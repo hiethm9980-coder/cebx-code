@@ -1,3 +1,4 @@
+
 <?php $attributes ??= new \Illuminate\View\ComponentAttributeBag;
 
 $__newAttributes = [];
@@ -30,9 +31,7 @@ unset($__defined_vars); ?>
 <div class="page-header">
     <div>
         <h1><?php echo e($title); ?></h1>
-        <?php if($subtitle): ?>
-            <p class="subtitle"><?php echo e($subtitle); ?></p>
-        <?php endif; ?>
+        <?php if($subtitle): ?><p class="subtitle"><?php echo e($subtitle); ?></p><?php endif; ?>
     </div>
     <?php if($slot->isNotEmpty()): ?>
         <div class="actions"><?php echo e($slot); ?></div>

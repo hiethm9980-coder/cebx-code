@@ -1,74 +1,76 @@
 @extends('layouts.app')
 @section('title', 'سجل التدقيق')
+
 @section('content')
-<x-page-header title="سجل التدقيق" :subtitle="$subtitle ?? null">
-    @if(isset($createRoute))
-        <button class="btn btn-pr" data-modal-open="create-audit">+ إنشاء</button>
-    @endif
-    @if(isset($exportRoute))
-        <a href="{{ $exportRoute }}" class="btn btn-s">📥 تصدير</a>
-    @endif
-</x-page-header>
-
-@if(isset($stats) && count($stats))
-<div class="stats-grid">
-    @foreach($stats as $st)
-        <x-stat-card :icon="$st['icon']" :label="$st['label']" :value="$st['value']" :trend="$st['trend'] ?? null" :up="$st['up'] ?? true" />
-    @endforeach
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+    <h1 style="font-size:24px;font-weight:700;color:var(--tx);margin:0">📜 سجل التدقيق</h1>
+    <a href="{{ route('audit.export') }}" class="btn btn-s">📥 تصدير CSV</a>
 </div>
-@endif
 
-@if(isset($cards) && count($cards))
-<div class="grid-3">
-    @foreach($cards as $c)
-        <div class="entity-card">
-            <div class="top">
-                <div>
-                    <h3>{{ $c['title'] }}</h3>
-                    @if(isset($c['subtitle'])) <p class="meta">{{ $c['subtitle'] }}</p> @endif
-                </div>
-                @if(isset($c['status'])) <x-badge :status="$c['status']" /> @endif
-            </div>
-            @if(isset($c['rows']))
-                @foreach($c['rows'] as $label => $value)
-                    <x-info-row :label="$label" :value="$value" />
+{{-- Filters --}}
+<x-card>
+    <form method="GET" action="{{ route('audit.index') }}" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:160px">
+            <label class="form-label">المستخدم</label>
+            <select name="user_id" class="form-input">
+                <option value="">الكل</option>
+                @foreach($users ?? [] as $u)
+                    <option value="{{ $u->id }}" {{ request('user_id') == $u->id ? 'selected' : '' }}>{{ $u->name }}</option>
                 @endforeach
-            @endif
-            @if(isset($c['actions']))
-                <div class="card-actions">
-                    @foreach($c['actions'] as $act)
-                        <a href="{{ $act['url'] }}" class="btn {{ $act['class'] ?? 'btn-s' }}">{{ $act['label'] }}</a>
-                    @endforeach
-                </div>
-            @endif
+            </select>
         </div>
-    @endforeach
-</div>
-@endif
+        <div style="flex:1;min-width:160px">
+            <label class="form-label">الحدث</label>
+            <select name="event" class="form-input">
+                <option value="">الكل</option>
+                @foreach(['create' => 'إنشاء', 'update' => 'تعديل', 'delete' => 'حذف', 'login' => 'تسجيل دخول', 'logout' => 'تسجيل خروج', 'export' => 'تصدير'] as $k => $v)
+                    <option value="{{ $k }}" {{ request('event') === $k ? 'selected' : '' }}>{{ $v }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div style="flex:1;min-width:140px">
+            <label class="form-label">من تاريخ</label>
+            <input type="date" name="from" value="{{ request('from') }}" class="form-input">
+        </div>
+        <div style="flex:1;min-width:140px">
+            <label class="form-label">إلى تاريخ</label>
+            <input type="date" name="to" value="{{ request('to') }}" class="form-input">
+        </div>
+        <button type="submit" class="btn btn-pr" style="height:42px">بحث</button>
+    </form>
+</x-card>
 
-@if(isset($columns) && isset($rows))
-<div class="table-wrap"><table>
-    <thead><tr>@foreach($columns as $col)<th>{{ $col }}</th>@endforeach</tr></thead>
-    <tbody>
-        @forelse($rows as $row)
-            <tr>@foreach($row as $cell)<td>{!! $cell !!}</td>@endforeach</tr>
-        @empty
-            <tr><td colspan="{{ count($columns) }}" class="empty-state">لا توجد بيانات</td></tr>
-        @endforelse
-    </tbody>
-</table></div>
-@if(isset($pagination)) <div style="margin-top:14px">{{ $pagination->links() }}</div> @endif
-@endif
-
-@if(isset($content))
-    {!! $content !!}
-@endif
-
-@if(isset($createRoute))
-<x-modal id="create-audit" title="إنشاء جديد">
-    @if(isset($createForm))
-        {!! $createForm !!}
+{{-- Audit Log --}}
+<x-card title="📋 السجلات">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>الوقت</th><th>المستخدم</th><th>الحدث</th><th>الموديل</th><th>التفاصيل</th><th>IP</th></tr>
+            </thead>
+            <tbody>
+                @forelse($logs ?? [] as $log)
+                    @php
+                        $eventLabels = ['create' => ['إنشاء', '🟢'], 'update' => ['تعديل', '🟡'], 'delete' => ['حذف', '🔴'], 'login' => ['دخول', '🔵'], 'logout' => ['خروج', '⚪'], 'export' => ['تصدير', '📥']];
+                        $el = $eventLabels[$log->event] ?? [$log->event, '⚪'];
+                    @endphp
+                    <tr>
+                        <td style="font-size:12px;white-space:nowrap">{{ $log->created_at->format('Y-m-d H:i:s') }}</td>
+                        <td>{{ $log->user->name ?? '—' }}</td>
+                        <td><span class="badge badge-in">{{ $el[1] }} {{ $el[0] }}</span></td>
+                        <td class="td-mono" style="font-size:12px">{{ class_basename($log->auditable_type ?? '') }} #{{ $log->auditable_id ?? '' }}</td>
+                        <td style="max-width:200px;font-size:12px;color:var(--td);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            {{ Str::limit(json_encode($log->new_values ?? [], JSON_UNESCAPED_UNICODE), 80) }}
+                        </td>
+                        <td class="td-mono" style="font-size:11px">{{ $log->ip_address ?? '—' }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6" class="empty-state">لا توجد سجلات</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+    @if(method_exists($logs ?? collect(), 'links'))
+        <div style="margin-top:14px">{{ $logs->links() }}</div>
     @endif
-</x-modal>
-@endif
+</x-card>
 @endsection

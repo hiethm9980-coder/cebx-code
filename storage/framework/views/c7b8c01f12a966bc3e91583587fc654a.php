@@ -120,7 +120,7 @@
         <h1>تسجيل دخول المنظمات</h1>
         <p class="subtitle">أدخل معرّف المنظمة والبريد الإلكتروني لتسجيل الدخول</p>
 
-        <?php if($errors->any()): ?>
+        <?php if(isset($errors) && $errors->any()): ?>
             <div class="error-msg">
                 <?php $__currentLoopData = $errors->all(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $error): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                     <div><?php echo e($error); ?></div>

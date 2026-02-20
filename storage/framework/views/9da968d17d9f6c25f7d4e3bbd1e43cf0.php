@@ -1,3 +1,4 @@
+
 <?php $attributes ??= new \Illuminate\View\ComponentAttributeBag;
 
 $__newAttributes = [];
@@ -29,7 +30,12 @@ foreach ($attributes->all() as $__key => $__value) {
 unset($__defined_vars); ?>
 <div class="card">
     <?php if($title): ?>
-        <div class="card-title"><?php echo e($title); ?></div>
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span><?php echo e($title); ?></span>
+            <?php if(isset($action)): ?>
+                <span><?php echo e($action); ?></span>
+            <?php endif; ?>
+        </div>
     <?php endif; ?>
     <?php echo e($slot); ?>
 

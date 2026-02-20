@@ -1,46 +1,73 @@
 @extends('layouts.app')
-@section('title', 'الطلبات')
-@section('content')
-<x-page-header title="الطلبات" :subtitle="$orders->total() . ' طلب'">
-    <button class="btn btn-pr" data-modal-open="create-order">+ طلب يدوي</button>
-</x-page-header>
-<div class="table-wrap">
-    <table>
-        <thead><tr><th>الرقم</th><th>العميل</th><th>المبلغ</th><th>المنتجات</th><th>المصدر</th><th>الحالة</th><th>التاريخ</th><th>إجراء</th></tr></thead>
-        <tbody>
-            @forelse($orders as $o)
-                <tr>
-                    <td class="td-link">{{ $o->order_number }}</td>
-                    <td>{{ $o->customer_name }}</td>
-                    <td style="font-family:monospace">{{ number_format($o->total_amount, 2) }} ر.س</td>
-                    <td>{{ $o->items_count ?? $o->items()->count() }}</td>
-                    <td><span class="badge badge-in">{{ $o->store?->platform ?? 'يدوي' }}</span></td>
-                    <td><x-badge :status="$o->status" /></td>
-                    <td>{{ $o->created_at->format('Y-m-d') }}</td>
-                    <td class="td-actions">
-                        @if($o->status === 'pending')
-                            <form action="{{ route('orders.ship', $o) }}" method="POST">@csrf <button class="btn btn-ac">🚚 شحن</button></form>
-                            <form action="{{ route('orders.cancel', $o) }}" method="POST" data-confirm="إلغاء؟">@csrf @method('PATCH') <button class="btn btn-dg">✕</button></form>
-                        @endif
-                    </td>
-                </tr>
-            @empty
-                <tr><td colspan="8" class="empty-state">لا توجد طلبات</td></tr>
-            @endforelse
-        </tbody>
-    </table>
-</div>
-<div style="margin-top:14px">{{ $orders->links() }}</div>
+@section('title', 'إدارة الطلبات')
 
-<x-modal id="create-order" title="طلب يدوي جديد">
-    <form method="POST" action="{{ route('orders.store') }}">@csrf
-        <div class="form-grid">
-            <div class="form-group"><label class="form-label">اسم العميل *</label><input name="customer_name" class="form-control" required></div>
-            <div class="form-group"><label class="form-label">البريد</label><input name="customer_email" type="email" class="form-control"></div>
-            <div class="form-group"><label class="form-label">المبلغ *</label><input name="total_amount" type="number" step="0.01" class="form-control" required></div>
-            <div class="form-group"><label class="form-label">العنوان</label><input name="shipping_address" class="form-control"></div>
-        </div>
-        <button type="submit" class="btn btn-pr" style="margin-top:10px">إنشاء</button>
+@section('content')
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+    <h1 style="font-size:24px;font-weight:700;color:var(--tx);margin:0">🛒 إدارة الطلبات</h1>
+    <button class="btn btn-pr" onclick="syncOrders()">🔄 مزامنة الطلبات</button>
+</div>
+
+{{-- ═══ FILTERS ═══ --}}
+<x-card>
+    <form method="GET" action="{{ route('orders.index') }}" style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:12px;align-items:end">
+        <input type="text" name="search" value="{{ request('search') }}" placeholder="بحث برقم الطلب أو اسم العميل..." class="form-input">
+        <select name="status" class="form-input">
+            <option value="">كل الحالات</option>
+            <option value="pending">جديد</option>
+            <option value="ready">جاهز للشحن</option>
+            <option value="shipped">تم الشحن</option>
+        </select>
+        <select name="store_id" class="form-input">
+            <option value="">كل المتاجر</option>
+            @foreach($stores ?? [] as $store)
+                <option value="{{ $store->id }}">{{ $store->name }}</option>
+            @endforeach
+        </select>
+        <button type="submit" class="btn btn-pr" style="height:42px">بحث</button>
     </form>
-</x-modal>
+</x-card>
+
+{{-- ═══ ORDERS TABLE ═══ --}}
+<x-card>
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>رقم الطلب</th><th>المتجر</th><th>العميل</th><th>المنتجات</th>
+                <th>المبلغ</th><th>الحالة</th><th>التاريخ</th><th></th>
+            </tr></thead>
+            <tbody>
+                @forelse($orders ?? [] as $order)
+                    @php
+                        $platformIcons = ['salla' => '🟣', 'zid' => '🔵', 'shopify' => '🟢', 'woocommerce' => '🟠'];
+                        $icon = $platformIcons[$order->source] ?? '📦';
+                    @endphp
+                    <tr>
+                        <td class="td-mono" style="font-weight:600">{{ $order->external_order_number }}</td>
+                        <td>{{ $icon }} {{ $order->store?->name ?? $order->source }}</td>
+                        <td>{{ $order->customer_name }}</td>
+                        <td>{{ $order->items_count ?? '—' }} منتج</td>
+                        <td style="font-family:monospace">{{ number_format($order->total_amount ?? 0) }} ر.س</td>
+                        <td><x-badge :status="$order->status" /></td>
+                        <td>{{ $order->created_at->format('d/m') }}</td>
+                        <td>
+                            @if(in_array($order->status, ['pending', 'ready']))
+                                <form method="POST" action="{{ route('orders.ship', $order) }}" style="display:inline">
+                                    @csrf
+                                    <button type="submit" class="btn btn-pr btn-sm">🚚 شحن</button>
+                                </form>
+                            @else
+                                <a href="{{ route('shipments.show', $order->shipment_id ?? '#') }}" class="btn btn-s">👁️</a>
+                            @endif
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="8" class="empty-state">لا توجد طلبات</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+    @if(isset($orders) && method_exists($orders, 'links'))
+        <div style="margin-top:14px">{{ $orders->links() }}</div>
+    @endif
+</x-card>
 @endsection

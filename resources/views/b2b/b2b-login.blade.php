@@ -120,7 +120,7 @@
         <h1>تسجيل دخول المنظمات</h1>
         <p class="subtitle">أدخل معرّف المنظمة والبريد الإلكتروني لتسجيل الدخول</p>
 
-        @if($errors->any())
+        @if(isset($errors) && $errors->any())
             <div class="error-msg">
                 @foreach($errors->all() as $error)
                     <div>{{ $error }}</div>

@@ -9,6 +9,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             DevLoginSeeder::class,
+            DevB2CSeeder::class,
+            DevPlatformAdminSeeder::class,
             RolesAndPermissionsSeeder::class,
             SystemSettingsSeeder::class,
             DemoAccountSeeder::class,

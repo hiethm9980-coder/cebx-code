@@ -1,15 +1,25 @@
-@props(['status', 'text' => null])
+{{-- resources/views/components/badge.blade.php --}}
+@props(['status'])
 @php
-$labels = [
-    'processing' => 'قيد المعالجة', 'shipped' => 'تم الشحن', 'in_transit' => 'في الطريق',
-    'delivered' => 'تم التسليم', 'cancelled' => 'ملغي', 'pending' => 'معلّق',
-    'confirmed' => 'مؤكد', 'fulfilled' => 'مكتمل', 'active' => 'نشط',
-    'suspended' => 'معطّل', 'open' => 'مفتوح', 'resolved' => 'محلول',
-    'connected' => 'متصل', 'accepted' => 'مقبول', 'expired' => 'منتهي',
-    'loading' => 'تحميل', 'sealed' => 'مختوم', 'intransit' => 'في الطريق',
-    'cleared' => 'مخلّص', 'held' => 'محتجز', 'inspecting' => 'فحص',
-    'review' => 'مراجعة', 'onduty' => 'في الخدمة', 'available' => 'متاح',
-    'offduty' => 'خارج الخدمة', 'closed' => 'مغلق',
-];
+    $statusMap = [
+        'pending' => ['قيد الانتظار', 'st-pending'],
+        'processing' => ['قيد المعالجة', 'st-processing'],
+        'shipped' => ['قيد الشحن', 'st-shipped'],
+        'in_transit' => ['قيد الشحن', 'st-intransit'],
+        'out_for_delivery' => ['خرج للتوصيل', 'st-shipped'],
+        'delivered' => ['تم التسليم', 'st-delivered'],
+        'cancelled' => ['ملغي', 'st-cancelled'],
+        'returned' => ['مرتجع', 'st-cancelled'],
+        'draft' => ['مسودة', 'badge-td'],
+        'active' => ['نشط', 'st-active'],
+        'open' => ['مفتوحة', 'st-open'],
+        'closed' => ['مغلقة', 'badge-td'],
+        'resolved' => ['تم الحل', 'st-resolved'],
+        'connected' => ['متصل', 'st-connected'],
+        'disconnected' => ['غير متصل', 'st-cancelled'],
+        'accepted' => ['مقبولة', 'st-accepted'],
+        'expired' => ['منتهية', 'st-expired'],
+    ];
+    $s = $statusMap[$status] ?? [$status, 'badge-td'];
 @endphp
-<span class="badge st-{{ $status }}">{{ $text ?? ($labels[$status] ?? $status) }}</span>
+<span class="badge {{ $s[1] }}">{{ $s[0] }}</span>

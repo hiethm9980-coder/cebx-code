@@ -1,81 +1,143 @@
 @extends('layouts.app')
-@section('title', 'الشحنات')
+@section('title', $portalType === 'b2c' ? 'شحناتي' : 'إدارة الشحنات')
+
 @section('content')
-<x-page-header title="الشحنات" :subtitle="$shipments->total() . ' شحنة'">
-    <button class="btn btn-pr" data-modal-open="create-shipment">+ إنشاء شحنة</button>
-    <a href="{{ route('shipments.export') }}" class="btn btn-s">📥 تصدير</a>
-</x-page-header>
-
-{{-- Tabs --}}
-<div class="tabs">
-    <a href="{{ route('shipments.index') }}" class="tab-btn {{ !request('status') ? 'active' : '' }}">الكل <span class="count">{{ $totalCount }}</span></a>
-    <a href="{{ route('shipments.index', ['status' => 'payment_pending']) }}" class="tab-btn {{ request('status') === 'payment_pending' ? 'active' : '' }}">بانتظار الدفع</a>
-    <a href="{{ route('shipments.index', ['status' => 'in_transit']) }}" class="tab-btn {{ request('status') === 'in_transit' ? 'active' : '' }}">في الطريق</a>
-    <a href="{{ route('shipments.index', ['status' => 'delivered']) }}" class="tab-btn {{ request('status') === 'delivered' ? 'active' : '' }}">مُسلّم</a>
-    <a href="{{ route('shipments.index', ['status' => 'cancelled']) }}" class="tab-btn {{ request('status') === 'cancelled' ? 'active' : '' }}">ملغي</a>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+    <h1 style="font-size:24px;font-weight:700;color:var(--tx);margin:0">📦 {{ $portalType === 'b2c' ? 'شحناتي' : 'إدارة الشحنات' }}</h1>
+    <div style="display:flex;gap:10px">
+        @if($portalType === 'b2b')
+            <a href="{{ route('shipments.export') }}" class="btn btn-s">📥 تصدير</a>
+        @endif
+        <a href="{{ route('shipments.create') }}" class="btn btn-pr">+ شحنة جديدة</a>
+    </div>
 </div>
 
-{{-- Search --}}
-<form method="GET" style="margin-bottom:14px">
-    <input type="text" name="search" class="form-control" style="max-width:400px" placeholder="بحث بالرقم أو التتبع أو العميل..." value="{{ request('search') }}">
-</form>
-
-<div class="table-wrap">
-    <table>
-        <thead><tr><th>الرقم</th><th>التتبع</th><th>الناقل</th><th>الحالة</th><th>العميل</th><th>المسار</th><th>التكلفة</th><th>إجراء</th></tr></thead>
-        <tbody>
-            @forelse($shipments as $s)
-                <tr>
-                    <td><a href="{{ route('shipments.show', $s) }}" class="td-link">{{ $s->tracking_number }}</a></td>
-                    <td class="td-mono">{{ $s->carrier_shipment_id ?? $s->tracking_number }}</td>
-                    <td><span class="badge badge-in">{{ $s->carrier_code }}</span></td>
-                    <td><x-badge :status="$s->status" /></td>
-                    <td>{{ $s->recipient_name }}</td>
-                    <td>{{ $s->sender_city ?? '—' }} → {{ $s->recipient_city ?? '—' }}</td>
-                    <td style="font-family:monospace">{{ number_format($s->total_charge ?? 0, 2) }} ر.س</td>
-                    <td class="td-actions">
-                        <a href="{{ route('shipments.show', $s) }}" class="btn btn-ghost">👁</a>
-                        @if(!in_array($s->status, ['cancelled', 'delivered']))
-                            <form action="{{ route('shipments.cancel', $s) }}" method="POST" data-confirm="هل أنت متأكد من إلغاء الشحنة؟">
-                                @csrf @method('PATCH')
-                                <button class="btn btn-ghost" style="color:var(--dg)">✕</button>
-                            </form>
-                        @endif
-                    </td>
-                </tr>
-            @empty
-                <tr><td colspan="8" class="empty-state">لا توجد شحنات</td></tr>
-            @endforelse
-        </tbody>
-    </table>
-</div>
-<div style="margin-top:14px">{{ $shipments->links() }}</div>
-
-{{-- Create Modal --}}
-<x-modal id="create-shipment" title="إنشاء شحنة جديدة">
-    <form method="POST" action="{{ route('shipments.store') }}">
-        @csrf
-        <div class="form-grid">
-            <div class="form-group"><label class="form-label">اسم المستلم *</label><input name="recipient_name" class="form-control" required></div>
-            <div class="form-group"><label class="form-label">الناقل</label>
-                <select name="carrier_code" class="form-control">
-                    @foreach(['DHL','Aramex','SMSA','FedEx','UPS','SPL'] as $c)
-                        <option value="{{ $c }}">{{ $c }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="form-group"><label class="form-label">مدينة المرسل *</label><input name="origin_city" class="form-control" required></div>
-            <div class="form-group"><label class="form-label">مدينة المستلم *</label><input name="destination_city" class="form-control" required></div>
-            <div class="form-group"><label class="form-label">الوزن (كغ)</label><input name="weight" type="number" step="0.1" class="form-control"></div>
-            <div class="form-group"><label class="form-label">التكلفة</label><input name="total_cost" type="number" step="0.01" class="form-control"></div>
-            <div class="form-group"><label class="form-label">الخدمة</label>
-                <select name="service_type" class="form-control">
-                    <option value="express">Express</option><option value="standard">Standard</option><option value="economy">Economy</option>
-                </select>
-            </div>
-            <div class="form-group"><label class="form-label">الأبعاد</label><input name="dimensions" class="form-control" placeholder="30×20×15 سم"></div>
+{{-- ═══ FILTERS ═══ --}}
+<x-card>
+    <form method="GET" action="{{ route('shipments.index') }}"
+          style="display:grid;grid-template-columns:{{ $portalType === 'b2b' ? '2fr 1fr 1fr 1fr 1fr auto' : '1fr auto' }};gap:12px;align-items:end">
+        <div>
+            <input type="text" name="search" value="{{ request('search') }}"
+                   placeholder="بحث برقم التتبع{{ $portalType === 'b2b' ? ' أو اسم المستلم' : '' }}..."
+                   class="form-input" style="width:100%">
         </div>
-        <button type="submit" class="btn btn-pr" style="margin-top:12px">إنشاء</button>
+        @if($portalType === 'b2b')
+            <select name="status" class="form-input">
+                <option value="">كل الحالات</option>
+                <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>قيد الانتظار</option>
+                <option value="processing" {{ request('status') === 'processing' ? 'selected' : '' }}>قيد المعالجة</option>
+                <option value="in_transit" {{ request('status') === 'in_transit' ? 'selected' : '' }}>تم الشحن</option>
+                <option value="delivered" {{ request('status') === 'delivered' ? 'selected' : '' }}>تم التسليم</option>
+            </select>
+            <select name="carrier" class="form-input">
+                <option value="">كل الناقلين</option>
+                <option value="aramex">أرامكس</option>
+                <option value="smsa">سمسا</option>
+                <option value="dhl">DHL</option>
+                <option value="fedex">فيدكس</option>
+            </select>
+            <select name="source" class="form-input">
+                <option value="">كل المصادر</option>
+                <option value="direct">يدوي</option>
+                <option value="order">طلب</option>
+            </select>
+            <input type="date" name="date" value="{{ request('date') }}" class="form-input">
+        @else
+            <select name="status" class="form-input" style="width:auto">
+                <option value="">كل الحالات</option>
+                <option value="pending">نشطة</option>
+                <option value="delivered">مسلّمة</option>
+                <option value="cancelled">ملغية</option>
+            </select>
+        @endif
+        <button type="submit" class="btn btn-pr" style="height:42px">بحث</button>
     </form>
-</x-modal>
+</x-card>
+
+{{-- ═══ SHIPMENTS LIST ═══ --}}
+@if($portalType === 'b2b')
+    {{-- B2B: TABLE VIEW --}}
+    <x-card>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="checkbox" id="selectAll">
+                <label for="selectAll" style="font-size:13px;color:var(--td)">تحديد الكل</label>
+                <button class="btn btn-s" style="margin-right:12px" onclick="window.print()">🖨️ طباعة البوالص</button>
+            </div>
+            <span style="font-size:13px;color:var(--td)">إجمالي: {{ $shipments->total() }} شحنة</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr>
+                    <th style="width:30px"></th>
+                    <th>رقم التتبع</th><th>المستلم</th><th>هاتف</th><th>الناقل</th>
+                    <th>الخدمة</th><th>المدينة</th><th>COD</th><th>الوزن</th>
+                    <th>الحالة</th><th>التاريخ</th><th></th>
+                </tr></thead>
+                <tbody>
+                    @forelse($shipments as $shipment)
+                        <tr>
+                            <td><input type="checkbox" name="selected[]" value="{{ $shipment->id }}"></td>
+                            <td><a href="{{ route('shipments.show', $shipment) }}" class="td-link td-mono">{{ $shipment->reference_number }}</a></td>
+                            <td>{{ $shipment->recipient_name }}</td>
+                            <td style="direction:ltr;text-align:right">{{ $shipment->recipient_phone }}</td>
+                            <td><span class="badge badge-in">{{ $shipment->carrier_code ?? '—' }}</span></td>
+                            <td>{{ $shipment->service_name ?? $shipment->service_code ?? '—' }}</td>
+                            <td>{{ $shipment->recipient_city }}</td>
+                            <td style="font-family:monospace">{{ $shipment->is_cod ? number_format($shipment->cod_amount) . ' ر.س' : '—' }}</td>
+                            <td>{{ $shipment->total_weight ?? '—' }} كغ</td>
+                            <td><x-badge :status="$shipment->status" /></td>
+                            <td>{{ $shipment->created_at->format('d/m') }}</td>
+                            <td><a href="{{ route('shipments.show', $shipment) }}" class="btn btn-s">👁️</a></td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="12" class="empty-state">لا توجد شحنات</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-top:20px">{{ $shipments->links() }}</div>
+    </x-card>
+@else
+    {{-- B2C: CARD VIEW --}}
+    <div style="display:flex;flex-direction:column;gap:14px">
+        @forelse($shipments as $shipment)
+            <a href="{{ route('shipments.show', $shipment) }}" style="text-decoration:none">
+                <div class="entity-card" style="padding:20px 24px;cursor:pointer">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                        <div style="display:flex;gap:16px;align-items:center">
+                            <div style="width:50px;height:50px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;
+                                @if($shipment->status === 'delivered') background:rgba(16,185,129,0.13)
+                                @elseif(in_array($shipment->status, ['shipped','in_transit'])) background:rgba(139,92,246,0.13)
+                                @elseif($shipment->status === 'out_for_delivery') background:rgba(59,130,246,0.13)
+                                @elseif($shipment->status === 'cancelled') background:rgba(239,68,68,0.13)
+                                @else background:rgba(245,158,11,0.13) @endif">
+                                @if($shipment->status === 'delivered') ✅
+                                @elseif(in_array($shipment->status, ['shipped','in_transit'])) 🚚
+                                @elseif($shipment->status === 'out_for_delivery') 🏃
+                                @elseif($shipment->status === 'cancelled') ❌
+                                @else ⏳ @endif
+                            </div>
+                            <div>
+                                <div style="font-family:monospace;color:#0D9488;font-weight:700;font-size:15px">{{ $shipment->reference_number }}</div>
+                                <div style="font-size:13px;color:var(--tx);margin-top:4px">إلى: {{ $shipment->recipient_name }}</div>
+                                <div style="font-size:12px;color:var(--td);margin-top:2px">📍 {{ $shipment->sender_city }} → {{ $shipment->recipient_city }} • {{ $shipment->carrier_code }}</div>
+                            </div>
+                        </div>
+                        <div style="text-align:left">
+                            <x-badge :status="$shipment->status" />
+                            <div style="font-size:12px;color:var(--td);margin-top:8px">{{ $shipment->created_at->format('d/m') }}</div>
+                            <div style="font-size:13px;font-family:monospace;color:var(--tx);margin-top:2px">{{ number_format($shipment->total_charge, 2) }} ر.س</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        @empty
+            <div class="empty-state">لا توجد شحنات</div>
+        @endforelse
+    </div>
+    <div style="margin-top:20px">{{ $shipments->links() }}</div>
+@endif
 @endsection

@@ -1,7 +1,8 @@
+
 <?php $attributes ??= new \Illuminate\View\ComponentAttributeBag;
 
 $__newAttributes = [];
-$__propNames = \Illuminate\View\ComponentAttributeBag::extractPropNames((['status', 'text' => null]));
+$__propNames = \Illuminate\View\ComponentAttributeBag::extractPropNames((['status']));
 
 foreach ($attributes->all() as $__key => $__value) {
     if (in_array($__key, $__propNames)) {
@@ -16,7 +17,7 @@ $attributes = new \Illuminate\View\ComponentAttributeBag($__newAttributes);
 unset($__propNames);
 unset($__newAttributes);
 
-foreach (array_filter((['status', 'text' => null]), 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
+foreach (array_filter((['status']), 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
     $$__key = $$__key ?? $__value;
 }
 
@@ -28,17 +29,26 @@ foreach ($attributes->all() as $__key => $__value) {
 
 unset($__defined_vars); ?>
 <?php
-$labels = [
-    'processing' => 'قيد المعالجة', 'shipped' => 'تم الشحن', 'in_transit' => 'في الطريق',
-    'delivered' => 'تم التسليم', 'cancelled' => 'ملغي', 'pending' => 'معلّق',
-    'confirmed' => 'مؤكد', 'fulfilled' => 'مكتمل', 'active' => 'نشط',
-    'suspended' => 'معطّل', 'open' => 'مفتوح', 'resolved' => 'محلول',
-    'connected' => 'متصل', 'accepted' => 'مقبول', 'expired' => 'منتهي',
-    'loading' => 'تحميل', 'sealed' => 'مختوم', 'intransit' => 'في الطريق',
-    'cleared' => 'مخلّص', 'held' => 'محتجز', 'inspecting' => 'فحص',
-    'review' => 'مراجعة', 'onduty' => 'في الخدمة', 'available' => 'متاح',
-    'offduty' => 'خارج الخدمة', 'closed' => 'مغلق',
-];
+    $statusMap = [
+        'pending' => ['قيد الانتظار', 'st-pending'],
+        'processing' => ['قيد المعالجة', 'st-processing'],
+        'shipped' => ['قيد الشحن', 'st-shipped'],
+        'in_transit' => ['قيد الشحن', 'st-intransit'],
+        'out_for_delivery' => ['خرج للتوصيل', 'st-shipped'],
+        'delivered' => ['تم التسليم', 'st-delivered'],
+        'cancelled' => ['ملغي', 'st-cancelled'],
+        'returned' => ['مرتجع', 'st-cancelled'],
+        'draft' => ['مسودة', 'badge-td'],
+        'active' => ['نشط', 'st-active'],
+        'open' => ['مفتوحة', 'st-open'],
+        'closed' => ['مغلقة', 'badge-td'],
+        'resolved' => ['تم الحل', 'st-resolved'],
+        'connected' => ['متصل', 'st-connected'],
+        'disconnected' => ['غير متصل', 'st-cancelled'],
+        'accepted' => ['مقبولة', 'st-accepted'],
+        'expired' => ['منتهية', 'st-expired'],
+    ];
+    $s = $statusMap[$status] ?? [$status, 'badge-td'];
 ?>
-<span class="badge st-<?php echo e($status); ?>"><?php echo e($text ?? ($labels[$status] ?? $status)); ?></span>
+<span class="badge <?php echo e($s[1]); ?>"><?php echo e($s[0]); ?></span>
 <?php /**PATH C:\xampp\htdocs\shipping-gateway-blade\cebx-code\resources\views/components/badge.blade.php ENDPATH**/ ?>

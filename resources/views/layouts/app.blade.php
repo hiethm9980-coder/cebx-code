@@ -11,73 +11,126 @@
 <body>
 <div class="app-layout">
     {{-- ═══ SIDEBAR ═══ --}}
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <div class="sidebar-logo">SG</div>
-            <span class="sidebar-title">Shipping Gateway</span>
+            @if($portalType === 'b2c')
+                <div class="sidebar-logo" style="background:linear-gradient(135deg,#0D9488,#065F56)">B2C</div>
+                <div class="sidebar-info">
+                    <span class="sidebar-title">بوابة الشحن</span>
+                    <span class="sidebar-subtitle">للأفراد</span>
+                </div>
+            @elseif($portalType === 'admin')
+                <div class="sidebar-logo" style="background:linear-gradient(135deg,#7C3AED,#4C1D95)">SYS</div>
+                <div class="sidebar-info">
+                    <span class="sidebar-title">Shipping Gateway</span>
+                    <span class="sidebar-subtitle">لوحة مدير النظام</span>
+                </div>
+            @else
+                <div class="sidebar-logo">B2B</div>
+                <div class="sidebar-info">
+                    <span class="sidebar-title">Shipping Gateway</span>
+                    <span class="sidebar-subtitle">بوابة الأعمال</span>
+                </div>
+            @endif
         </div>
+
         <nav class="sidebar-nav">
             @php
                 $currentRoute = Route::currentRouteName() ?? '';
                 $unreadNotifs = \App\Models\Notification::where('read_at', null)->count();
                 $openTickets = \App\Models\SupportTicket::where('status', 'open')->count();
-                $processingShipments = \App\Models\Shipment::whereIn('status', ['payment_pending', 'purchased', 'picked_up', 'in_transit', 'out_for_delivery'])->count();
+                $processingShipments = \App\Models\Shipment::whereIn('status', ['payment_pending','purchased','picked_up','in_transit','out_for_delivery'])->count();
 
-                // Sidebar route names must exist in routes/web.php (auth + tenant middleware group)
-                $menu = [
-                    ['d' => true, 'label' => 'الرئيسية'],
-                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '🏠', 'label' => 'لوحة التحكم'],
+                $b2cMenu = [
+                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '🏠', 'label' => 'الرئيسية'],
+                    ['id' => 'shipments', 'route' => 'shipments.index', 'icon' => '📦', 'label' => 'شحناتي', 'badge' => $processingShipments],
+                    ['id' => 'tracking', 'route' => 'tracking.index', 'icon' => '🔍', 'label' => 'التتبع'],
+                    ['id' => 'wallet', 'route' => 'wallet.index', 'icon' => '💰', 'label' => 'المحفظة'],
+                    ['d' => true],
+                    ['id' => 'addresses', 'route' => 'addresses.index', 'icon' => '📒', 'label' => 'العناوين'],
+                    ['id' => 'support', 'route' => 'support.index', 'icon' => '🎧', 'label' => 'الدعم', 'badge' => $openTickets],
+                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙️', 'label' => 'الإعدادات'],
+                ];
+
+                $b2bMenu = [
+                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '📊', 'label' => 'لوحة التحكم'],
                     ['id' => 'shipments', 'route' => 'shipments.index', 'icon' => '📦', 'label' => 'الشحنات', 'badge' => $processingShipments],
                     ['id' => 'orders', 'route' => 'orders.index', 'icon' => '🛒', 'label' => 'الطلبات'],
                     ['id' => 'stores', 'route' => 'stores.index', 'icon' => '🏪', 'label' => 'المتاجر'],
-                    ['id' => 'tracking', 'route' => 'tracking.index', 'icon' => '🚚', 'label' => 'التتبع'],
-                    ['id' => 'pricing', 'route' => 'pricing.index', 'icon' => '🏷', 'label' => 'التسعير'],
-                    ['d' => true, 'label' => 'المالية'],
                     ['id' => 'wallet', 'route' => 'wallet.index', 'icon' => '💰', 'label' => 'المحفظة'],
-                    ['id' => 'financial', 'route' => 'financial.index', 'icon' => '📊', 'label' => 'المالية'],
-                    ['d' => true, 'label' => 'الإدارة'],
-                    ['id' => 'users', 'route' => 'users.index', 'icon' => '👥', 'label' => 'المستخدمين'],
-                    ['id' => 'roles', 'route' => 'roles.index', 'icon' => '🛡', 'label' => 'الأدوار'],
-                    ['id' => 'invitations', 'route' => 'invitations.index', 'icon' => '📧', 'label' => 'الدعوات'],
-                    ['id' => 'organizations', 'route' => 'organizations.index', 'icon' => '🏢', 'label' => 'المنظمات'],
-                    ['d' => true, 'label' => 'النظام'],
-                    ['id' => 'notifications', 'route' => 'notifications.index', 'icon' => '🔔', 'label' => 'الإشعارات', 'badge' => $unreadNotifs],
-                    ['id' => 'reports', 'route' => 'reports.index', 'icon' => '📈', 'label' => 'التقارير'],
-                    ['id' => 'audit', 'route' => 'audit.index', 'icon' => '📋', 'label' => 'التدقيق'],
-                    ['id' => 'kyc', 'route' => 'kyc.index', 'icon' => '✅', 'label' => 'KYC'],
-                    ['id' => 'dg', 'route' => 'dg.index', 'icon' => '⚠', 'label' => 'DG'],
-                    ['id' => 'support', 'route' => 'support.index', 'icon' => '🎧', 'label' => 'الدعم', 'badge' => $openTickets],
-                    ['id' => 'addresses', 'route' => 'addresses.index', 'icon' => '📍', 'label' => 'العناوين'],
-                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙', 'label' => 'الإعدادات'],
-                    ['id' => 'admin', 'route' => 'admin.index', 'icon' => '🔑', 'label' => 'الإدارة'],
-                    ['d' => true, 'label' => 'Phase 2'],
-                    ['id' => 'containers', 'route' => 'containers.index', 'icon' => '📦', 'label' => 'الحاويات'],
-                    ['id' => 'customs', 'route' => 'customs.index', 'icon' => '📄', 'label' => 'الجمارك'],
-                    ['id' => 'drivers', 'route' => 'drivers.index', 'icon' => '🚗', 'label' => 'السائقين'],
-                    ['id' => 'claims', 'route' => 'claims.index', 'icon' => '⚡', 'label' => 'المطالبات'],
-                    ['id' => 'risk', 'route' => 'risk.index', 'icon' => '🛡', 'label' => 'المخاطر'],
-                    ['id' => 'vessels', 'route' => 'vessels.index', 'icon' => '⚓', 'label' => 'السفن'],
-                    ['id' => 'schedules', 'route' => 'schedules.index', 'icon' => '📅', 'label' => 'الجداول'],
-                    ['id' => 'branches', 'route' => 'branches.index', 'icon' => '🏛', 'label' => 'الفروع'],
-                    ['id' => 'companies', 'route' => 'companies.index', 'icon' => '🌐', 'label' => 'الشركات'],
-                    ['id' => 'hscodes', 'route' => 'hscodes.index', 'icon' => '#️⃣', 'label' => 'HS أكواد'],
+                    ['id' => 'reports', 'route' => 'reports.index', 'icon' => '📊', 'label' => 'التقارير'],
+                    ['d' => true],
+                    ['id' => 'users', 'route' => 'users.index', 'icon' => '👥', 'label' => 'المستخدمون'],
+                    ['id' => 'roles', 'route' => 'roles.index', 'icon' => '🔐', 'label' => 'الأدوار'],
+                    ['id' => 'invitations', 'route' => 'invitations.index', 'icon' => '📨', 'label' => 'الدعوات'],
+                    ['d' => true],
+                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙️', 'label' => 'الإعدادات'],
                 ];
+
+                $adminMenu = [
+                    ['g' => 'العمليات'],
+                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '📊', 'label' => 'لوحة التحكم'],
+                    ['id' => 'shipments', 'route' => 'shipments.index', 'icon' => '📦', 'label' => 'الشحنات', 'badge' => $processingShipments],
+                    ['id' => 'orders', 'route' => 'orders.index', 'icon' => '🛒', 'label' => 'الطلبات'],
+                    ['id' => 'tracking', 'route' => 'tracking.index', 'icon' => '🔍', 'label' => 'التتبع'],
+                    ['id' => 'stores', 'route' => 'stores.index', 'icon' => '🏪', 'label' => 'المتاجر'],
+
+                    ['g' => 'المالية'],
+                    ['id' => 'wallet', 'route' => 'wallet.index', 'icon' => '💰', 'label' => 'المحفظة'],
+                    ['id' => 'financial', 'route' => 'financial.index', 'icon' => '💳', 'label' => 'المالية'],
+                    ['id' => 'pricing', 'route' => 'pricing.index', 'icon' => '🏷️', 'label' => 'التسعير'],
+
+                    ['g' => 'اللوجستيات'],
+                    ['id' => 'containers', 'route' => 'containers.index', 'icon' => '🚢', 'label' => 'الحاويات'],
+                    ['id' => 'customs', 'route' => 'customs.index', 'icon' => '🛃', 'label' => 'الجمارك'],
+                    ['id' => 'vessels', 'route' => 'vessels.index', 'icon' => '⛴️', 'label' => 'السفن'],
+                    ['id' => 'schedules', 'route' => 'schedules.index', 'icon' => '📅', 'label' => 'الجداول'],
+                    ['id' => 'drivers', 'route' => 'drivers.index', 'icon' => '🚛', 'label' => 'السائقين'],
+                    ['id' => 'hscodes', 'route' => 'hscodes.index', 'icon' => '🔢', 'label' => 'أكواد HS'],
+
+                    ['g' => 'الامتثال'],
+                    ['id' => 'kyc', 'route' => 'kyc.index', 'icon' => '🪪', 'label' => 'KYC'],
+                    ['id' => 'dg', 'route' => 'dg.index', 'icon' => '☣️', 'label' => 'البضائع الخطرة'],
+                    ['id' => 'risk', 'route' => 'risk.index', 'icon' => '⚠️', 'label' => 'المخاطر'],
+                    ['id' => 'claims', 'route' => 'claims.index', 'icon' => '📋', 'label' => 'المطالبات'],
+
+                    ['g' => 'الإدارة'],
+                    ['id' => 'organizations', 'route' => 'organizations.index', 'icon' => '🏢', 'label' => 'المنظمات'],
+                    ['id' => 'companies', 'route' => 'companies.index', 'icon' => '🏭', 'label' => 'الشركات'],
+                    ['id' => 'branches', 'route' => 'branches.index', 'icon' => '🏬', 'label' => 'الفروع'],
+                    ['id' => 'users', 'route' => 'users.index', 'icon' => '👥', 'label' => 'المستخدمون'],
+                    ['id' => 'roles', 'route' => 'roles.index', 'icon' => '🔐', 'label' => 'الأدوار'],
+                    ['id' => 'invitations', 'route' => 'invitations.index', 'icon' => '📨', 'label' => 'الدعوات'],
+
+                    ['g' => 'النظام'],
+                    ['id' => 'admin', 'route' => 'admin.index', 'icon' => '🛡️', 'label' => 'الإدارة العامة'],
+                    ['id' => 'audit', 'route' => 'audit.index', 'icon' => '📜', 'label' => 'التدقيق'],
+                    ['id' => 'reports', 'route' => 'reports.index', 'icon' => '📈', 'label' => 'التقارير'],
+                    ['id' => 'notifications', 'route' => 'notifications.index', 'icon' => '🔔', 'label' => 'الإشعارات', 'badge' => $unreadNotifs],
+                    ['id' => 'support', 'route' => 'support.index', 'icon' => '🎧', 'label' => 'الدعم', 'badge' => $openTickets],
+                    ['id' => 'addresses', 'route' => 'addresses.index', 'icon' => '📒', 'label' => 'العناوين'],
+                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙️', 'label' => 'الإعدادات'],
+                ];
+
+                $menu = match($portalType) {
+                    'b2c' => $b2cMenu,
+                    'admin' => $adminMenu,
+                    default => $b2bMenu,
+                };
             @endphp
 
             @foreach($menu as $item)
                 @if(isset($item['d']))
-                    <div class="sidebar-divider">{{ $item['label'] }}</div>
+                    <div class="sidebar-divider"></div>
+                @elseif(isset($item['g']))
+                    <div class="sidebar-group-label">{{ $item['g'] }}</div>
                 @else
                     @php
-                        $isActive = str_starts_with($currentRoute, $item['id']);
-                        // Use web route only: relative path so session/cookie same-origin (avoid redirect to login)
-                        $url = \Illuminate\Support\Facades\Route::has($item['route'])
-                            ? (\Illuminate\Support\Str::startsWith($item['route'] ?? '', 'api.') ? '#' : route($item['route'], [], false))
-                            : '#';
+                        $isActive = str_starts_with($currentRoute, $item['id']) || $currentRoute === $item['route'];
                     @endphp
-                    <a href="{{ $url }}"
+                    <a href="{{ route($item['route']) }}"
                        class="sidebar-item {{ $isActive ? 'active' : '' }}"
-                       @if($url === '#') title="{{ __('Route not registered: ') }}{{ $item['route'] }}" @endif>
+                       style="{{ $isActive && $portalType === 'b2c' ? 'background:rgba(13,148,136,0.13);color:#0D9488' : ($isActive && $portalType === 'admin' ? 'background:rgba(124,58,237,0.13);color:#7C3AED' : '') }}">
                         <span class="icon">{{ $item['icon'] }}</span>
                         <span>{{ $item['label'] }}</span>
                         @if(isset($item['badge']) && $item['badge'] > 0)
@@ -87,10 +140,11 @@
                 @endif
             @endforeach
         </nav>
+
         <div class="sidebar-footer">
-            <form action="{{ route('logout') }}" method="POST">
+            <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit">🚪 <span>تسجيل الخروج</span></button>
+                <button type="submit">🚪 تسجيل الخروج</button>
             </form>
         </div>
     </aside>
@@ -98,74 +152,61 @@
     {{-- ═══ MAIN AREA ═══ --}}
     <div class="main-area">
         <header class="topbar">
-            <div style="color: var(--tm); font-size: 11px;">
-                مرحباً، {{ auth()->user()->name ?? 'المستخدم' }} 👋
+            <div style="display:flex;align-items:center;gap:12px">
+                @if($portalType === 'admin')
+                    <span style="font-size:14px">🛡️</span>
+                    <span style="font-weight:600;color:var(--tx);font-size:14px">مدير النظام</span>
+                @elseif($portalType === 'b2b')
+                    <span style="font-size:14px">🏢</span>
+                    <span style="font-weight:600;color:var(--tx);font-size:14px">{{ auth()->user()->account->name ?? 'شركة التقنية المتقدمة' }}</span>
+                @else
+                    <span style="font-weight:600;color:var(--tx);font-size:15px">@yield('page-title', '')</span>
+                @endif
             </div>
             <div class="topbar-user">
-                <a href="{{ route('notifications.index') }}" class="topbar-bell">
+                <button class="topbar-bell" onclick="window.location='{{ route('notifications.index') }}'">
                     🔔
-                    @if($unreadNotifs > 0)
-                        <span class="dot"></span>
-                    @endif
-                </a>
-                <div style="display:flex;align-items:center;gap:8px">
-                    <div class="topbar-avatar">{{ mb_substr(auth()->user()->name ?? 'م', 0, 1) }}</div>
-                    <span style="font-size:11px;font-weight:600">{{ auth()->user()->name ?? 'المستخدم' }}</span>
+                    @if($unreadNotifs > 0)<span class="dot"></span>@endif
+                </button>
+                <div style="display:flex;align-items:center;gap:10px">
+                    @php
+                        $avatarStyle = match($portalType) {
+                            'b2c' => 'background:linear-gradient(135deg,#0D9488,#065F56);color:#fff',
+                            'admin' => 'background:linear-gradient(135deg,#7C3AED,#4C1D95);color:#fff',
+                            default => '',
+                        };
+                    @endphp
+                    <div class="topbar-avatar" style="{{ $avatarStyle }}">
+                        {{ mb_substr(auth()->user()->name ?? 'م', 0, 1) }}
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--tx)">{{ auth()->user()->name ?? 'المستخدم' }}</div>
+                        @if($portalType !== 'b2c')
+                            <div style="font-size:11px;color:var(--td)">{{ $portalType === 'admin' ? 'مدير النظام' : (auth()->user()->role_name ?? 'مدير') }}</div>
+                        @endif
+                    </div>
                 </div>
             </div>
         </header>
 
-        <div class="content fade-in">
-            {{-- Flash Messages --}}
+        <main class="content">
+            {{-- Toast Notifications --}}
             @if(session('success'))
-                <x-toast type="success" :message="session('success')" />
+                <div class="toast-container"><div class="toast toast-success">✅ {{ session('success') }}</div></div>
             @endif
             @if(session('error'))
-                <x-toast type="danger" :message="session('error')" />
+                <div class="toast-container"><div class="toast toast-danger">❌ {{ session('error') }}</div></div>
             @endif
             @if(session('warning'))
-                <x-toast type="warning" :message="session('warning')" />
+                <div class="toast-container"><div class="toast toast-warning">⚠️ {{ session('warning') }}</div></div>
             @endif
 
             @yield('content')
-        </div>
+        </main>
     </div>
 </div>
 
-{{-- Toast JS --}}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Auto-dismiss toasts
-    document.querySelectorAll('.toast').forEach(function(t) {
-        setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 300); }, 3000);
-    });
-    // Modal close
-    document.querySelectorAll('[data-modal-close]').forEach(function(b) {
-        b.addEventListener('click', function() {
-            var m = this.closest('.modal-bg');
-            if (m) m.remove();
-        });
-    });
-    document.querySelectorAll('[data-modal-open]').forEach(function(b) {
-        b.addEventListener('click', function() {
-            var t = this.dataset.modalOpen;
-            var m = document.getElementById(t);
-            if (m) m.style.display = 'flex';
-        });
-    });
-    document.querySelectorAll('.modal-bg').forEach(function(m) {
-        m.addEventListener('click', function(e) {
-            if (e.target === m) m.style.display = 'none';
-        });
-    });
-    // Confirm deletes
-    document.querySelectorAll('[data-confirm]').forEach(function(f) {
-        f.addEventListener('submit', function(e) {
-            if (!confirm(f.dataset.confirm || 'هل أنت متأكد؟')) e.preventDefault();
-        });
-    });
-});
-</script>
+<script src="{{ asset('js/app.js') }}"></script>
 @stack('scripts')
 </body>
 </html>

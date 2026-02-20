@@ -11,73 +11,126 @@
 <body>
 <div class="app-layout">
     
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <div class="sidebar-logo">SG</div>
-            <span class="sidebar-title">Shipping Gateway</span>
+            <?php if($portalType === 'b2c'): ?>
+                <div class="sidebar-logo" style="background:linear-gradient(135deg,#0D9488,#065F56)">B2C</div>
+                <div class="sidebar-info">
+                    <span class="sidebar-title">بوابة الشحن</span>
+                    <span class="sidebar-subtitle">للأفراد</span>
+                </div>
+            <?php elseif($portalType === 'admin'): ?>
+                <div class="sidebar-logo" style="background:linear-gradient(135deg,#7C3AED,#4C1D95)">SYS</div>
+                <div class="sidebar-info">
+                    <span class="sidebar-title">Shipping Gateway</span>
+                    <span class="sidebar-subtitle">لوحة مدير النظام</span>
+                </div>
+            <?php else: ?>
+                <div class="sidebar-logo">B2B</div>
+                <div class="sidebar-info">
+                    <span class="sidebar-title">Shipping Gateway</span>
+                    <span class="sidebar-subtitle">بوابة الأعمال</span>
+                </div>
+            <?php endif; ?>
         </div>
+
         <nav class="sidebar-nav">
             <?php
                 $currentRoute = Route::currentRouteName() ?? '';
                 $unreadNotifs = \App\Models\Notification::where('read_at', null)->count();
                 $openTickets = \App\Models\SupportTicket::where('status', 'open')->count();
-                $processingShipments = \App\Models\Shipment::whereIn('status', ['payment_pending', 'purchased', 'picked_up', 'in_transit', 'out_for_delivery'])->count();
+                $processingShipments = \App\Models\Shipment::whereIn('status', ['payment_pending','purchased','picked_up','in_transit','out_for_delivery'])->count();
 
-                // Sidebar route names must exist in routes/web.php (auth + tenant middleware group)
-                $menu = [
-                    ['d' => true, 'label' => 'الرئيسية'],
-                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '🏠', 'label' => 'لوحة التحكم'],
+                $b2cMenu = [
+                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '🏠', 'label' => 'الرئيسية'],
+                    ['id' => 'shipments', 'route' => 'shipments.index', 'icon' => '📦', 'label' => 'شحناتي', 'badge' => $processingShipments],
+                    ['id' => 'tracking', 'route' => 'tracking.index', 'icon' => '🔍', 'label' => 'التتبع'],
+                    ['id' => 'wallet', 'route' => 'wallet.index', 'icon' => '💰', 'label' => 'المحفظة'],
+                    ['d' => true],
+                    ['id' => 'addresses', 'route' => 'addresses.index', 'icon' => '📒', 'label' => 'العناوين'],
+                    ['id' => 'support', 'route' => 'support.index', 'icon' => '🎧', 'label' => 'الدعم', 'badge' => $openTickets],
+                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙️', 'label' => 'الإعدادات'],
+                ];
+
+                $b2bMenu = [
+                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '📊', 'label' => 'لوحة التحكم'],
                     ['id' => 'shipments', 'route' => 'shipments.index', 'icon' => '📦', 'label' => 'الشحنات', 'badge' => $processingShipments],
                     ['id' => 'orders', 'route' => 'orders.index', 'icon' => '🛒', 'label' => 'الطلبات'],
                     ['id' => 'stores', 'route' => 'stores.index', 'icon' => '🏪', 'label' => 'المتاجر'],
-                    ['id' => 'tracking', 'route' => 'tracking.index', 'icon' => '🚚', 'label' => 'التتبع'],
-                    ['id' => 'pricing', 'route' => 'pricing.index', 'icon' => '🏷', 'label' => 'التسعير'],
-                    ['d' => true, 'label' => 'المالية'],
                     ['id' => 'wallet', 'route' => 'wallet.index', 'icon' => '💰', 'label' => 'المحفظة'],
-                    ['id' => 'financial', 'route' => 'financial.index', 'icon' => '📊', 'label' => 'المالية'],
-                    ['d' => true, 'label' => 'الإدارة'],
-                    ['id' => 'users', 'route' => 'users.index', 'icon' => '👥', 'label' => 'المستخدمين'],
-                    ['id' => 'roles', 'route' => 'roles.index', 'icon' => '🛡', 'label' => 'الأدوار'],
-                    ['id' => 'invitations', 'route' => 'invitations.index', 'icon' => '📧', 'label' => 'الدعوات'],
-                    ['id' => 'organizations', 'route' => 'organizations.index', 'icon' => '🏢', 'label' => 'المنظمات'],
-                    ['d' => true, 'label' => 'النظام'],
-                    ['id' => 'notifications', 'route' => 'notifications.index', 'icon' => '🔔', 'label' => 'الإشعارات', 'badge' => $unreadNotifs],
-                    ['id' => 'reports', 'route' => 'reports.index', 'icon' => '📈', 'label' => 'التقارير'],
-                    ['id' => 'audit', 'route' => 'audit.index', 'icon' => '📋', 'label' => 'التدقيق'],
-                    ['id' => 'kyc', 'route' => 'kyc.index', 'icon' => '✅', 'label' => 'KYC'],
-                    ['id' => 'dg', 'route' => 'dg.index', 'icon' => '⚠', 'label' => 'DG'],
-                    ['id' => 'support', 'route' => 'support.index', 'icon' => '🎧', 'label' => 'الدعم', 'badge' => $openTickets],
-                    ['id' => 'addresses', 'route' => 'addresses.index', 'icon' => '📍', 'label' => 'العناوين'],
-                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙', 'label' => 'الإعدادات'],
-                    ['id' => 'admin', 'route' => 'admin.index', 'icon' => '🔑', 'label' => 'الإدارة'],
-                    ['d' => true, 'label' => 'Phase 2'],
-                    ['id' => 'containers', 'route' => 'containers.index', 'icon' => '📦', 'label' => 'الحاويات'],
-                    ['id' => 'customs', 'route' => 'customs.index', 'icon' => '📄', 'label' => 'الجمارك'],
-                    ['id' => 'drivers', 'route' => 'drivers.index', 'icon' => '🚗', 'label' => 'السائقين'],
-                    ['id' => 'claims', 'route' => 'claims.index', 'icon' => '⚡', 'label' => 'المطالبات'],
-                    ['id' => 'risk', 'route' => 'risk.index', 'icon' => '🛡', 'label' => 'المخاطر'],
-                    ['id' => 'vessels', 'route' => 'vessels.index', 'icon' => '⚓', 'label' => 'السفن'],
-                    ['id' => 'schedules', 'route' => 'schedules.index', 'icon' => '📅', 'label' => 'الجداول'],
-                    ['id' => 'branches', 'route' => 'branches.index', 'icon' => '🏛', 'label' => 'الفروع'],
-                    ['id' => 'companies', 'route' => 'companies.index', 'icon' => '🌐', 'label' => 'الشركات'],
-                    ['id' => 'hscodes', 'route' => 'hscodes.index', 'icon' => '#️⃣', 'label' => 'HS أكواد'],
+                    ['id' => 'reports', 'route' => 'reports.index', 'icon' => '📊', 'label' => 'التقارير'],
+                    ['d' => true],
+                    ['id' => 'users', 'route' => 'users.index', 'icon' => '👥', 'label' => 'المستخدمون'],
+                    ['id' => 'roles', 'route' => 'roles.index', 'icon' => '🔐', 'label' => 'الأدوار'],
+                    ['id' => 'invitations', 'route' => 'invitations.index', 'icon' => '📨', 'label' => 'الدعوات'],
+                    ['d' => true],
+                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙️', 'label' => 'الإعدادات'],
                 ];
+
+                $adminMenu = [
+                    ['g' => 'العمليات'],
+                    ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '📊', 'label' => 'لوحة التحكم'],
+                    ['id' => 'shipments', 'route' => 'shipments.index', 'icon' => '📦', 'label' => 'الشحنات', 'badge' => $processingShipments],
+                    ['id' => 'orders', 'route' => 'orders.index', 'icon' => '🛒', 'label' => 'الطلبات'],
+                    ['id' => 'tracking', 'route' => 'tracking.index', 'icon' => '🔍', 'label' => 'التتبع'],
+                    ['id' => 'stores', 'route' => 'stores.index', 'icon' => '🏪', 'label' => 'المتاجر'],
+
+                    ['g' => 'المالية'],
+                    ['id' => 'wallet', 'route' => 'wallet.index', 'icon' => '💰', 'label' => 'المحفظة'],
+                    ['id' => 'financial', 'route' => 'financial.index', 'icon' => '💳', 'label' => 'المالية'],
+                    ['id' => 'pricing', 'route' => 'pricing.index', 'icon' => '🏷️', 'label' => 'التسعير'],
+
+                    ['g' => 'اللوجستيات'],
+                    ['id' => 'containers', 'route' => 'containers.index', 'icon' => '🚢', 'label' => 'الحاويات'],
+                    ['id' => 'customs', 'route' => 'customs.index', 'icon' => '🛃', 'label' => 'الجمارك'],
+                    ['id' => 'vessels', 'route' => 'vessels.index', 'icon' => '⛴️', 'label' => 'السفن'],
+                    ['id' => 'schedules', 'route' => 'schedules.index', 'icon' => '📅', 'label' => 'الجداول'],
+                    ['id' => 'drivers', 'route' => 'drivers.index', 'icon' => '🚛', 'label' => 'السائقين'],
+                    ['id' => 'hscodes', 'route' => 'hscodes.index', 'icon' => '🔢', 'label' => 'أكواد HS'],
+
+                    ['g' => 'الامتثال'],
+                    ['id' => 'kyc', 'route' => 'kyc.index', 'icon' => '🪪', 'label' => 'KYC'],
+                    ['id' => 'dg', 'route' => 'dg.index', 'icon' => '☣️', 'label' => 'البضائع الخطرة'],
+                    ['id' => 'risk', 'route' => 'risk.index', 'icon' => '⚠️', 'label' => 'المخاطر'],
+                    ['id' => 'claims', 'route' => 'claims.index', 'icon' => '📋', 'label' => 'المطالبات'],
+
+                    ['g' => 'الإدارة'],
+                    ['id' => 'organizations', 'route' => 'organizations.index', 'icon' => '🏢', 'label' => 'المنظمات'],
+                    ['id' => 'companies', 'route' => 'companies.index', 'icon' => '🏭', 'label' => 'الشركات'],
+                    ['id' => 'branches', 'route' => 'branches.index', 'icon' => '🏬', 'label' => 'الفروع'],
+                    ['id' => 'users', 'route' => 'users.index', 'icon' => '👥', 'label' => 'المستخدمون'],
+                    ['id' => 'roles', 'route' => 'roles.index', 'icon' => '🔐', 'label' => 'الأدوار'],
+                    ['id' => 'invitations', 'route' => 'invitations.index', 'icon' => '📨', 'label' => 'الدعوات'],
+
+                    ['g' => 'النظام'],
+                    ['id' => 'admin', 'route' => 'admin.index', 'icon' => '🛡️', 'label' => 'الإدارة العامة'],
+                    ['id' => 'audit', 'route' => 'audit.index', 'icon' => '📜', 'label' => 'التدقيق'],
+                    ['id' => 'reports', 'route' => 'reports.index', 'icon' => '📈', 'label' => 'التقارير'],
+                    ['id' => 'notifications', 'route' => 'notifications.index', 'icon' => '🔔', 'label' => 'الإشعارات', 'badge' => $unreadNotifs],
+                    ['id' => 'support', 'route' => 'support.index', 'icon' => '🎧', 'label' => 'الدعم', 'badge' => $openTickets],
+                    ['id' => 'addresses', 'route' => 'addresses.index', 'icon' => '📒', 'label' => 'العناوين'],
+                    ['id' => 'settings', 'route' => 'settings.index', 'icon' => '⚙️', 'label' => 'الإعدادات'],
+                ];
+
+                $menu = match($portalType) {
+                    'b2c' => $b2cMenu,
+                    'admin' => $adminMenu,
+                    default => $b2bMenu,
+                };
             ?>
 
             <?php $__currentLoopData = $menu; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                 <?php if(isset($item['d'])): ?>
-                    <div class="sidebar-divider"><?php echo e($item['label']); ?></div>
+                    <div class="sidebar-divider"></div>
+                <?php elseif(isset($item['g'])): ?>
+                    <div class="sidebar-group-label"><?php echo e($item['g']); ?></div>
                 <?php else: ?>
                     <?php
-                        $isActive = str_starts_with($currentRoute, $item['id']);
-                        // Use web route only: relative path so session/cookie same-origin (avoid redirect to login)
-                        $url = \Illuminate\Support\Facades\Route::has($item['route'])
-                            ? (\Illuminate\Support\Str::startsWith($item['route'] ?? '', 'api.') ? '#' : route($item['route'], [], false))
-                            : '#';
+                        $isActive = str_starts_with($currentRoute, $item['id']) || $currentRoute === $item['route'];
                     ?>
-                    <a href="<?php echo e($url); ?>"
+                    <a href="<?php echo e(route($item['route'])); ?>"
                        class="sidebar-item <?php echo e($isActive ? 'active' : ''); ?>"
-                       <?php if($url === '#'): ?> title="<?php echo e(__('Route not registered: ')); ?><?php echo e($item['route']); ?>" <?php endif; ?>>
+                       style="<?php echo e($isActive && $portalType === 'b2c' ? 'background:rgba(13,148,136,0.13);color:#0D9488' : ($isActive && $portalType === 'admin' ? 'background:rgba(124,58,237,0.13);color:#7C3AED' : '')); ?>">
                         <span class="icon"><?php echo e($item['icon']); ?></span>
                         <span><?php echo e($item['label']); ?></span>
                         <?php if(isset($item['badge']) && $item['badge'] > 0): ?>
@@ -87,10 +140,11 @@
                 <?php endif; ?>
             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
         </nav>
+
         <div class="sidebar-footer">
-            <form action="<?php echo e(route('logout')); ?>" method="POST">
+            <form method="POST" action="<?php echo e(route('logout')); ?>">
                 <?php echo csrf_field(); ?>
-                <button type="submit">🚪 <span>تسجيل الخروج</span></button>
+                <button type="submit">🚪 تسجيل الخروج</button>
             </form>
         </div>
     </aside>
@@ -98,131 +152,62 @@
     
     <div class="main-area">
         <header class="topbar">
-            <div style="color: var(--tm); font-size: 11px;">
-                مرحباً، <?php echo e(auth()->user()->name ?? 'المستخدم'); ?> 👋
+            <div style="display:flex;align-items:center;gap:12px">
+                <?php if($portalType === 'admin'): ?>
+                    <span style="font-size:14px">🛡️</span>
+                    <span style="font-weight:600;color:var(--tx);font-size:14px">مدير النظام</span>
+                <?php elseif($portalType === 'b2b'): ?>
+                    <span style="font-size:14px">🏢</span>
+                    <span style="font-weight:600;color:var(--tx);font-size:14px"><?php echo e(auth()->user()->account->name ?? 'شركة التقنية المتقدمة'); ?></span>
+                <?php else: ?>
+                    <span style="font-weight:600;color:var(--tx);font-size:15px"><?php echo $__env->yieldContent('page-title', ''); ?></span>
+                <?php endif; ?>
             </div>
             <div class="topbar-user">
-                <a href="<?php echo e(route('notifications.index')); ?>" class="topbar-bell">
+                <button class="topbar-bell" onclick="window.location='<?php echo e(route('notifications.index')); ?>'">
                     🔔
-                    <?php if($unreadNotifs > 0): ?>
-                        <span class="dot"></span>
-                    <?php endif; ?>
-                </a>
-                <div style="display:flex;align-items:center;gap:8px">
-                    <div class="topbar-avatar"><?php echo e(mb_substr(auth()->user()->name ?? 'م', 0, 1)); ?></div>
-                    <span style="font-size:11px;font-weight:600"><?php echo e(auth()->user()->name ?? 'المستخدم'); ?></span>
+                    <?php if($unreadNotifs > 0): ?><span class="dot"></span><?php endif; ?>
+                </button>
+                <div style="display:flex;align-items:center;gap:10px">
+                    <?php
+                        $avatarStyle = match($portalType) {
+                            'b2c' => 'background:linear-gradient(135deg,#0D9488,#065F56);color:#fff',
+                            'admin' => 'background:linear-gradient(135deg,#7C3AED,#4C1D95);color:#fff',
+                            default => '',
+                        };
+                    ?>
+                    <div class="topbar-avatar" style="<?php echo e($avatarStyle); ?>">
+                        <?php echo e(mb_substr(auth()->user()->name ?? 'م', 0, 1)); ?>
+
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--tx)"><?php echo e(auth()->user()->name ?? 'المستخدم'); ?></div>
+                        <?php if($portalType !== 'b2c'): ?>
+                            <div style="font-size:11px;color:var(--td)"><?php echo e($portalType === 'admin' ? 'مدير النظام' : (auth()->user()->role_name ?? 'مدير')); ?></div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </header>
 
-        <div class="content fade-in">
+        <main class="content">
             
             <?php if(session('success')): ?>
-                <?php if (isset($component)) { $__componentOriginal7cfab914afdd05940201ca0b2cbc009b = $component; } ?>
-<?php if (isset($attributes)) { $__attributesOriginal7cfab914afdd05940201ca0b2cbc009b = $attributes; } ?>
-<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.toast','data' => ['type' => 'success','message' => session('success')]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
-<?php $component->withName('toast'); ?>
-<?php if ($component->shouldRender()): ?>
-<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
-<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
-<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
-<?php endif; ?>
-<?php $component->withAttributes(['type' => 'success','message' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute(session('success'))]); ?>
-<?php echo $__env->renderComponent(); ?>
-<?php endif; ?>
-<?php if (isset($__attributesOriginal7cfab914afdd05940201ca0b2cbc009b)): ?>
-<?php $attributes = $__attributesOriginal7cfab914afdd05940201ca0b2cbc009b; ?>
-<?php unset($__attributesOriginal7cfab914afdd05940201ca0b2cbc009b); ?>
-<?php endif; ?>
-<?php if (isset($__componentOriginal7cfab914afdd05940201ca0b2cbc009b)): ?>
-<?php $component = $__componentOriginal7cfab914afdd05940201ca0b2cbc009b; ?>
-<?php unset($__componentOriginal7cfab914afdd05940201ca0b2cbc009b); ?>
-<?php endif; ?>
+                <div class="toast-container"><div class="toast toast-success">✅ <?php echo e(session('success')); ?></div></div>
             <?php endif; ?>
             <?php if(session('error')): ?>
-                <?php if (isset($component)) { $__componentOriginal7cfab914afdd05940201ca0b2cbc009b = $component; } ?>
-<?php if (isset($attributes)) { $__attributesOriginal7cfab914afdd05940201ca0b2cbc009b = $attributes; } ?>
-<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.toast','data' => ['type' => 'danger','message' => session('error')]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
-<?php $component->withName('toast'); ?>
-<?php if ($component->shouldRender()): ?>
-<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
-<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
-<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
-<?php endif; ?>
-<?php $component->withAttributes(['type' => 'danger','message' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute(session('error'))]); ?>
-<?php echo $__env->renderComponent(); ?>
-<?php endif; ?>
-<?php if (isset($__attributesOriginal7cfab914afdd05940201ca0b2cbc009b)): ?>
-<?php $attributes = $__attributesOriginal7cfab914afdd05940201ca0b2cbc009b; ?>
-<?php unset($__attributesOriginal7cfab914afdd05940201ca0b2cbc009b); ?>
-<?php endif; ?>
-<?php if (isset($__componentOriginal7cfab914afdd05940201ca0b2cbc009b)): ?>
-<?php $component = $__componentOriginal7cfab914afdd05940201ca0b2cbc009b; ?>
-<?php unset($__componentOriginal7cfab914afdd05940201ca0b2cbc009b); ?>
-<?php endif; ?>
+                <div class="toast-container"><div class="toast toast-danger">❌ <?php echo e(session('error')); ?></div></div>
             <?php endif; ?>
             <?php if(session('warning')): ?>
-                <?php if (isset($component)) { $__componentOriginal7cfab914afdd05940201ca0b2cbc009b = $component; } ?>
-<?php if (isset($attributes)) { $__attributesOriginal7cfab914afdd05940201ca0b2cbc009b = $attributes; } ?>
-<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.toast','data' => ['type' => 'warning','message' => session('warning')]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
-<?php $component->withName('toast'); ?>
-<?php if ($component->shouldRender()): ?>
-<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
-<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
-<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
-<?php endif; ?>
-<?php $component->withAttributes(['type' => 'warning','message' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute(session('warning'))]); ?>
-<?php echo $__env->renderComponent(); ?>
-<?php endif; ?>
-<?php if (isset($__attributesOriginal7cfab914afdd05940201ca0b2cbc009b)): ?>
-<?php $attributes = $__attributesOriginal7cfab914afdd05940201ca0b2cbc009b; ?>
-<?php unset($__attributesOriginal7cfab914afdd05940201ca0b2cbc009b); ?>
-<?php endif; ?>
-<?php if (isset($__componentOriginal7cfab914afdd05940201ca0b2cbc009b)): ?>
-<?php $component = $__componentOriginal7cfab914afdd05940201ca0b2cbc009b; ?>
-<?php unset($__componentOriginal7cfab914afdd05940201ca0b2cbc009b); ?>
-<?php endif; ?>
+                <div class="toast-container"><div class="toast toast-warning">⚠️ <?php echo e(session('warning')); ?></div></div>
             <?php endif; ?>
 
             <?php echo $__env->yieldContent('content'); ?>
-        </div>
+        </main>
     </div>
 </div>
 
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Auto-dismiss toasts
-    document.querySelectorAll('.toast').forEach(function(t) {
-        setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 300); }, 3000);
-    });
-    // Modal close
-    document.querySelectorAll('[data-modal-close]').forEach(function(b) {
-        b.addEventListener('click', function() {
-            var m = this.closest('.modal-bg');
-            if (m) m.remove();
-        });
-    });
-    document.querySelectorAll('[data-modal-open]').forEach(function(b) {
-        b.addEventListener('click', function() {
-            var t = this.dataset.modalOpen;
-            var m = document.getElementById(t);
-            if (m) m.style.display = 'flex';
-        });
-    });
-    document.querySelectorAll('.modal-bg').forEach(function(m) {
-        m.addEventListener('click', function(e) {
-            if (e.target === m) m.style.display = 'none';
-        });
-    });
-    // Confirm deletes
-    document.querySelectorAll('[data-confirm]').forEach(function(f) {
-        f.addEventListener('submit', function(e) {
-            if (!confirm(f.dataset.confirm || 'هل أنت متأكد؟')) e.preventDefault();
-        });
-    });
-});
-</script>
+<script src="<?php echo e(asset('js/app.js')); ?>"></script>
 <?php echo $__env->yieldPushContent('scripts'); ?>
 </body>
 </html>
