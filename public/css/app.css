@@ -30,6 +30,8 @@ body {
     color: var(--tx);
     font-size: 14px;
     line-height: 1.6;
+    direction: rtl;
+    text-align: right;
     -webkit-font-smoothing: antialiased;
 }
 

@@ -58,37 +58,23 @@ class ShipmentWebController extends WebController
         $cost = max(($v['weight'] ?? 1) * 6.5, 18);
         $vat  = round($cost * 0.15, 2);
 
-        $user = auth()->user();
-        $userId = $user ? $user->getKey() : null;
-        if (!$userId) {
-            return redirect()->route('login')->with('error', 'يجب تسجيل الدخول.');
-        }
         $shipment = Shipment::create([
             'account_id'          => $accountId,
-            'user_id'             => $userId,
-            'created_by'          => $userId,
+            'user_id'             => auth()->id(),
             'reference_number'    => Shipment::generateRef(),
             'type'                => 'domestic',
             'sender_name'         => $v['sender_name'],
             'sender_phone'        => $v['sender_phone'],
             'sender_city'         => $v['sender_city'],
-            'sender_address_1'    => $v['sender_city'] ?? '',
-            'sender_country'      => 'SA',
             'recipient_name'      => $v['recipient_name'],
             'recipient_phone'     => $v['recipient_phone'],
             'recipient_city'      => $v['recipient_city'],
-            'recipient_address_1' => $v['recipient_city'] ?? '',
-            'recipient_country'   => 'SA',
             'weight'              => $v['weight'] ?? 1,
-            'total_weight'        => $v['weight'] ?? 1,
             'pieces'              => $v['pieces'] ?? 1,
-            'parcels_count'       => (int) ($v['pieces'] ?? 1),
             'content_description' => $v['content_description'] ?? null,
             'shipping_cost'       => $cost,
-            'shipping_rate'       => $cost,
             'vat_amount'          => $vat,
             'total_cost'          => $cost + $vat,
-            'total_charge'        => $cost + $vat,
             'status'              => 'pending',
             'source'              => 'manual',
         ]);

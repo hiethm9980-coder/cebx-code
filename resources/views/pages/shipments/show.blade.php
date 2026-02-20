@@ -62,12 +62,11 @@
         {{-- ═══ PARCEL DETAILS ═══ --}}
         <x-card title="📦 تفاصيل الطرد">
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-                @php $firstParcel = $shipment->parcels?->first(); @endphp
                 @foreach([
-                    ['الوزن', ($shipment->total_weight ?? $shipment->weight ?? '—') . ' كغ'],
-                    ['الأبعاد', ($firstParcel ? (($firstParcel->length ?? '—') . '×' . ($firstParcel->width ?? '—') . '×' . ($firstParcel->height ?? '—')) : '—')],
-                    ['المحتوى', $firstParcel?->description ?? $shipment->content_description ?? '—'],
-                    ['القطع', $shipment->parcels_count ?? $shipment->pieces ?? 1],
+                    ['الوزن', ($shipment->total_weight ?? '—') . ' كغ'],
+                    ['الأبعاد', ($shipment->parcels->first()?->length ?? '—') . '×' . ($shipment->parcels->first()?->width ?? '—') . '×' . ($shipment->parcels->first()?->height ?? '—')],
+                    ['المحتوى', $shipment->parcels->first()?->description ?? '—'],
+                    ['القطع', $shipment->parcels_count ?? 1],
                 ] as $detail)
                     <div style="text-align:center;padding:16px;background:var(--sf);border-radius:10px">
                         <div style="font-size:12px;color:var(--td);margin-bottom:6px">{{ $detail[0] }}</div>

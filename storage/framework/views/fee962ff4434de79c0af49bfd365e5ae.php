@@ -11,14 +11,14 @@
     <form action="<?php echo e(route('tracking.index')); ?>" method="GET" style="display:flex;gap:12px">
         <div style="flex:1">
             <input type="text" name="tracking_number" value="<?php echo e(request('tracking_number')); ?>"
-                   placeholder="أدخل رقم التتبع... مثال: TRK-8891"
-                   class="form-input form-input-lg" style="width:100%;height:56px;font-size:18px">
+                   placeholder="أدخل رقم التتبع... مثال: SHP-20261847"
+                   class="form-input" style="width:100%;height:56px;font-size:18px">
         </div>
-        <button type="submit" class="btn btn-pr" style="height:56px;padding:0 32px;border-radius:14px;font-size:16px;background:#0D9488">تتبع</button>
+        <button type="submit" class="btn btn-pr" style="height:56px;padding:0 32px;border-radius:14px;font-size:16px">تتبع</button>
     </form>
 </div>
 
-<?php if(isset($trackedShipment)): ?>
+<?php if($trackedShipment): ?>
     <?php if (isset($component)) { $__componentOriginal53747ceb358d30c0105769f8471417f6 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal53747ceb358d30c0105769f8471417f6 = $attributes; } ?>
 <?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.card','data' => []] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
@@ -32,9 +32,9 @@
         <div style="max-width:700px;margin:0 auto">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
                 <div>
-                    <div style="font-family:monospace;color:#0D9488;font-weight:700;font-size:20px"><?php echo e($trackedShipment->reference_number); ?></div>
+                    <div style="font-family:monospace;color:var(--pr);font-weight:700;font-size:20px"><?php echo e($trackedShipment->reference_number); ?></div>
                     <div style="font-size:13px;color:var(--td);margin-top:4px">
-                        <?php echo e($trackedShipment->carrier_code); ?> • <?php echo e($trackedShipment->service_name ?? ''); ?> •
+                        <?php echo e($trackedShipment->carrier_name ?? ''); ?> •
                         <?php echo e($trackedShipment->sender_city); ?> → <?php echo e($trackedShipment->recipient_city); ?>
 
                     </div>
@@ -61,13 +61,12 @@
 <?php endif; ?>
             </div>
 
-            
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">
                 <?php $__currentLoopData = [
-                    ['الوزن', ($trackedShipment->total_weight ?? '—') . ' كغ'],
-                    ['القطع', $trackedShipment->parcels_count ?? 1],
+                    ['الوزن', ($trackedShipment->weight ?? '—') . ' كغ'],
+                    ['القطع', $trackedShipment->pieces ?? 1],
                     ['COD', $trackedShipment->is_cod ? number_format($trackedShipment->cod_amount) . ' ر.س' : '—'],
-                    ['الوصول المتوقع', $trackedShipment->estimated_delivery_at ? $trackedShipment->estimated_delivery_at->format('d/m') : '—'],
+                    ['التكلفة', number_format($trackedShipment->total_cost, 2) . ' ر.س'],
                 ]; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $info): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                     <div style="padding:14px;background:var(--sf);border-radius:10px;text-align:center">
                         <div style="font-size:11px;color:var(--td)"><?php echo e($info[0]); ?></div>
@@ -78,14 +77,14 @@
 
             <?php if (isset($component)) { $__componentOriginal93f2afea2d7941ca7799292711b7f46f = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal93f2afea2d7941ca7799292711b7f46f = $attributes; } ?>
-<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.timeline','data' => ['items' => $trackingHistory ?? [],'teal' => true]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.timeline','data' => ['items' => $trackingHistory]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
 <?php $component->withName('timeline'); ?>
 <?php if ($component->shouldRender()): ?>
 <?php $__env->startComponent($component->resolveView(), $component->data()); ?>
 <?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
 <?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
 <?php endif; ?>
-<?php $component->withAttributes(['items' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($trackingHistory ?? []),'teal' => true]); ?>
+<?php $component->withAttributes(['items' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($trackingHistory)]); ?>
 <?php echo $__env->renderComponent(); ?>
 <?php endif; ?>
 <?php if (isset($__attributesOriginal93f2afea2d7941ca7799292711b7f46f)): ?>
@@ -97,7 +96,7 @@
 <?php unset($__componentOriginal93f2afea2d7941ca7799292711b7f46f); ?>
 <?php endif; ?>
 
-            <a href="<?php echo e(route('shipments.show', $trackedShipment)); ?>" class="btn btn-pr" style="width:100%;text-align:center;margin-top:16px;background:#0D9488;display:block">عرض التفاصيل الكاملة</a>
+            <a href="<?php echo e(route('shipments.show', $trackedShipment)); ?>" class="btn btn-pr" style="width:100%;text-align:center;margin-top:16px;display:block">عرض التفاصيل الكاملة</a>
         </div>
      <?php echo $__env->renderComponent(); ?>
 <?php endif; ?>
@@ -114,19 +113,19 @@
 
 <?php if (isset($component)) { $__componentOriginal53747ceb358d30c0105769f8471417f6 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal53747ceb358d30c0105769f8471417f6 = $attributes; } ?>
-<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.card','data' => ['title' => '📦 شحناتي النشطة']] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.card','data' => ['title' => '📦 شحناتي النشطة','style' => 'margin-top:24px']] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
 <?php $component->withName('card'); ?>
 <?php if ($component->shouldRender()): ?>
 <?php $__env->startComponent($component->resolveView(), $component->data()); ?>
 <?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
 <?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
 <?php endif; ?>
-<?php $component->withAttributes(['title' => '📦 شحناتي النشطة']); ?>
-    <?php $__empty_1 = true; $__currentLoopData = $activeShipments ?? []; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $i => $shipment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
+<?php $component->withAttributes(['title' => '📦 شحناتي النشطة','style' => 'margin-top:24px']); ?>
+    <?php $__empty_1 = true; $__currentLoopData = $activeShipments; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $shipment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;<?php echo e(!$loop->last ? 'border-bottom:1px solid var(--bd)' : ''); ?>;cursor:pointer"
-             onclick="window.location='<?php echo e(route('tracking.index', ['tracking_number' => $shipment->tracking_number])); ?>'">
+             onclick="window.location='<?php echo e(route('tracking.index', ['tracking_number' => $shipment->reference_number])); ?>'">
             <div>
-                <span style="font-family:monospace;color:#0D9488;font-weight:600"><?php echo e($shipment->reference_number); ?></span>
+                <span style="font-family:monospace;color:var(--pr);font-weight:600"><?php echo e($shipment->reference_number); ?></span>
                 <span style="color:var(--td);font-size:13px;margin-right:12px"><?php echo e($shipment->sender_city); ?> → <?php echo e($shipment->recipient_city); ?></span>
             </div>
             <?php if (isset($component)) { $__componentOriginal2ddbc40e602c342e508ac696e52f8719 = $component; } ?>

@@ -2,7 +2,34 @@
 
 namespace Database\Seeders;
 
-use App\Models\*;
+use App\Models\Account;
+use App\Models\User;
+use App\Models\Wallet;
+use App\Models\WalletTransaction;
+use App\Models\Store;
+use App\Models\Shipment;
+use App\Models\ShipmentEvent;
+use App\Models\Order;
+use App\Models\Address;
+use App\Models\SupportTicket;
+use App\Models\TicketReply;
+use App\Models\Notification;
+use App\Models\Invitation;
+use App\Models\Company;
+use App\Models\Branch;
+use App\Models\Vessel;
+use App\Models\Container;
+use App\Models\Schedule;
+use App\Models\CustomsDeclaration;
+use App\Models\Driver;
+use App\Models\Claim;
+use App\Models\HsCode;
+use App\Models\KycRequest;
+use App\Models\DgClassification;
+use App\Models\PricingRule;
+use App\Models\RiskRule;
+use App\Models\RiskAlert;
+use App\Models\AuditLog;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
@@ -51,6 +78,28 @@ class DemoSeeder extends Seeder
         // Super admin account
         $sysAccount = Account::create(['name'=>'مدير النظام','type'=>'admin','email'=>'admin@system.sa','status'=>'active','kyc_status'=>'verified']);
         User::create(['account_id'=>$sysAccount->id,'name'=>'مدير النظام','email'=>'admin@system.sa','password'=>Hash::make('admin'),'role_name'=>'مدير النظام','role'=>'admin','is_super_admin'=>true,'is_active'=>true,'last_login_at'=>now()]);
+
+        // B2C Individual account
+        $b2cAccount = Account::create([
+            'name' => 'محمد العمري',
+            'type' => 'individual',
+            'email' => 'mohammed@example.sa',
+            'phone' => '+966551234567',
+            'status' => 'active',
+            'kyc_status' => 'verified',
+        ]);
+        User::create([
+            'account_id' => $b2cAccount->id,
+            'name' => 'محمد العمري',
+            'email' => 'mohammed@example.sa',
+            'password' => Hash::make('password'),
+            'role_name' => 'مستخدم',
+            'role' => 'operator',
+            'is_active' => true,
+            'last_login_at' => now(),
+        ]);
+        // B2C Wallet
+        Wallet::create(['account_id' => $b2cAccount->id, 'available_balance' => 850.00, 'pending_balance' => 0]);
 
         // ═══════════════════════════════════════
         // 2. WALLET
@@ -140,6 +189,26 @@ class DemoSeeder extends Seeder
                 'delivered_at' => $status === 'delivered' ? $createdAt->copy()->addDays(rand(1,4)) : null,
                 'created_at' => $createdAt,
                 'updated_at' => $createdAt,
+            ]);
+        }
+
+        // ═══════════════════════════════════════
+        // ═══════════════════════════════════════
+        // 4b. B2C SHIPMENTS
+        // ═══════════════════════════════════════
+        $b2cStatuses = ['pending','in_transit','delivered','delivered','out_for_delivery'];
+        for ($i = 0; $i < 5; $i++) {
+            $carrier = $carriers[array_rand($carriers)];
+            Shipment::create([
+                'account_id' => $b2cAccount->id, 'user_id' => $b2cAccount->users()->first()->id ?? 1,
+                'reference_number' => 'SHP-B2C-' . str_pad($i + 1, 3, '0', STR_PAD_LEFT),
+                'type' => 'domestic', 'sender_name' => 'محمد العمري', 'sender_phone' => '+966551234567',
+                'sender_city' => 'الرياض', 'recipient_name' => $names[array_rand($names)],
+                'recipient_phone' => '+9665' . rand(10000000, 99999999),
+                'recipient_city' => $cities[array_rand($cities)],
+                'carrier_code' => $carrier['code'], 'carrier_name' => $carrier['name'],
+                'weight' => rand(5, 50) / 10, 'pieces' => 1, 'shipping_cost' => 18, 'vat_amount' => 2.70,
+                'total_cost' => 20.70, 'status' => $b2cStatuses[array_rand($b2cStatuses)], 'source' => 'manual',
             ]);
         }
 
@@ -255,7 +324,8 @@ class DemoSeeder extends Seeder
         AuditLog::create(['user_id'=>$admin->id,'event'=>'create','auditable_type'=>'App\\Models\\Shipment','auditable_id'=>1,'new_values'=>['reference_number'=>'SHP-20261847','status'=>'pending'],'ip_address'=>'192.168.1.100','created_at'=>now()->subHour()]);
 
         $this->command->info("✅ Demo data seeded: {$account->name}");
-        $this->command->info("   Login: sultan@techco.sa / password");
-        $this->command->info("   Admin: admin@system.sa / admin");
+        $this->command->info("   B2B Login: sultan@techco.sa / password");
+        $this->command->info("   B2C Login: mohammed@example.sa / password");
+        $this->command->info("   Admin Login: admin@system.sa / admin");
     }
 }

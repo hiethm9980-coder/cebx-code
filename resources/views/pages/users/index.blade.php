@@ -7,6 +7,13 @@
     <a href="{{ route('invitations.index') }}" class="btn btn-pr">+ دعوة مستخدم</a>
 </div>
 
+{{-- User Stats --}}
+<div class="stats-grid" style="margin-bottom:20px">
+    <x-stat-card icon="👥" label="إجمالي المستخدمين" :value="$users->total()" />
+    <x-stat-card icon="✅" label="نشط" :value="$activeCount" />
+    <x-stat-card icon="🚫" label="معطّل" :value="$disabledCount" />
+</div>
+
 <x-card>
     <div class="table-wrap">
         <table>

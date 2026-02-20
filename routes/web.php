@@ -10,6 +10,7 @@ use App\Http\Controllers\Web\WalletWebController;
 use App\Http\Controllers\Web\UserWebController;
 use App\Http\Controllers\Web\SupportWebController;
 use App\Http\Controllers\Web\PageController;
+use App\Http\Middleware\EnsureIsAdmin;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,13 +18,26 @@ use App\Http\Controllers\Web\PageController;
 |--------------------------------------------------------------------------
 */
 
-// ── Auth ──
-Route::get('/login', [AuthWebController::class, 'showLogin'])->name('login');
-Route::post('/login', [AuthWebController::class, 'login']);
+// ── Portal Selector (Landing) ──
+Route::get('/login', [AuthWebController::class, 'portalSelector'])->name('login');
+
+// ── B2B Auth ──
+Route::get('/b2b/login', [AuthWebController::class, 'showB2bLogin'])->name('b2b.login');
+Route::post('/b2b/login', [AuthWebController::class, 'loginB2b'])->name('b2b.login.submit');
+
+// ── B2C Auth ──
+Route::get('/b2c/login', [AuthWebController::class, 'showB2cLogin'])->name('b2c.login');
+Route::post('/b2c/login', [AuthWebController::class, 'loginB2c'])->name('b2c.login.submit');
+
+// ── Admin Auth ──
+Route::get('/admin/login', [AuthWebController::class, 'showAdminLogin'])->name('admin.login');
+Route::post('/admin/login', [AuthWebController::class, 'loginAdmin'])->name('admin.login.submit');
+
+// ── Logout ──
 Route::post('/logout', [AuthWebController::class, 'logout'])->name('logout');
 
 // ── Protected Routes ──
-Route::middleware(['auth:web', 'tenant'])->group(function () {
+Route::middleware(['auth:web'])->group(function () {
 
     // Dashboard
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
@@ -101,53 +115,57 @@ Route::middleware(['auth:web', 'tenant'])->group(function () {
     // ── Financial ──
     Route::get('/financial', [PageController::class, 'financial'])->name('financial.index');
 
-    // ── Audit ──
-    Route::get('/audit', [PageController::class, 'audit'])->name('audit.index');
-    Route::get('/audit/export', [PageController::class, 'auditExport'])->name('audit.export');
+    // ── Admin-Only Routes (protected by admin middleware) ──
+    Route::middleware([EnsureIsAdmin::class])->group(function () {
 
-    // ── Pricing ──
-    Route::get('/pricing', [PageController::class, 'pricing'])->name('pricing.index');
+        // ── Audit ──
+        Route::get('/audit', [PageController::class, 'audit'])->name('audit.index');
+        Route::get('/audit/export', [PageController::class, 'auditExport'])->name('audit.export');
 
-    // ── Admin ──
-    Route::get('/admin', [PageController::class, 'admin'])->name('admin.index');
+        // ── Pricing ──
+        Route::get('/pricing', [PageController::class, 'pricing'])->name('pricing.index');
 
-    // ── KYC ──
-    Route::get('/kyc', [PageController::class, 'kyc'])->name('kyc.index');
+        // ── Admin ──
+        Route::get('/admin', [PageController::class, 'admin'])->name('admin.index');
 
-    // ── DG (Dangerous Goods) ──
-    Route::get('/dg', [PageController::class, 'dg'])->name('dg.index');
+        // ── KYC ──
+        Route::get('/kyc', [PageController::class, 'kyc'])->name('kyc.index');
 
-    // ── Organizations ──
-    Route::get('/organizations', [PageController::class, 'organizations'])->name('organizations.index');
-    Route::post('/organizations', [PageController::class, 'organizationsStore'])->name('organizations.store');
+        // ── DG (Dangerous Goods) ──
+        Route::get('/dg', [PageController::class, 'dg'])->name('dg.index');
 
-    // ── Containers ──
-    Route::get('/containers', [PageController::class, 'containers'])->name('containers.index');
+        // ── Organizations ──
+        Route::get('/organizations', [PageController::class, 'organizations'])->name('organizations.index');
+        Route::post('/organizations', [PageController::class, 'organizationsStore'])->name('organizations.store');
 
-    // ── Customs ──
-    Route::get('/customs', [PageController::class, 'customs'])->name('customs.index');
+        // ── Containers ──
+        Route::get('/containers', [PageController::class, 'containers'])->name('containers.index');
 
-    // ── Drivers ──
-    Route::get('/drivers', [PageController::class, 'drivers'])->name('drivers.index');
+        // ── Customs ──
+        Route::get('/customs', [PageController::class, 'customs'])->name('customs.index');
 
-    // ── Claims ──
-    Route::get('/claims', [PageController::class, 'claims'])->name('claims.index');
+        // ── Drivers ──
+        Route::get('/drivers', [PageController::class, 'drivers'])->name('drivers.index');
 
-    // ── Vessels ──
-    Route::get('/vessels', [PageController::class, 'vessels'])->name('vessels.index');
+        // ── Claims ──
+        Route::get('/claims', [PageController::class, 'claims'])->name('claims.index');
 
-    // ── Schedules ──
-    Route::get('/schedules', [PageController::class, 'schedules'])->name('schedules.index');
+        // ── Vessels ──
+        Route::get('/vessels', [PageController::class, 'vessels'])->name('vessels.index');
 
-    // ── Branches ──
-    Route::get('/branches', [PageController::class, 'branches'])->name('branches.index');
+        // ── Schedules ──
+        Route::get('/schedules', [PageController::class, 'schedules'])->name('schedules.index');
 
-    // ── Companies ──
-    Route::get('/companies', [PageController::class, 'companies'])->name('companies.index');
+        // ── Branches ──
+        Route::get('/branches', [PageController::class, 'branches'])->name('branches.index');
 
-    // ── HS Codes ──
-    Route::get('/hscodes', [PageController::class, 'hscodes'])->name('hscodes.index');
+        // ── Companies ──
+        Route::get('/companies', [PageController::class, 'companies'])->name('companies.index');
 
-    // ── Risk ──
-    Route::get('/risk', [PageController::class, 'risk'])->name('risk.index');
+        // ── HS Codes ──
+        Route::get('/hscodes', [PageController::class, 'hscodes'])->name('hscodes.index');
+
+        // ── Risk ──
+        Route::get('/risk', [PageController::class, 'risk'])->name('risk.index');
+    }); // end admin middleware
 });

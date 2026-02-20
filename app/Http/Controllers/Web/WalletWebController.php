@@ -8,7 +8,7 @@ class WalletWebController extends WebController
     public function index()
     {
         $accountId = auth()->user()->account_id;
-        $wallet = Wallet::firstOrCreate(['account_id' => $accountId], ['available_balance' => 0, 'locked_balance' => 0]);
+        $wallet = Wallet::firstOrCreate(['account_id' => $accountId], ['available_balance' => 0, 'pending_balance' => 0]);
         $transactions = WalletTransaction::where('account_id', $accountId)->latest()->paginate(15);
         return view('pages.wallet.index', compact('wallet', 'transactions'));
     }
@@ -17,7 +17,7 @@ class WalletWebController extends WebController
     {
         $v = $request->validate(['amount' => 'required|numeric|min:10|max:100000', 'payment_method' => 'nullable|string']);
         $accountId = auth()->user()->account_id;
-        $wallet = Wallet::firstOrCreate(['account_id' => $accountId], ['available_balance' => 0, 'locked_balance' => 0]);
+        $wallet = Wallet::firstOrCreate(['account_id' => $accountId], ['available_balance' => 0]);
         $wallet->increment('available_balance', $v['amount']);
 
         WalletTransaction::create([

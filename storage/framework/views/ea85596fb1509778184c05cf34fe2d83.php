@@ -31,6 +31,7 @@
 <?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
 <?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
 <?php endif; ?>
+    <?php if($portalType !== 'b2c'): ?>
     <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
 <?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '🛒','label' => 'طلبات جديدة','value' => $newOrders ?? 0]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
@@ -51,6 +52,7 @@
 <?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
 <?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
 <?php endif; ?>
+    <?php endif; ?>
     <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
 <?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '💰','label' => 'الرصيد','value' => 'SAR ' . number_format($walletBalance ?? 0)]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
@@ -71,6 +73,7 @@
 <?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
 <?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
 <?php endif; ?>
+    <?php if($portalType !== 'b2c'): ?>
     <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
 <?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '🏪','label' => 'المتاجر','value' => $storesCount ?? 0]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
@@ -111,6 +114,7 @@
 <?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
 <?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
 <?php endif; ?>
+    <?php endif; ?>
 </div>
 
 
@@ -179,13 +183,55 @@
 </div>
 
 
+<?php if($portalType !== 'b2c' && !empty($carrierStats) && count($carrierStats) > 0): ?>
+<div style="margin-bottom:24px">
+    <?php if (isset($component)) { $__componentOriginal53747ceb358d30c0105769f8471417f6 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginal53747ceb358d30c0105769f8471417f6 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.card','data' => ['title' => '🚚 توزيع الناقلين']] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('card'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['title' => '🚚 توزيع الناقلين']); ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">
+            <?php $__currentLoopData = $carrierStats; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $cs): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                <div style="text-align:center;padding:14px;background:var(--bg);border-radius:10px">
+                    <div style="font-weight:700;font-size:20px;color:var(--pr)"><?php echo e($cs['percent']); ?>%</div>
+                    <div style="font-size:12px;color:var(--td);margin-top:4px"><?php echo e($cs['name']); ?></div>
+                </div>
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </div>
+     <?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginal53747ceb358d30c0105769f8471417f6)): ?>
+<?php $attributes = $__attributesOriginal53747ceb358d30c0105769f8471417f6; ?>
+<?php unset($__attributesOriginal53747ceb358d30c0105769f8471417f6); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginal53747ceb358d30c0105769f8471417f6)): ?>
+<?php $component = $__componentOriginal53747ceb358d30c0105769f8471417f6; ?>
+<?php unset($__componentOriginal53747ceb358d30c0105769f8471417f6); ?>
+<?php endif; ?>
+</div>
+<?php endif; ?>
+
+
 <div class="grid-4" style="margin-bottom:24px">
-    <?php $__currentLoopData = [
-        ['icon' => '📦', 'label' => 'شحنة جديدة', 'desc' => 'إنشاء شحنة يدوياً', 'route' => 'shipments.create'],
-        ['icon' => '🛒', 'label' => 'الطلبات', 'desc' => 'استيراد من المتاجر', 'route' => 'orders.index'],
-        ['icon' => '💳', 'label' => 'شحن الرصيد', 'desc' => 'إضافة رصيد للمحفظة', 'route' => 'wallet.index'],
-        ['icon' => '📊', 'label' => 'التقارير', 'desc' => 'عرض التحليلات', 'route' => 'reports.index'],
-    ]; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $action): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+    <?php
+        $quickActions = $portalType === 'b2c' ? [
+            ['icon' => '📦', 'label' => 'شحنة جديدة', 'desc' => 'إنشاء شحنة', 'route' => 'shipments.create'],
+            ['icon' => '🔍', 'label' => 'تتبع شحنة', 'desc' => 'تتبع الحالة', 'route' => 'tracking.index'],
+            ['icon' => '💳', 'label' => 'شحن الرصيد', 'desc' => 'إضافة رصيد', 'route' => 'wallet.index'],
+            ['icon' => '📒', 'label' => 'العناوين', 'desc' => 'دفتر العناوين', 'route' => 'addresses.index'],
+        ] : [
+            ['icon' => '📦', 'label' => 'شحنة جديدة', 'desc' => 'إنشاء شحنة يدوياً', 'route' => 'shipments.create'],
+            ['icon' => '🛒', 'label' => 'الطلبات', 'desc' => 'استيراد من المتاجر', 'route' => 'orders.index'],
+            ['icon' => '💳', 'label' => 'شحن الرصيد', 'desc' => 'إضافة رصيد للمحفظة', 'route' => 'wallet.index'],
+            ['icon' => '📊', 'label' => 'التقارير', 'desc' => 'عرض التحليلات', 'route' => 'reports.index'],
+        ];
+    ?>
+    <?php $__currentLoopData = $quickActions; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $action): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
         <a href="<?php echo e(route($action['route'])); ?>" class="entity-card" style="text-align:center">
             <div style="font-size:32px;margin-bottom:10px"><?php echo e($action['icon']); ?></div>
             <div style="font-weight:700;color:var(--tx);font-size:14px"><?php echo e($action['label']); ?></div>

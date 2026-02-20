@@ -10,8 +10,8 @@
 <div style="background:linear-gradient(135deg,#3B82F6 0%,#1D4ED8 100%);border-radius:20px;padding:32px 36px;color:#fff;margin-bottom:24px">
     <div style="font-size:14px;opacity:.8;margin-bottom:8px">الرصيد المتاح</div>
     <div style="font-size:42px;font-weight:800;letter-spacing:-1px">SAR <?php echo e(number_format($wallet->available_balance ?? 0, 2)); ?></div>
-    <?php if($wallet->pending_balance > 0): ?>
-        <div style="font-size:13px;opacity:.7;margin-top:8px">رصيد معلّق: SAR <?php echo e(number_format($wallet->pending_balance, 2)); ?></div>
+    <?php if(($wallet->locked_balance ?? 0) > 0): ?>
+        <div style="font-size:13px;opacity:.7;margin-top:8px">رصيد معلّق: SAR <?php echo e(number_format($wallet->locked_balance ?? 0, 2)); ?></div>
     <?php endif; ?>
 </div>
 

@@ -6,6 +6,70 @@
     <a href="<?php echo e(route('invitations.index')); ?>" class="btn btn-pr">+ دعوة مستخدم</a>
 </div>
 
+
+<div class="stats-grid" style="margin-bottom:20px">
+    <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '👥','label' => 'إجمالي المستخدمين','value' => $users->total()]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('stat-card'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['icon' => '👥','label' => 'إجمالي المستخدمين','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($users->total())]); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $attributes = $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+    <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '✅','label' => 'نشط','value' => $activeCount]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('stat-card'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['icon' => '✅','label' => 'نشط','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($activeCount)]); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $attributes = $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+    <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '🚫','label' => 'معطّل','value' => $disabledCount]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('stat-card'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['icon' => '🚫','label' => 'معطّل','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($disabledCount)]); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $attributes = $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+</div>
+
 <?php if (isset($component)) { $__componentOriginal53747ceb358d30c0105769f8471417f6 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal53747ceb358d30c0105769f8471417f6 = $attributes; } ?>
 <?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.card','data' => []] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>

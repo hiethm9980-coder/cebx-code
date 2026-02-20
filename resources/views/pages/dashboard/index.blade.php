@@ -13,10 +13,14 @@
 {{-- Stats --}}
 <div class="stats-grid" style="margin-bottom:24px">
     <x-stat-card icon="📦" label="شحنات اليوم" :value="$todayShipments ?? 0" :trend="($shipmentsTrend ?? 0) > 0 ? '+' . ($shipmentsTrend ?? 0) . '%' : null" :up="($shipmentsTrend ?? 0) > 0" />
+    @if($portalType !== 'b2c')
     <x-stat-card icon="🛒" label="طلبات جديدة" :value="$newOrders ?? 0" />
+    @endif
     <x-stat-card icon="💰" label="الرصيد" :value="'SAR ' . number_format($walletBalance ?? 0)" />
+    @if($portalType !== 'b2c')
     <x-stat-card icon="🏪" label="المتاجر" :value="$storesCount ?? 0" />
     <x-stat-card icon="⚠️" label="استثناءات" :value="$exceptions ?? 0" />
+    @endif
 </div>
 
 {{-- Charts --}}
@@ -48,14 +52,38 @@
     </x-card>
 </div>
 
+{{-- Carrier Stats (B2B & Admin only) --}}
+@if($portalType !== 'b2c' && !empty($carrierStats) && count($carrierStats) > 0)
+<div style="margin-bottom:24px">
+    <x-card title="🚚 توزيع الناقلين">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">
+            @foreach($carrierStats as $cs)
+                <div style="text-align:center;padding:14px;background:var(--bg);border-radius:10px">
+                    <div style="font-weight:700;font-size:20px;color:var(--pr)">{{ $cs['percent'] }}%</div>
+                    <div style="font-size:12px;color:var(--td);margin-top:4px">{{ $cs['name'] }}</div>
+                </div>
+            @endforeach
+        </div>
+    </x-card>
+</div>
+@endif
+
 {{-- Quick Actions --}}
 <div class="grid-4" style="margin-bottom:24px">
-    @foreach([
-        ['icon' => '📦', 'label' => 'شحنة جديدة', 'desc' => 'إنشاء شحنة يدوياً', 'route' => 'shipments.create'],
-        ['icon' => '🛒', 'label' => 'الطلبات', 'desc' => 'استيراد من المتاجر', 'route' => 'orders.index'],
-        ['icon' => '💳', 'label' => 'شحن الرصيد', 'desc' => 'إضافة رصيد للمحفظة', 'route' => 'wallet.index'],
-        ['icon' => '📊', 'label' => 'التقارير', 'desc' => 'عرض التحليلات', 'route' => 'reports.index'],
-    ] as $action)
+    @php
+        $quickActions = $portalType === 'b2c' ? [
+            ['icon' => '📦', 'label' => 'شحنة جديدة', 'desc' => 'إنشاء شحنة', 'route' => 'shipments.create'],
+            ['icon' => '🔍', 'label' => 'تتبع شحنة', 'desc' => 'تتبع الحالة', 'route' => 'tracking.index'],
+            ['icon' => '💳', 'label' => 'شحن الرصيد', 'desc' => 'إضافة رصيد', 'route' => 'wallet.index'],
+            ['icon' => '📒', 'label' => 'العناوين', 'desc' => 'دفتر العناوين', 'route' => 'addresses.index'],
+        ] : [
+            ['icon' => '📦', 'label' => 'شحنة جديدة', 'desc' => 'إنشاء شحنة يدوياً', 'route' => 'shipments.create'],
+            ['icon' => '🛒', 'label' => 'الطلبات', 'desc' => 'استيراد من المتاجر', 'route' => 'orders.index'],
+            ['icon' => '💳', 'label' => 'شحن الرصيد', 'desc' => 'إضافة رصيد للمحفظة', 'route' => 'wallet.index'],
+            ['icon' => '📊', 'label' => 'التقارير', 'desc' => 'عرض التحليلات', 'route' => 'reports.index'],
+        ];
+    @endphp
+    @foreach($quickActions as $action)
         <a href="{{ route($action['route']) }}" class="entity-card" style="text-align:center">
             <div style="font-size:32px;margin-bottom:10px">{{ $action['icon'] }}</div>
             <div style="font-weight:700;color:var(--tx);font-size:14px">{{ $action['label'] }}</div>
