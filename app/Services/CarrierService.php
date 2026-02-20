@@ -4,10 +4,13 @@ namespace App\Services;
 
 use App\Exceptions\BusinessException;
 use App\Models\Account;
+use App\Models\AuditLog;
 use App\Models\CarrierDocument;
 use App\Models\CarrierError;
 use App\Models\CarrierShipment;
+use App\Models\ContentDeclaration;
 use App\Models\Shipment;
+use App\Models\ShipmentStatusHistory;
 use App\Models\User;
 use App\Services\Carriers\DhlApiService;
 use Illuminate\Support\Collection;
@@ -17,14 +20,10 @@ use Illuminate\Support\Str;
 /**
  * CarrierService — FR-CR-001→008 (8 requirements)
  *
- * FR-CR-001: Create shipment at DHL API, receive tracking/AWB
- * FR-CR-002: Receive & store Label/Docs (PDF/ZPL)
- * FR-CR-003: Idempotency for creation & label issuance
- * FR-CR-004: Normalized error model with retriable flag
- * FR-CR-005: Re-fetch label for created shipments
- * FR-CR-006: Cancel/void shipment at carrier
- * FR-CR-007: Multiple label formats (PDF/ZPL per account setting)
- * FR-CR-008: Secure label download (no financial data, permission-based)
+ * FIX P0-5: إصلاح أسماء الحقول لتتوافق مع migration
+ * FIX P0-2: استخدام BusinessException::make() بعد إضافتها
+ * FIX P1-3: تحديث label_url/label_format/label_created_at بعد carrier create
+ * FIX P1-1: تسجيل history عند تغيير الحالة
  */
 class CarrierService
 {
@@ -38,10 +37,6 @@ class CarrierService
     // FR-CR-001: Create Shipment at Carrier
     // ═══════════════════════════════════════════════════════════
 
-    /**
-     * Create a shipment at the carrier (DHL) after payment.
-     * Includes pre-flight checks, idempotency, and error handling.
-     */
     public function createAtCarrier(
         Shipment $shipment,
         User $user,
@@ -64,7 +59,7 @@ class CarrierService
             ->first();
 
         if ($existing) {
-            return $existing; // Return same result for idempotent request
+            return $existing;
         }
 
         // ── FR-CR-007: Determine label format ────────────────
@@ -114,25 +109,36 @@ class CarrierService
                 ]);
 
                 // ── Update shipment with tracking info ───────
+                $oldStatus = $shipment->status;
                 $shipment->update([
                     'tracking_number'       => $response['trackingNumber'],
                     'carrier_shipment_id'   => $response['shipmentId'] ?? $carrierShipment->id,
                     'status'                => Shipment::STATUS_READY_FOR_PICKUP,
                 ]);
 
+                // FIX P1-1: تسجيل history عند تغيير الحالة
+                $this->recordStatusHistory($shipment, $oldStatus, Shipment::STATUS_READY_FOR_PICKUP, 'system', $user->id, 'Carrier shipment created');
+
                 // ── FR-CR-002: Store documents ───────────────
                 if (!empty($response['documents'])) {
-                    $this->storeCarrierDocuments($carrierShipment, $shipment, $response['documents']);
+                    $storedDocs = $this->storeCarrierDocuments($carrierShipment, $shipment, $response['documents']);
                     $carrierShipment->update(['status' => CarrierShipment::STATUS_LABEL_READY]);
+
+                    // FIX P1-3: تحديث label_url/label_format/label_created_at بعد تخزين المستندات
+                    $this->updateShipmentLabelFromDocuments($shipment, $storedDocs);
                 } else {
                     $carrierShipment->update(['status' => CarrierShipment::STATUS_LABEL_PENDING]);
                 }
 
-                // ── Audit ────────────────────────────────────
-                $this->audit->log(
+                // ── Audit (FIX P0-3: استخدام التوقيع الصحيح لـ AuditService) ──
+                $this->audit->info(
+                    $shipment->account_id,
+                    $user->id,
                     'carrier.shipment_created',
-                    $user,
-                    $carrierShipment,
+                    AuditLog::CATEGORY_ACCOUNT,
+                    'CarrierShipment',
+                    $carrierShipment->id,
+                    null,
                     [
                         'tracking_number' => $response['trackingNumber'],
                         'carrier'         => 'dhl',
@@ -154,8 +160,9 @@ class CarrierService
 
                 $carrierShipment->update(['status' => CarrierShipment::STATUS_FAILED]);
 
-                // Update shipment to failed/requires action
+                $oldStatus = $shipment->status;
                 $shipment->update(['status' => Shipment::STATUS_FAILED]);
+                $this->recordStatusHistory($shipment, $oldStatus, Shipment::STATUS_FAILED, 'system', null, "Carrier creation failed: {$carrierError->internal_message}");
 
                 throw BusinessException::make(
                     'ERR_CARRIER_CREATE_FAILED',
@@ -167,12 +174,30 @@ class CarrierService
     }
 
     // ═══════════════════════════════════════════════════════════
+    // FIX P1-3: تحديث بيانات الملصق في الشحنة من المستندات المخزنة
+    // ═══════════════════════════════════════════════════════════
+
+    private function updateShipmentLabelFromDocuments(Shipment $shipment, Collection $storedDocs): void
+    {
+        // ابحث عن مستند من نوع label
+        $labelDoc = $storedDocs->firstWhere('type', CarrierDocument::TYPE_LABEL);
+
+        if ($labelDoc) {
+            $shipment->update([
+                'label_url'        => $labelDoc->download_url ?? route('api.v1.shipments.documents.download', [
+                    'shipment' => $shipment->id,
+                    'document' => $labelDoc->id,
+                ]),
+                'label_format'     => $labelDoc->format,
+                'label_created_at' => now(),
+            ]);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // FR-CR-002: Store Carrier Documents
     // ═══════════════════════════════════════════════════════════
 
-    /**
-     * Store label and documents from carrier response.
-     */
     private function storeCarrierDocuments(
         CarrierShipment $carrierShipment,
         Shipment $shipment,
@@ -192,7 +217,7 @@ class CarrierService
                 'format'              => $format,
                 'mime_type'           => CarrierDocument::getMimeType($format),
                 'original_filename'   => $this->generateDocFilename($shipment, $type, $format),
-                'content_base64'      => $content, // Already base64 from DHL
+                'content_base64'      => $content,
                 'file_size'           => $content ? strlen(base64_decode($content)) : null,
                 'checksum'            => $content ? hash('sha256', base64_decode($content)) : null,
                 'download_url'        => $doc['url'] ?? null,
@@ -212,9 +237,6 @@ class CarrierService
     // FR-CR-005: Re-fetch Label
     // ═══════════════════════════════════════════════════════════
 
-    /**
-     * Re-fetch label for a shipment that was created but docs failed.
-     */
     public function refetchLabel(
         Shipment $shipment,
         User $user,
@@ -223,10 +245,7 @@ class CarrierService
         $carrierShipment = $shipment->carrierShipment;
 
         if (!$carrierShipment || !$carrierShipment->isCreated()) {
-            throw BusinessException::make(
-                'ERR_CARRIER_NOT_CREATED',
-                'Shipment has not been created at carrier yet'
-            );
+            throw BusinessException::carrierNotCreated();
         }
 
         $correlationId = Str::uuid()->toString();
@@ -239,7 +258,6 @@ class CarrierService
                 $format
             );
 
-            // Store new document
             $document = CarrierDocument::create([
                 'carrier_shipment_id' => $carrierShipment->id,
                 'shipment_id'         => $shipment->id,
@@ -256,25 +274,30 @@ class CarrierService
                 'is_available'        => true,
             ]);
 
-            // Update carrier shipment status
             $carrierShipment->update(['status' => CarrierShipment::STATUS_LABEL_READY]);
 
-            // Update main shipment label fields
+            // FIX P1-3: تحديث الملصق في الشحنة
             $shipment->update([
-                'label_url'    => $response['url'] ?? null,
-                'label_format' => $format,
-                'status'       => Shipment::STATUS_READY_FOR_PICKUP,
+                'label_url'        => $response['url'] ?? route('api.v1.shipments.documents.download', [
+                    'shipment' => $shipment->id,
+                    'document' => $document->id,
+                ]),
+                'label_format'     => $format,
+                'label_created_at' => now(),
             ]);
 
-            $this->audit->log('carrier.label_refetched', $user, $carrierShipment, [
-                'format'         => $format,
-                'correlation_id' => $correlationId,
-            ]);
+            $this->audit->info(
+                $shipment->account_id, $user->id,
+                'carrier.label_refetched', AuditLog::CATEGORY_ACCOUNT,
+                'CarrierDocument', $document->id,
+                null,
+                ['format' => $format, 'correlation_id' => $correlationId]
+            );
 
             return $document;
 
         } catch (\Exception $e) {
-            $carrierError = $this->logCarrierError(
+            $this->logCarrierError(
                 CarrierError::OP_RE_FETCH_LABEL,
                 $e,
                 $correlationId,
@@ -282,74 +305,48 @@ class CarrierService
                 $carrierShipment->id
             );
 
-            throw BusinessException::make(
-                'ERR_LABEL_REFETCH_FAILED',
-                "Failed to re-fetch label: {$carrierError->internal_message}",
-                ['is_retriable' => $carrierError->is_retriable]
-            );
+            throw BusinessException::labelRefetchFailed();
         }
     }
 
     // ═══════════════════════════════════════════════════════════
-    // FR-CR-006: Cancel Shipment at Carrier
+    // FR-CR-006: Cancel at Carrier
     // ═══════════════════════════════════════════════════════════
 
-    /**
-     * Cancel/void a shipment at the carrier.
-     */
-    public function cancelAtCarrier(
-        Shipment $shipment,
-        User $user,
-        string $reason = ''
-    ): CarrierShipment {
+    public function cancelAtCarrier(Shipment $shipment, User $user): CarrierShipment
+    {
         $carrierShipment = $shipment->carrierShipment;
 
-        if (!$carrierShipment) {
-            throw BusinessException::make(
-                'ERR_CARRIER_NOT_CREATED',
-                'No carrier record exists for this shipment'
-            );
-        }
-
-        if (!$carrierShipment->canCancel()) {
-            throw BusinessException::make(
-                'ERR_CARRIER_NOT_CANCELLABLE',
-                'Shipment cannot be cancelled at carrier (status: ' . $carrierShipment->status
-                . ($carrierShipment->cancellation_deadline && now()->isAfter($carrierShipment->cancellation_deadline)
-                    ? ', cancellation window expired' : '') . ')'
-            );
+        if (!$carrierShipment || !$carrierShipment->isCancellable()) {
+            throw BusinessException::carrierNotCancellable();
         }
 
         $correlationId = Str::uuid()->toString();
 
-        $carrierShipment->update(['status' => CarrierShipment::STATUS_CANCEL_PENDING]);
-
         try {
-            $response = $this->dhlApi->cancelShipment(
+            $this->dhlApi->cancelShipment(
                 $carrierShipment->carrier_shipment_id,
                 $carrierShipment->tracking_number
             );
 
-            $carrierShipment->update([
-                'status'              => CarrierShipment::STATUS_CANCELLED,
-                'cancellation_id'     => $response['cancellationId'] ?? null,
-                'cancellation_reason' => $reason,
-                'cancelled_at'        => now(),
-                'is_cancellable'      => false,
-            ]);
+            $carrierShipment->update(['status' => CarrierShipment::STATUS_CANCELLED]);
 
-            // Update main shipment
+            $oldStatus = $shipment->status;
             $shipment->update(['status' => Shipment::STATUS_CANCELLED]);
+            $this->recordStatusHistory($shipment, $oldStatus, Shipment::STATUS_CANCELLED, 'user', $user->id, 'Cancelled at carrier');
 
-            $this->audit->log('carrier.shipment_cancelled', $user, $carrierShipment, [
-                'reason'         => $reason,
-                'correlation_id' => $correlationId,
-            ]);
+            $this->audit->info(
+                $shipment->account_id, $user->id,
+                'carrier.shipment_cancelled', AuditLog::CATEGORY_ACCOUNT,
+                'CarrierShipment', $carrierShipment->id,
+                null,
+                ['correlation_id' => $correlationId]
+            );
 
             return $carrierShipment;
 
         } catch (\Exception $e) {
-            $carrierError = $this->logCarrierError(
+            $this->logCarrierError(
                 CarrierError::OP_CANCEL,
                 $e,
                 $correlationId,
@@ -357,92 +354,21 @@ class CarrierService
                 $carrierShipment->id
             );
 
-            $carrierShipment->update(['status' => CarrierShipment::STATUS_CANCEL_FAILED]);
-
-            throw BusinessException::make(
-                'ERR_CARRIER_CANCEL_FAILED',
-                "Carrier cancellation failed: {$carrierError->internal_message}",
-                ['is_retriable' => $carrierError->is_retriable]
-            );
+            throw BusinessException::carrierCancelFailed();
         }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // FR-CR-008: Get Document for Download (Secure)
-    // ═══════════════════════════════════════════════════════════
-
-    /**
-     * Get a document for secure download (no financial data exposed).
-     * Validates user permission before returning.
-     */
-    public function getDocumentForDownload(
-        string $documentId,
-        Shipment $shipment,
-        User $user,
-        bool $recordAccess = true
-    ): array {
-        $document = CarrierDocument::where('id', $documentId)
-            ->where('shipment_id', $shipment->id)
-            ->firstOrFail();
-
-        if (!$document->is_available || !$document->hasContent()) {
-            throw BusinessException::make(
-                'ERR_DOCUMENT_NOT_AVAILABLE',
-                'Document is not available for download'
-            );
-        }
-
-        if ($recordAccess) {
-            $document->recordDownload();
-        }
-
-        return [
-            'id'         => $document->id,
-            'type'       => $document->type,
-            'format'     => $document->format,
-            'mime_type'  => $document->mime_type,
-            'filename'   => $document->original_filename,
-            'content'    => $document->getDecodedContent(),
-            'file_size'  => $document->file_size,
-            'checksum'   => $document->checksum,
-        ];
-    }
-
-    /**
-     * List documents for a shipment (metadata only, no content).
-     */
-    public function listDocuments(Shipment $shipment): Collection
-    {
-        return CarrierDocument::where('shipment_id', $shipment->id)
-            ->available()
-            ->get()
-            ->map(fn ($doc) => [
-                'id'              => $doc->id,
-                'type'            => $doc->type,
-                'format'          => $doc->format,
-                'filename'        => $doc->original_filename,
-                'file_size'       => $doc->file_size,
-                'print_count'     => $doc->print_count,
-                'download_count'  => $doc->download_count,
-                'is_available'    => $doc->is_available,
-                'created_at'      => $doc->created_at,
-            ]);
     }
 
     // ═══════════════════════════════════════════════════════════
     // FR-CR-003: Retry Failed Creation
     // ═══════════════════════════════════════════════════════════
 
-    /**
-     * Retry a failed carrier shipment creation.
-     */
     public function retryCreation(
         Shipment $shipment,
         User $user,
         int $maxRetries = 3
     ): CarrierShipment {
         $carrierShipment = CarrierShipment::where('shipment_id', $shipment->id)
-            ->withStatus(CarrierShipment::STATUS_FAILED)
+            ->where('status', CarrierShipment::STATUS_FAILED)
             ->first();
 
         if (!$carrierShipment) {
@@ -453,21 +379,15 @@ class CarrierService
         }
 
         if (!$carrierShipment->canRetry($maxRetries)) {
-            throw BusinessException::make(
-                'ERR_MAX_RETRIES_EXCEEDED',
-                "Maximum retry attempts ({$maxRetries}) exceeded",
-                ['attempt_count' => $carrierShipment->attempt_count]
-            );
+            throw BusinessException::maxRetriesExceeded();
         }
 
         $carrierShipment->incrementAttempt();
 
-        // Mark previous errors as resolved
         CarrierError::where('carrier_shipment_id', $carrierShipment->id)
-            ->unresolved()
+            ->where('was_resolved', false)
             ->update(['was_resolved' => true, 'resolved_at' => now()]);
 
-        // Re-attempt creation
         return $this->createAtCarrier(
             $shipment,
             $user,
@@ -477,12 +397,27 @@ class CarrierService
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Get Carrier Errors for Shipment
+    // FR-CR-008: List & Download Documents
     // ═══════════════════════════════════════════════════════════
 
-    /**
-     * Get all carrier errors for a shipment (FR-CR-004).
-     */
+    public function listDocuments(Shipment $shipment): array
+    {
+        return CarrierDocument::where('shipment_id', $shipment->id)
+            ->where('is_available', true)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn ($doc) => [
+                'id'       => $doc->id,
+                'type'     => $doc->type,
+                'format'   => $doc->format,
+                'filename' => $doc->original_filename,
+                'size'     => $doc->file_size,
+                'available' => $doc->hasContent() || $doc->hasValidUrl(),
+                'created_at' => $doc->created_at,
+            ])
+            ->toArray();
+    }
+
     public function getErrors(Shipment $shipment): Collection
     {
         return CarrierError::where('shipment_id', $shipment->id)
@@ -508,7 +443,8 @@ class CarrierService
     // ═══════════════════════════════════════════════════════════
 
     /**
-     * Validate shipment is ready for carrier creation.
+     * FIX P0-5: إصلاح التحقق ليستخدم has_dangerous_goods بدلاً من is_dangerous_goods
+     * وإزالة الاعتماد على dg_declaration_id (يتم عبر DgComplianceService)
      */
     private function validateForCarrierCreation(Shipment $shipment): void
     {
@@ -536,17 +472,27 @@ class CarrierService
             );
         }
 
-        // Check DG declaration if needed
-        if ($shipment->is_dangerous_goods && empty($shipment->dg_declaration_id)) {
-            throw BusinessException::make(
-                'ERR_DG_DECLARATION_REQUIRED',
-                'Dangerous goods declaration is required before carrier creation'
-            );
+        // FIX P0-5: استخدام has_dangerous_goods بدلاً من is_dangerous_goods
+        // والتحقق من DG declaration عبر جدول content_declarations بدلاً من dg_declaration_id
+        if ($shipment->has_dangerous_goods) {
+            $declaration = ContentDeclaration::where('shipment_id', $shipment->id)
+                ->where('account_id', $shipment->account_id)
+                ->where('status', ContentDeclaration::STATUS_COMPLETED)
+                ->first();
+
+            if (!$declaration) {
+                throw BusinessException::make(
+                    'ERR_DG_DECLARATION_REQUIRED',
+                    'Dangerous goods declaration is required and must be completed before carrier creation'
+                );
+            }
         }
     }
 
     /**
-     * Build DHL Create Shipment payload.
+     * FIX P0-5: إصلاح أسماء الحقول في DHL Payload
+     * - sender_address_line1 → sender_address_1
+     * - recipient_address_line1 → recipient_address_1
      */
     private function buildDhlCreatePayload(Shipment $shipment, string $labelFormat, string $labelSize): array
     {
@@ -581,7 +527,8 @@ class CarrierService
                         'postalCode'   => $shipment->sender_postal_code,
                         'cityName'     => $shipment->sender_city,
                         'countryCode'  => $shipment->sender_country,
-                        'addressLine1' => $shipment->sender_address_line1,
+                        // FIX P0-5: sender_address_1 بدلاً من sender_address_line1
+                        'addressLine1' => $shipment->sender_address_1,
                     ],
                     'contactInformation' => [
                         'phone'       => $shipment->sender_phone,
@@ -595,7 +542,8 @@ class CarrierService
                         'postalCode'   => $shipment->recipient_postal_code,
                         'cityName'     => $shipment->recipient_city,
                         'countryCode'  => $shipment->recipient_country,
-                        'addressLine1' => $shipment->recipient_address_line1,
+                        // FIX P0-5: recipient_address_1 بدلاً من recipient_address_line1
+                        'addressLine1' => $shipment->recipient_address_1,
                     ],
                     'contactInformation' => [
                         'phone'       => $shipment->recipient_phone,
@@ -617,8 +565,27 @@ class CarrierService
     }
 
     /**
-     * Map carrier document type string to constant.
+     * FIX P1-1: تسجيل history عند كل تغيير في حالة الشحنة
      */
+    private function recordStatusHistory(
+        Shipment $shipment,
+        string $fromStatus,
+        string $toStatus,
+        string $source = 'system',
+        ?string $changedBy = null,
+        ?string $reason = null
+    ): void {
+        ShipmentStatusHistory::create([
+            'shipment_id' => $shipment->id,
+            'from_status' => $fromStatus,
+            'to_status'   => $toStatus,
+            'source'      => $source,
+            'reason'      => $reason,
+            'changed_by'  => $changedBy,
+            'created_at'  => now(),
+        ]);
+    }
+
     private function mapDocumentType(string $type): string
     {
         return match (strtolower($type)) {
@@ -631,18 +598,12 @@ class CarrierService
         };
     }
 
-    /**
-     * Generate a filename for a carrier document.
-     */
     private function generateDocFilename(Shipment $shipment, string $type, string $format): string
     {
-        $ref = $shipment->reference ?? $shipment->id;
+        $ref = $shipment->reference_number ?? $shipment->id;
         return "{$type}_{$ref}.{$format}";
     }
 
-    /**
-     * FR-CR-004: Log a carrier error in normalized format.
-     */
     private function logCarrierError(
         string $operation,
         \Exception $e,

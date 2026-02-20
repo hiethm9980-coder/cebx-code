@@ -8,12 +8,14 @@ class BusinessException extends Exception
 {
     protected string $errorCode;
     protected int $httpStatus;
+    protected array $context;
 
-    public function __construct(string $message, string $errorCode, int $httpStatus = 400)
+    public function __construct(string $message, string $errorCode, int $httpStatus = 400, array $context = [])
     {
         parent::__construct($message);
         $this->errorCode = $errorCode;
         $this->httpStatus = $httpStatus;
+        $this->context = $context;
     }
 
     public function getErrorCode(): string
@@ -26,13 +28,57 @@ class BusinessException extends Exception
         return $this->httpStatus;
     }
 
+    /**
+     * FIX P0-1: Alias لحل عدم التوافق مع Handler.php
+     * Handler يستدعي getStatusCode() بينما الكلاس يعرّف getHttpStatus()
+     */
+    public function getStatusCode(): int
+    {
+        return $this->httpStatus;
+    }
+
+    /**
+     * FIX P0-1: إضافة context للأخطاء
+     */
+    public function getContext(): array
+    {
+        return $this->context;
+    }
+
     public function render(): \Illuminate\Http\JsonResponse
     {
-        return response()->json([
+        $response = [
             'success'    => false,
             'error_code' => $this->errorCode,
             'message'    => $this->getMessage(),
-        ], $this->httpStatus);
+        ];
+
+        // إضافة context إذا موجود
+        if (!empty($this->context)) {
+            $response['context'] = $this->context;
+        }
+
+        return response()->json($response, $this->httpStatus);
+    }
+
+    // ─── FIX P0-1: إضافة make() — يستخدمها CarrierService ──────
+
+    /**
+     * Factory method عام لإنشاء BusinessException مع context.
+     * يُستخدم في CarrierService وغيرها.
+     *
+     * @param string $errorCode  كود الخطأ (مثل 'ERR_INVALID_STATE_FOR_CARRIER')
+     * @param string $message    رسالة الخطأ
+     * @param array  $context    بيانات إضافية اختيارية
+     * @param int    $httpStatus HTTP status code (default 400)
+     */
+    public static function make(
+        string $errorCode,
+        string $message,
+        array $context = [],
+        int $httpStatus = 400
+    ): self {
+        return new self($message, $errorCode, $httpStatus, $context);
     }
 
     // ─── Named Constructors for FR-IAM error codes ────────────────
@@ -105,78 +151,17 @@ class BusinessException extends Exception
     public static function invitationCannotResend(): self
     {
         return new self(
-            'لا يمكن إعادة إرسال هذه الدعوة. فقط الدعوات المعلقة يمكن إعادة إرسالها.',
+            'لا يمكن إعادة إرسال هذه الدعوة.',
             'ERR_INVITATION_CANNOT_RESEND',
             422
         );
     }
 
-    public static function invitationCannotCancel(): self
+    // ─── FR-IAM-014/015/016: KYC ────────────────────────────────
+
+    public static function kycRequired(): self
     {
-        return new self(
-            'لا يمكن إلغاء هذه الدعوة. فقط الدعوات المعلقة يمكن إلغاؤها.',
-            'ERR_INVITATION_CANNOT_CANCEL',
-            422
-        );
-    }
-
-    public static function emailAlreadyInAccount(): self
-    {
-        return new self(
-            'هذا البريد الإلكتروني مسجل بالفعل في هذا الحساب.',
-            'ERR_EMAIL_ALREADY_IN_ACCOUNT',
-            409
-        );
-    }
-
-    // ─── FR-IAM-006: Audit Log Error Codes ───────────────────────
-
-    public static function auditLogImmutable(): self
-    {
-        return new self(
-            'سجلات التدقيق غير قابلة للتعديل أو الحذف.',
-            'ERR_AUDIT_IMMUTABLE',
-            403
-        );
-    }
-
-    public static function auditLogAccessDenied(): self
-    {
-        return new self(
-            'لا تملك صلاحية الوصول لسجل التدقيق.',
-            'ERR_LOG_ACCESS_DENIED',
-            403
-        );
-    }
-
-    public static function auditLogWriteFail(): self
-    {
-        return new self(
-            'فشل في كتابة سجل التدقيق.',
-            'ERR_LOG_WRITE_FAIL',
-            500
-        );
-    }
-
-    public static function auditExportFailed(): self
-    {
-        return new self(
-            'فشل في تصدير سجل التدقيق.',
-            'ERR_EXPORT_FAILED',
-            500
-        );
-    }
-
-    // ─── FR-IAM-014/016: KYC Error Codes ─────────────────────────
-
-    public static function kycNotFound(): self
-    {
-        return new self('سجل التحقق غير موجود.', 'ERR_KYC_NOT_FOUND', 404);
-    }
-
-    public static function kycStatusInvalid(): self
-    {
-        return new self('حالة التحقق غير صالحة لهذه العملية.', 'ERR_KYC_STATUS_INVALID', 422);
+        return new self('التحقق من الهوية مطلوب.', 'ERR_KYC_REQUIRED', 422);
     }
 
     public static function kycServiceUnavailable(): self
@@ -228,6 +213,9 @@ class BusinessException extends Exception
         return new self('المحفظة مجمدة أو مغلقة.', 'ERR_WALLET_FROZEN', 422);
     }
 
+    /**
+     * FIX P0-1: نسخة واحدة فقط — تم إزالة التكرار
+     */
     public static function insufficientBalance(): self
     {
         return new self('رصيد المحفظة غير كافٍ.', 'ERR_INSUFFICIENT_BALANCE', 422);
@@ -292,24 +280,24 @@ class BusinessException extends Exception
         return new self('لا يوجد ملصق لهذه الشحنة.', 'ERR_NO_LABEL', 422);
     }
 
-    public static function invalidShipmentState(): self
+    public static function invalidState(): self
     {
         return new self('حالة الشحنة غير صالحة لهذه العملية.', 'ERR_INVALID_STATE', 422);
     }
 
-    public static function validationFailed(string $details): self
+    public static function validationFailed(): self
     {
-        return new self("فشل التحقق: {$details}", 'ERR_VALIDATION_FAILED', 422);
+        return new self('فشل التحقق من بيانات الشحنة.', 'ERR_VALIDATION_FAILED', 422);
     }
 
     public static function returnNotAllowed(): self
     {
-        return new self('لا يمكن إنشاء شحنة مرتجع.', 'ERR_RETURN_NOT_ALLOWED', 422);
+        return new self('لا يمكن إنشاء مرتجع.', 'ERR_RETURN_NOT_ALLOWED', 422);
     }
 
     public static function cannotModifyParcels(): self
     {
-        return new self('لا يمكن تعديل الطرود بعد تسعير الشحنة.', 'ERR_CANNOT_MODIFY_PARCELS', 422);
+        return new self('لا يمكن تعديل الطرود بعد التسعير.', 'ERR_CANNOT_MODIFY_PARCELS', 422);
     }
 
     public static function lastParcel(): self
@@ -317,21 +305,28 @@ class BusinessException extends Exception
         return new self('لا يمكن حذف آخر طرد.', 'ERR_LAST_PARCEL', 422);
     }
 
-    public static function kycRequired(): self
+    // ── RT (Rates) Module Error Codes ──────────────────────────────
+
+    public static function noRatesAvailable(): self
     {
-        return new self('التحقق من الهوية مطلوب لهذه العملية.', 'ERR_KYC_REQUIRED', 422);
+        return new self('لا توجد أسعار متاحة.', 'ERR_NO_RATES', 404);
     }
 
-    public static function insufficientBalance(): self
+    public static function rateExpired(): self
     {
-        return new self('الرصيد غير كافٍ.', 'ERR_INSUFFICIENT_BALANCE', 422);
+        return new self('انتهت صلاحية التسعير.', 'ERR_RATE_EXPIRED', 410);
     }
 
-    // ── CR Module Error Codes (FR-CR-001→008) ────────────────
-
-    public static function carrierCreateFailed(string $detail = ''): self
+    public static function rateOptionNotFound(): self
     {
-        return new self("فشل إنشاء الشحنة لدى الناقل. {$detail}", 'ERR_CARRIER_CREATE_FAILED', 502);
+        return new self('خيار السعر غير موجود.', 'ERR_RATE_OPTION_NOT_FOUND', 404);
+    }
+
+    // ── CR (Carrier) Module Error Codes ────────────────────────────
+
+    public static function carrierCreateFailed(): self
+    {
+        return new self('فشل إنشاء الشحنة لدى الناقل.', 'ERR_CARRIER_CREATE_FAILED', 502);
     }
 
     public static function carrierNotCreated(): self

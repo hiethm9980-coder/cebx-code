@@ -9,10 +9,8 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * TenantMiddleware
  *
- * Resolves the current tenant (account) from the authenticated user
- * and binds it to the container so all queries are automatically scoped.
- *
- * FIX H-01: يرفض الطلبات إذا لم يكن هناك حساب مرتبط
+ * FIX P2-4: تعديل لدعم بوابات B2B/B2C المنفصلة.
+ * عند عدم تسجيل الدخول يعيد التوجيه للبوابة المناسبة.
  */
 class TenantMiddleware
 {
@@ -20,7 +18,6 @@ class TenantMiddleware
     {
         $user = $request->user();
 
-        // FIX H-01: التحقق من وجود المستخدم و account_id
         if (! $user) {
             return $this->denyAccess($request, 'يرجى تسجيل الدخول.', 401);
         }
@@ -29,7 +26,6 @@ class TenantMiddleware
             return $this->denyAccess($request, 'الحساب غير مرتبط. تواصل مع الدعم.', 403);
         }
 
-        // التحقق من أن الحساب نشط
         $account = $user->account()->withoutGlobalScopes()->first();
         if (! $account) {
             return $this->denyAccess($request, 'الحساب غير موجود.', 403);
@@ -41,15 +37,13 @@ class TenantMiddleware
 
         // Bind current account_id to the container for global scopes
         app()->instance('current_account_id', $user->account_id);
-
-        // Also store the full account for convenience
         app()->instance('current_account', $account);
 
         return $next($request);
     }
 
     /**
-     * رفض الوصول مع رسالة مناسبة حسب نوع الطلب
+     * FIX P2-4: إعادة التوجيه حسب البوابة عند عدم تسجيل الدخول.
      */
     private function denyAccess(Request $request, string $message, int $status): Response
     {
@@ -61,11 +55,30 @@ class TenantMiddleware
             ], $status);
         }
 
-        // لطلبات الويب — إعادة التوجيه لصفحة الدخول
+        // FIX P2-4: إعادة التوجيه للبوابة المناسبة
         if ($status === 401) {
-            return redirect()->route('login');
+            return redirect($this->resolveLoginRoute($request));
         }
 
         abort($status, $message);
+    }
+
+    /**
+     * FIX P2-4: تحديد صفحة تسجيل الدخول بناءً على المسار.
+     */
+    private function resolveLoginRoute(Request $request): string
+    {
+        $path = $request->path();
+
+        if (str_starts_with($path, 'b2b')) {
+            return route('b2b.login');
+        }
+
+        if (str_starts_with($path, 'b2c')) {
+            return route('b2c.login');
+        }
+
+        // Fallback: البوابة العامة (التوافق مع النظام الحالي)
+        return route('login');
     }
 }

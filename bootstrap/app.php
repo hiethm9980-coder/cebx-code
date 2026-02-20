@@ -13,8 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
-            'tenant'     => \App\Http\Middleware\TenantMiddleware::class,
-            'permission' => \App\Http\Middleware\CheckPermission::class,
+            'tenant'              => \App\Http\Middleware\TenantMiddleware::class,
+            'permission'          => \App\Http\Middleware\CheckPermission::class,
+            'portal'              => \App\Http\Middleware\PortalContextMiddleware::class,
+            'ensureAccountType'   => \App\Http\Middleware\EnsureAccountTypeMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
