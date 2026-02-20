@@ -3,117 +3,69 @@
 
 @section('content')
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-    <h1 style="font-size:24px;font-weight:700;color:var(--tx);margin:0">💰 {{ $portalType === 'b2c' ? 'محفظتي' : 'المحفظة' }}</h1>
-    <button class="btn btn-pr" data-modal-open="topup-wallet"
-            @if($portalType === 'b2c') style="background:#0D9488" @endif>+ شحن الرصيد</button>
+    <h1 style="font-size:24px;font-weight:800;color:var(--tx);margin:0">💰 المحفظة</h1>
+    <button type="button" class="btn btn-pr" data-modal-open="topup">+ شحن الرصيد</button>
 </div>
 
-{{-- ═══ BALANCE CARD ═══ --}}
-<div style="background:linear-gradient(135deg,{{ $portalType === 'b2c' ? '#0D9488,#065F56,#134E4A' : '#3B82F6,#1D4ED8,#7C3AED' }});border-radius:20px;padding:36px 32px;margin-bottom:28px;position:relative;overflow:hidden">
-    <div style="position:absolute;top:-30px;left:-30px;width:140px;height:140px;background:rgba(255,255,255,0.05);border-radius:50%"></div>
-    <div style="position:absolute;bottom:-40px;right:40px;width:100px;height:100px;background:rgba(255,255,255,0.03);border-radius:50%"></div>
-    <div style="position:relative">
-        <div style="font-size:14px;color:rgba(255,255,255,0.73)">الرصيد المتاح</div>
-        <div style="font-size:48px;font-weight:800;color:#fff;font-family:monospace;margin:8px 0">
-            {{ number_format($wallet->available_balance ?? 0, 2) }} <span style="font-size:20px">ر.س</span>
-        </div>
-        @if($portalType === 'b2b')
-            <div style="font-size:13px;color:rgba(255,255,255,0.66)">آخر عملية: {{ $lastTransaction?->description ?? '—' }}</div>
-        @endif
-    </div>
-</div>
-
-@if($portalType === 'b2b')
-    <div class="stats-grid" style="margin-bottom:24px">
-        <x-stat-card icon="💸" label="مصروفات الشهر" :value="number_format($monthlyExpenses ?? 0)" />
-        <x-stat-card icon="💳" label="إيداعات الشهر" :value="number_format($monthlyDeposits ?? 0)" />
-        <x-stat-card icon="🔄" label="عدد المعاملات" :value="$transactionCount ?? 0" />
-    </div>
-@endif
-
-{{-- ═══ TRANSACTIONS ═══ --}}
-<x-card title="📋 {{ $portalType === 'b2c' ? 'آخر المعاملات' : 'سجل المعاملات' }}">
-    @if($portalType === 'b2b')
-        <div class="table-wrap">
-            <table>
-                <thead><tr><th>النوع</th><th>الوصف</th><th>المبلغ</th><th>الرصيد بعد</th><th>التاريخ</th></tr></thead>
-                <tbody>
-                    @forelse($transactions ?? [] as $tx)
-                        @php $isCredit = in_array($tx->type, ['topup', 'refund']); @endphp
-                        <tr>
-                            <td><span class="badge {{ $isCredit ? 'badge-ac' : 'badge-dg' }}">{{ $isCredit ? 'إيداع' : 'خصم' }}</span></td>
-                            <td>{{ $tx->description }}</td>
-                            <td style="color:{{ $isCredit ? 'var(--ac)' : 'var(--dg)' }};font-family:monospace;font-weight:600">{{ $isCredit ? '+' : '-' }}{{ number_format($tx->amount, 2) }}</td>
-                            <td style="font-family:monospace">{{ number_format($tx->running_balance ?? 0, 2) }}</td>
-                            <td>{{ $tx->created_at->format('d/m/Y') }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="5" class="empty-state">لا توجد معاملات</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    @else
-        <div style="display:flex;flex-direction:column;gap:0">
-            @forelse($transactions ?? [] as $tx)
-                @php $isCredit = in_array($tx->type, ['topup', 'refund']); @endphp
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid var(--bd)">
-                    <div style="display:flex;gap:14px;align-items:center">
-                        <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;background:{{ $isCredit ? 'rgba(16,185,129,0.13)' : 'rgba(239,68,68,0.13)' }}">
-                            {{ $isCredit ? '↑' : '↓' }}
-                        </div>
-                        <div>
-                            <div style="font-size:14px;color:var(--tx)">{{ $tx->description }}</div>
-                            <div style="font-size:12px;color:var(--td);margin-top:2px">{{ $tx->created_at->format('d/m') }}</div>
-                        </div>
-                    </div>
-                    <span style="font-family:monospace;font-weight:700;font-size:16px;color:{{ $isCredit ? '#10B981' : '#EF4444' }}">
-                        {{ $isCredit ? '+' : '-' }}{{ number_format($tx->amount, 2) }}
-                    </span>
-                </div>
-            @empty
-                <div class="empty-state">لا توجد معاملات</div>
-            @endforelse
-        </div>
+{{-- Balance Card --}}
+<div style="background:linear-gradient(135deg,#3B82F6 0%,#1D4ED8 100%);border-radius:20px;padding:32px 36px;color:#fff;margin-bottom:24px">
+    <div style="font-size:14px;opacity:.8;margin-bottom:8px">الرصيد المتاح</div>
+    <div style="font-size:42px;font-weight:800;letter-spacing:-1px">SAR {{ number_format($wallet->available_balance ?? 0, 2) }}</div>
+    @if($wallet->pending_balance > 0)
+        <div style="font-size:13px;opacity:.7;margin-top:8px">رصيد معلّق: SAR {{ number_format($wallet->pending_balance, 2) }}</div>
     @endif
-    @if(isset($transactions) && $transactions instanceof \Illuminate\Pagination\LengthAwarePaginator)
+</div>
+
+{{-- Transactions --}}
+<x-card title="🧾 العمليات الأخيرة">
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>المعرّف</th><th>الوصف</th><th>المبلغ</th><th>الرصيد بعد</th><th>التاريخ</th></tr></thead>
+            <tbody>
+                @forelse($transactions as $tx)
+                    <tr>
+                        <td class="td-mono" style="font-size:12px">{{ $tx->reference_number ?? '—' }}</td>
+                        <td>{{ $tx->description }}</td>
+                        <td style="font-weight:700;color:{{ $tx->amount > 0 ? 'var(--ac)' : 'var(--dg)' }}">
+                            {{ $tx->amount > 0 ? '+' : '' }}{{ number_format($tx->amount, 2) }} SAR
+                        </td>
+                        <td style="font-size:12px;color:var(--td)">{{ number_format($tx->balance_after, 2) }} SAR</td>
+                        <td style="font-size:12px;color:var(--tm)">{{ $tx->created_at->format('Y-m-d H:i') }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="5" class="empty-state">لا توجد عمليات</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+    @if($transactions->hasPages())
         <div style="margin-top:14px">{{ $transactions->links() }}</div>
     @endif
 </x-card>
 
-{{-- ═══ TOPUP MODAL ═══ --}}
-<x-modal id="topup-wallet" title="شحن الرصيد">
+{{-- Topup Modal --}}
+<x-modal id="topup" title="شحن الرصيد">
     <form method="POST" action="{{ route('wallet.topup') }}">
         @csrf
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
-            @foreach([100, 250, 500, 1000] as $amount)
-                <button type="button" class="amount-btn"
-                        style="padding:14px;background:var(--sf);border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-weight:600;font-size:16px;cursor:pointer;font-family:monospace"
-                        onclick="document.getElementById('topupAmount').value={{ $amount }}">
-                    {{ $amount }}
-                </button>
-            @endforeach
+        <div style="margin-bottom:16px">
+            <label class="form-label">المبلغ (ريال)</label>
+            <input type="number" name="amount" class="form-input" min="10" step="0.01" required placeholder="100.00">
+            <div style="display:flex;gap:8px;margin-top:10px">
+                @foreach([100, 250, 500, 1000, 5000] as $amt)
+                    <button type="button" class="btn btn-s" style="font-size:12px" onclick="this.form.amount.value={{ $amt }}">{{ $amt }}</button>
+                @endforeach
+            </div>
         </div>
         <div style="margin-bottom:16px">
-            <label class="form-label">مبلغ مخصص</label>
-            <input type="number" name="amount" id="topupAmount" placeholder="0.00 ر.س" step="0.01" class="form-input" value="500">
-        </div>
-        <div style="margin-bottom:16px">
-            <label class="form-label">وسيلة الدفع</label>
+            <label class="form-label">طريقة الدفع</label>
             <select name="payment_method" class="form-input">
-                @if($portalType === 'b2b')
-                    <option>تحويل بنكي</option>
-                @endif
-                <option>مدى</option>
-                <option>فيزا/ماستركارد</option>
-                <option>Apple Pay</option>
-                <option>STC Pay</option>
+                <option value="bank_transfer">تحويل بنكي</option>
+                <option value="credit_card">بطاقة ائتمان</option>
+                <option value="mada">مدى</option>
+                <option value="stc_pay">STC Pay</option>
             </select>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
-            <button type="button" class="btn btn-s" data-modal-close>إلغاء</button>
-            <button type="submit" class="btn btn-pr" @if($portalType === 'b2c') style="background:#0D9488" @endif>شحن الرصيد</button>
-        </div>
+        <button type="submit" class="btn btn-pr" style="width:100%">تأكيد الشحن</button>
     </form>
 </x-modal>
 @endsection

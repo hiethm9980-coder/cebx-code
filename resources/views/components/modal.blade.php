@@ -1,11 +1,10 @@
-{{-- resources/views/components/modal.blade.php --}}
-@props(['id', 'title', 'wide' => false])
-<div class="modal-bg" id="{{ $id }}" style="display:none">
-    <div class="modal" style="{{ $wide ? 'max-width:640px' : '' }}">
+@props(['id', 'title' => '', 'wide' => false])
+<div class="modal-backdrop" id="modal-{{ $id }}">
+    <div class="modal {{ $wide ? 'wide' : '' }}">
         <div class="modal-header">
-            <h2>{{ $title }}</h2>
-            <button data-modal-close style="background:none;border:none;color:var(--td);font-size:20px;cursor:pointer">✕</button>
+            <h3>{{ $title }}</h3>
+            <button type="button" data-modal-close style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--td)">✕</button>
         </div>
-        {{ $slot }}
+        <div class="modal-body">{{ $slot }}</div>
     </div>
 </div>

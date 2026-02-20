@@ -1,13 +1,12 @@
-{{-- resources/views/components/card.blade.php --}}
 @props(['title' => null])
 <div class="card">
     @if($title)
-        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title">
             <span>{{ $title }}</span>
             @if(isset($action))
                 <span>{{ $action }}</span>
             @endif
         </div>
     @endif
-    {{ $slot }}
+    <div class="card-body">{{ $slot }}</div>
 </div>

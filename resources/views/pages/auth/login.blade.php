@@ -39,11 +39,6 @@
             </div>
             <button type="submit" class="btn btn-pr" style="width:100%;padding:14px;font-size:16px;border-radius:12px">تسجيل الدخول</button>
         </form>
-        <p style="text-align:center;margin-top:20px;font-size:13px;color:var(--td)">
-            بوابة أفراد؟ <a href="{{ route('b2c.login') }}" style="color:var(--pr);text-decoration:none">B2C</a>
-            &nbsp;|&nbsp;
-            بوابة منظمات؟ <a href="{{ route('b2b.login') }}" style="color:var(--pr);text-decoration:none">B2B</a>
-        </p>
     </div>
 </div>
 </body>

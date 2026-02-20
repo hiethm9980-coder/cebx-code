@@ -2,147 +2,135 @@
 
 namespace App\Http\Controllers\Web;
 
-use App\Models\Shipment;
-use App\Models\Address;
-use App\Models\Parcel;
+use App\Models\{Shipment, ShipmentEvent, Address, Wallet, WalletTransaction};
 use Illuminate\Http\Request;
-use League\Csv\Writer;
 
 class ShipmentWebController extends WebController
 {
     public function index(Request $request)
     {
         $accountId = auth()->user()->account_id;
+        $query = Shipment::where('account_id', $accountId);
 
-        $query = Shipment::where('account_id', $accountId)
-            ->with(['order.store', 'parcels']);
-
-        if ($status = $request->get('status')) {
-            $query->where('status', $status);
-        }
-        if ($carrier = $request->get('carrier')) {
-            $query->where('carrier_code', $carrier);
-        }
-        if ($search = trim((string) $request->get('search'))) {
-            $query->where(function ($q) use ($search) {
-                $q->where('tracking_number', 'like', "%{$search}%")
-                  ->orWhere('reference_number', 'like', "%{$search}%")
-                  ->orWhere('recipient_name', 'like', "%{$search}%");
-            });
+        if ($status = $request->get('status'))  $query->where('status', $status);
+        if ($carrier = $request->get('carrier')) $query->where('carrier_code', $carrier);
+        if ($search = trim((string) $request->get('search', ''))) {
+            $query->where(fn($q) => $q
+                ->where('reference_number', 'like', "%{$search}%")
+                ->orWhere('recipient_name', 'like', "%{$search}%")
+                ->orWhere('carrier_tracking_number', 'like', "%{$search}%"));
         }
 
         $shipments = $query->latest()->paginate(20)->withQueryString();
 
-        return view('pages.shipments.index', compact('shipments'));
+        // Stats
+        $allCount       = Shipment::where('account_id', $accountId)->count();
+        $inTransitCount = Shipment::where('account_id', $accountId)->where('status', 'in_transit')->count();
+        $deliveredCount = Shipment::where('account_id', $accountId)->where('status', 'delivered')->count();
+        $pendingCount   = Shipment::where('account_id', $accountId)->where('status', 'pending')->count();
+
+        return view('pages.shipments.index', compact(
+            'shipments', 'allCount', 'inTransitCount', 'deliveredCount', 'pendingCount'
+        ));
     }
 
     public function create()
     {
-        $accountId = auth()->user()->account_id;
-        $savedAddresses = Address::where('account_id', $accountId)->get();
-
+        $savedAddresses = Address::where('account_id', auth()->user()->account_id)->get();
         return view('pages.shipments.create', compact('savedAddresses'));
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'sender_name'       => 'required|string|max:200',
-            'sender_phone'      => 'required|string|max:30',
-            'sender_country'    => 'required|string|max:2',
-            'sender_city'       => 'required|string|max:100',
-            'sender_address_1'  => 'required|string|max:300',
-            'recipient_name'    => 'required|string|max:200',
-            'recipient_phone'   => 'required|string|max:30',
-            'recipient_country' => 'required|string|max:2',
-            'recipient_city'    => 'required|string|max:100',
-            'recipient_address_1' => 'required|string|max:300',
-            'weight'            => 'nullable|numeric|min:0',
-            'length'            => 'nullable|numeric|min:0',
-            'width'             => 'nullable|numeric|min:0',
-            'height'            => 'nullable|numeric|min:0',
-            'description'       => 'nullable|string|max:300',
+        $v = $request->validate([
+            'sender_name' => 'required|string|max:200',
+            'sender_phone' => 'required|string|max:30',
+            'sender_city' => 'required|string|max:100',
+            'recipient_name' => 'required|string|max:200',
+            'recipient_phone' => 'required|string|max:30',
+            'recipient_city' => 'required|string|max:100',
+            'weight' => 'nullable|numeric|min:0',
+            'pieces' => 'nullable|integer|min:1',
+            'content_description' => 'nullable|string|max:500',
         ]);
 
         $accountId = auth()->user()->account_id;
-        $refNumber = 'SHP-' . date('Y') . '-' . str_pad(Shipment::where('account_id', $accountId)->count() + 1, 4, '0', STR_PAD_LEFT);
+        $cost = max(($v['weight'] ?? 1) * 6.5, 18);
+        $vat  = round($cost * 0.15, 2);
 
-        $isInternational = $validated['sender_country'] !== $validated['recipient_country'];
-
+        $user = auth()->user();
+        $userId = $user ? $user->getKey() : null;
+        if (!$userId) {
+            return redirect()->route('login')->with('error', 'يجب تسجيل الدخول.');
+        }
         $shipment = Shipment::create([
-            'account_id'         => $accountId,
-            'reference_number'   => $refNumber,
-            'source'             => 'direct',
-            'status'             => 'draft',
-            'sender_name'        => $validated['sender_name'],
-            'sender_phone'       => $validated['sender_phone'],
-            'sender_country'     => $validated['sender_country'],
-            'sender_city'        => $validated['sender_city'],
-            'sender_address_1'   => $validated['sender_address_1'],
-            'recipient_name'     => $validated['recipient_name'],
-            'recipient_phone'    => $validated['recipient_phone'],
-            'recipient_country'  => $validated['recipient_country'],
-            'recipient_city'     => $validated['recipient_city'],
-            'recipient_address_1'=> $validated['recipient_address_1'],
-            'total_weight'       => $validated['weight'] ?? 0,
-            'is_international'   => $isInternational,
-            'is_cod'             => $request->boolean('is_cod'),
-            'is_insured'         => $request->boolean('is_insured'),
-            'has_dangerous_goods'=> $request->boolean('has_dangerous_goods'),
-            'parcels_count'      => $request->input('parcels_count', 1),
-            'currency'           => 'SAR',
-            'created_by'         => auth()->id(),
+            'account_id'          => $accountId,
+            'user_id'             => $userId,
+            'created_by'          => $userId,
+            'reference_number'    => Shipment::generateRef(),
+            'type'                => 'domestic',
+            'sender_name'         => $v['sender_name'],
+            'sender_phone'        => $v['sender_phone'],
+            'sender_city'         => $v['sender_city'],
+            'sender_address_1'    => $v['sender_city'] ?? '',
+            'sender_country'      => 'SA',
+            'recipient_name'      => $v['recipient_name'],
+            'recipient_phone'     => $v['recipient_phone'],
+            'recipient_city'      => $v['recipient_city'],
+            'recipient_address_1' => $v['recipient_city'] ?? '',
+            'recipient_country'   => 'SA',
+            'weight'              => $v['weight'] ?? 1,
+            'total_weight'        => $v['weight'] ?? 1,
+            'pieces'              => $v['pieces'] ?? 1,
+            'parcels_count'       => (int) ($v['pieces'] ?? 1),
+            'content_description' => $v['content_description'] ?? null,
+            'shipping_cost'       => $cost,
+            'shipping_rate'       => $cost,
+            'vat_amount'          => $vat,
+            'total_cost'          => $cost + $vat,
+            'total_charge'        => $cost + $vat,
+            'status'              => 'pending',
+            'source'              => 'manual',
         ]);
 
-        // Create parcel record
-        if ($validated['weight'] || $validated['length']) {
-            Parcel::create([
-                'shipment_id'      => $shipment->id,
-                'sequence'         => 1,
-                'weight'           => $validated['weight'] ?? 0,
-                'length'           => $validated['length'] ?? 0,
-                'width'            => $validated['width'] ?? 0,
-                'height'           => $validated['height'] ?? 0,
-                'description'      => $validated['description'] ?? null,
+        // Deduct from wallet
+        $wallet = Wallet::firstOrCreate(['account_id' => $accountId], ['available_balance' => 0]);
+        if ($wallet->available_balance >= $shipment->total_cost) {
+            $wallet->decrement('available_balance', $shipment->total_cost);
+            WalletTransaction::create([
+                'wallet_id'        => $wallet->id,
+                'account_id'       => $accountId,
+                'reference_number' => 'TXN-' . str_pad(WalletTransaction::count() + 1, 5, '0', STR_PAD_LEFT),
+                'type'             => 'debit',
+                'description'      => "شحنة {$shipment->reference_number} — {$shipment->carrier_name}",
+                'amount'           => -$shipment->total_cost,
+                'balance_after'    => $wallet->available_balance,
+                'status'           => 'completed',
             ]);
         }
 
-        // Save sender address if requested (B2C)
-        if ($request->boolean('save_sender_address')) {
-            Address::create([
-                'account_id'     => $accountId,
-                'type'           => 'sender',
-                'contact_name'   => $validated['sender_name'],
-                'phone'          => $validated['sender_phone'],
-                'country'        => $validated['sender_country'],
-                'city'           => $validated['sender_city'],
-                'address_line_1' => $validated['sender_address_1'],
-            ]);
-        }
+        // Tracking event
+        ShipmentEvent::create([
+            'shipment_id'  => $shipment->id,
+            'status'       => 'pending',
+            'description'  => 'تم إنشاء الشحنة',
+            'event_at'     => now(),
+        ]);
 
         return redirect()->route('shipments.show', $shipment)->with('success', 'تم إنشاء الشحنة بنجاح');
     }
 
     public function show(Shipment $shipment)
     {
-        $shipment->load(['parcels', 'statusHistory' => function ($q) {
-            $q->orderBy('created_at', 'desc');
-        }]);
+        $shipment->load('events');
+        $trackingHistory = $shipment->events->map(fn($e) => [
+            'title'    => $e->description,
+            'date'     => $e->event_at->format('d/m/Y — h:i A'),
+            'location' => $e->location,
+        ])->toArray();
 
-        // Build tracking history for timeline component
-        $trackingHistory = $shipment->statusHistory->map(function ($history) {
-            return [
-                'title'    => $this->getStatusLabel($history->to_status),
-                'date'     => $history->created_at->format('d/m/Y — h:i A'),
-                'location' => $history->metadata['location'] ?? null,
-                'desc'     => $history->reason ?? null,
-            ];
-        })->toArray();
-
-        // If no history, create default
         if (empty($trackingHistory)) {
             $trackingHistory = [
-                ['title' => $this->getStatusLabel($shipment->status), 'date' => $shipment->updated_at->format('d/m/Y — h:i A')],
                 ['title' => 'تم إنشاء الشحنة', 'date' => $shipment->created_at->format('d/m/Y — h:i A')],
             ];
         }
@@ -152,91 +140,55 @@ class ShipmentWebController extends WebController
 
     public function cancel(Shipment $shipment)
     {
-        $shipment->update([
-            'status'             => 'cancelled',
-            'cancelled_by'       => auth()->id(),
-            'cancellation_reason'=> 'إلغاء من المستخدم',
-        ]);
+        if (in_array($shipment->status, ['delivered', 'cancelled'])) {
+            return back()->with('error', 'لا يمكن إلغاء هذه الشحنة');
+        }
 
-        return back()->with('warning', 'تم إلغاء الشحنة');
+        $shipment->update(['status' => 'cancelled']);
+        ShipmentEvent::create(['shipment_id' => $shipment->id, 'status' => 'cancelled', 'description' => 'تم إلغاء الشحنة', 'event_at' => now()]);
+
+        // Refund
+        $wallet = Wallet::where('account_id', $shipment->account_id)->first();
+        if ($wallet && $shipment->total_cost > 0) {
+            $wallet->increment('available_balance', $shipment->total_cost);
+            WalletTransaction::create([
+                'wallet_id' => $wallet->id, 'account_id' => $shipment->account_id,
+                'reference_number' => 'TXN-' . str_pad(WalletTransaction::count() + 1, 5, '0', STR_PAD_LEFT),
+                'type' => 'refund', 'description' => "استرداد شحنة ملغاة {$shipment->reference_number}",
+                'amount' => $shipment->total_cost, 'balance_after' => $wallet->available_balance, 'status' => 'completed',
+            ]);
+        }
+
+        return back()->with('warning', 'تم إلغاء الشحنة واسترداد المبلغ');
     }
 
     public function createReturn(Shipment $shipment)
     {
-        // Create a return shipment
-        $return = $shipment->replicate();
-        $return->fill([
-            'reference_number' => 'RET-' . $shipment->reference_number,
-            'source'           => 'return',
-            'is_return'        => true,
-            'status'           => 'draft',
-            // Swap sender/recipient
-            'sender_name'      => $shipment->recipient_name,
-            'sender_phone'     => $shipment->recipient_phone,
-            'sender_city'      => $shipment->recipient_city,
-            'sender_address_1' => $shipment->recipient_address_1,
-            'recipient_name'   => $shipment->sender_name,
-            'recipient_phone'  => $shipment->sender_phone,
-            'recipient_city'   => $shipment->sender_city,
-            'recipient_address_1' => $shipment->sender_address_1,
+        $ret = $shipment->replicate();
+        $ret->fill([
+            'reference_number' => 'RET-' . Shipment::count(),
+            'type' => 'return', 'status' => 'pending',
+            'sender_name' => $shipment->recipient_name, 'sender_phone' => $shipment->recipient_phone,
+            'sender_city' => $shipment->recipient_city,
+            'recipient_name' => $shipment->sender_name, 'recipient_phone' => $shipment->sender_phone,
+            'recipient_city' => $shipment->sender_city,
         ]);
-        $return->save();
-
-        return redirect()->route('shipments.show', $return)->with('success', 'تم إنشاء شحنة الإرجاع');
+        $ret->save();
+        return redirect()->route('shipments.show', $ret)->with('success', 'تم إنشاء شحنة الإرجاع');
     }
 
     public function label(Shipment $shipment)
     {
-        if ($shipment->label_url) {
-            return redirect($shipment->label_url);
-        }
-
-        return back()->with('error', 'لا يوجد ملصق متاح لهذه الشحنة');
+        return $shipment->label_url ? redirect($shipment->label_url) : back()->with('error', 'لا يوجد ملصق');
     }
 
-    public function export(Request $request)
+    public function export()
     {
-        $accountId = auth()->user()->account_id;
-        $shipments = Shipment::where('account_id', $accountId)->latest()->get();
-
-        $csv = Writer::createFromString('');
-        $csv->insertOne(['رقم التتبع', 'المستلم', 'الناقل', 'المدينة', 'الحالة', 'التاريخ']);
-
+        $shipments = Shipment::where('account_id', auth()->user()->account_id)->latest()->get();
+        $csv = "\xEF\xBB\xBF" . "رقم التتبع,المستلم,الناقل,المدينة,الحالة,التاريخ\n";
         foreach ($shipments as $s) {
-            $csv->insertOne([
-                $s->reference_number,
-                $s->recipient_name,
-                $s->carrier_code,
-                $s->recipient_city,
-                $s->status,
-                $s->created_at->format('Y-m-d'),
-            ]);
+            $csv .= "{$s->reference_number},{$s->recipient_name},{$s->carrier_name},{$s->recipient_city},{$s->status},{$s->created_at->format('Y-m-d')}\n";
         }
-
-        return response($csv->toString(), 200, [
-            'Content-Type'        => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="shipments-export.csv"',
-        ]);
-    }
-
-    private function getStatusLabel(string $status): string
-    {
-        return match ($status) {
-            'draft'            => 'تم إنشاء الشحنة',
-            'validated'        => 'تم التحقق',
-            'rated'            => 'تم التسعير',
-            'payment_pending'  => 'بانتظار الدفع',
-            'purchased'        => 'تم شراء الخدمة',
-            'ready_for_pickup' => 'جاهزة للاستلام',
-            'picked_up'        => 'تم الاستلام من المرسل',
-            'in_transit'       => 'في الطريق',
-            'out_for_delivery' => 'خرج للتوصيل',
-            'delivered'        => 'تم التسليم',
-            'returned'         => 'تم الإرجاع',
-            'exception'        => 'استثناء',
-            'cancelled'        => 'ملغي',
-            'failed'           => 'فشل',
-            default            => $status,
-        };
+        return response($csv, 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="shipments.csv"']);
     }
 }

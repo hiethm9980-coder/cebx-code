@@ -1,75 +1,60 @@
 @extends('layouts.app')
-@section('title', 'التقارير والتحليلات')
+@section('title', 'التقارير')
 
 @section('content')
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-    <h1 style="font-size:24px;font-weight:700;color:var(--tx);margin:0">📊 التقارير والتحليلات</h1>
-    <a href="{{ route('reports.export', 'shipments') }}" class="btn btn-s">📥 تصدير PDF</a>
+    <h1 style="font-size:24px;font-weight:800;color:var(--tx);margin:0">📊 التقارير</h1>
+    <a href="{{ route('reports.export', 'pdf') }}" class="btn btn-s">📥 تصدير PDF</a>
 </div>
 
-{{-- ═══ PERIOD FILTER ═══ --}}
-<div style="display:flex;gap:8px;margin-bottom:24px">
-    @foreach(['today' => 'اليوم', 'week' => 'أسبوع', 'month' => 'شهر', 'quarter' => 'ربع سنة', 'year' => 'سنة'] as $key => $label)
-        <a href="{{ route('reports.index', ['period' => $key]) }}"
-           class="btn {{ request('period', 'month') === $key ? 'btn-pr' : 'btn-s' }}">{{ $label }}</a>
-    @endforeach
+<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+    <x-stat-card icon="📦" label="إجمالي الشحنات" :value="number_format($totalShipments)" />
+    <x-stat-card icon="✅" label="نسبة التسليم" :value="$deliveryRate . '%'" />
+    <x-stat-card icon="⏱️" label="متوسط التوصيل" :value="round($avgDeliveryDays, 1) . ' يوم'" />
+    <x-stat-card icon="💰" label="إجمالي التكاليف" :value="number_format($totalCost)" />
 </div>
 
-{{-- ═══ KPIs ═══ --}}
-<div class="stats-grid" style="margin-bottom:24px">
-    <x-stat-card icon="📦" label="إجمالي الشحنات" :value="number_format($totalShipments ?? 0)" :trend="($shipmentsTrend ?? 0) . '%'" :up="($shipmentsTrend ?? 0) > 0" />
-    <x-stat-card icon="✅" label="نسبة التسليم" :value="($deliveryRate ?? 0) . '%'" :trend="($deliveryRateTrend ?? 0) . '%'" :up="($deliveryRateTrend ?? 0) > 0" />
-    <x-stat-card icon="💰" label="إجمالي التكلفة" :value="number_format($totalCost ?? 0)" />
-    <x-stat-card icon="⏱️" label="متوسط وقت التسليم" :value="($avgDeliveryTime ?? 0) . ' يوم'" />
-    <x-stat-card icon="↩️" label="نسبة الإرجاع" :value="($returnRate ?? 0) . '%'" />
-</div>
-
-<div class="grid-2-1" style="margin-bottom:20px">
-    {{-- ═══ DAILY CHART ═══ --}}
-    <x-card title="📈 حجم الشحنات اليومي">
-        <div class="bar-chart" style="height:200px">
-            @foreach($dailyData ?? [] as $day)
-                <div class="bar-col">
-                    <div class="bar" style="height:{{ $maxDaily ? ($day['count'] / $maxDaily * 180) : 0 }}px;background:linear-gradient(180deg,var(--pr),rgba(59,130,246,0.13));min-width:8px"></div>
-                </div>
-            @endforeach
-        </div>
-    </x-card>
-
-    {{-- ═══ CARRIER DISTRIBUTION ═══ --}}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
     <x-card title="🚚 توزيع الناقلين">
-        @foreach($carrierStats ?? [] as $carrier)
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-                <div style="width:12px;height:12px;border-radius:3px;background:{{ $carrier['color'] }};flex-shrink:0"></div>
-                <span style="flex:1;font-size:13px;color:var(--tm)">{{ $carrier['name'] }}</span>
-                <div style="width:100px;height:6px;background:var(--bd);border-radius:3px">
-                    <div style="height:100%;width:{{ $carrier['percent'] }}%;background:{{ $carrier['color'] }};border-radius:3px"></div>
+        @php
+            $carriers = \App\Models\Shipment::where('account_id', auth()->user()->account_id)
+                ->select('carrier_name', \DB::raw('count(*) as total'))
+                ->whereNotNull('carrier_name')
+                ->groupBy('carrier_name')->orderByDesc('total')->take(5)->get();
+            $cTotal = max($carriers->sum('total'), 1);
+            $colors = ['#EF4444', '#3B82F6', '#F59E0B', '#8B5CF6', '#10B981'];
+        @endphp
+        @foreach($carriers as $i => $c)
+            @php $pct = round($c->total / $cTotal * 100); @endphp
+            <div style="margin-bottom:16px">
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+                    <span style="color:var(--tx);font-weight:600">{{ $c->carrier_name }}</span>
+                    <span style="color:var(--tm)">{{ $pct }}%</span>
                 </div>
-                <span style="font-size:13px;color:var(--tx);font-family:monospace;width:36px;text-align:left">{{ $carrier['percent'] }}%</span>
+                <div style="height:8px;background:var(--bg);border-radius:4px">
+                    <div style="height:100%;width:{{ $pct }}%;background:{{ $colors[$i] ?? '#94A3B8' }};border-radius:4px"></div>
+                </div>
             </div>
         @endforeach
     </x-card>
-</div>
 
-{{-- ═══ TOP DESTINATIONS ═══ --}}
-<x-card title="🏙️ أكثر الوجهات">
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>المدينة</th><th>الشحنات</th><th>نسبة التسليم</th><th>متوسط الوقت</th><th>التكلفة</th></tr></thead>
+    <x-card title="🏆 أكثر المدن شحناً">
+        @php
+            $cities = \App\Models\Shipment::where('account_id', auth()->user()->account_id)
+                ->select('recipient_city', \DB::raw('count(*) as total'))
+                ->whereNotNull('recipient_city')
+                ->groupBy('recipient_city')->orderByDesc('total')->take(5)->get();
+        @endphp
+        <table style="width:100%">
             <tbody>
-                @forelse($topDestinations ?? [] as $dest)
-                    <tr>
-                        <td>{{ $dest['city'] }}</td>
-                        <td>{{ $dest['count'] }}</td>
-                        <td style="color:{{ $dest['rate'] >= 90 ? 'var(--ac)' : 'var(--wn)' }}">{{ $dest['rate'] }}%</td>
-                        <td>{{ $dest['avg_time'] }} يوم</td>
-                        <td style="font-family:monospace">{{ number_format($dest['cost']) }} ر.س</td>
+                @foreach($cities as $i => $city)
+                    <tr style="border-bottom:1px solid var(--sf)">
+                        <td style="padding:10px 8px;font-size:13px;font-weight:600">{{ $i + 1 }}. {{ $city->recipient_city }}</td>
+                        <td style="padding:10px 8px;font-size:13px;color:var(--pr);font-weight:700;text-align:left">{{ $city->total }}</td>
                     </tr>
-                @empty
-                    <tr><td colspan="5" class="empty-state">لا توجد بيانات</td></tr>
-                @endforelse
+                @endforeach
             </tbody>
         </table>
-    </div>
-</x-card>
+    </x-card>
+</div>
 @endsection

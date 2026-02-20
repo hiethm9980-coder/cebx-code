@@ -1,8 +1,7 @@
-
 <?php $attributes ??= new \Illuminate\View\ComponentAttributeBag;
 
 $__newAttributes = [];
-$__propNames = \Illuminate\View\ComponentAttributeBag::extractPropNames((['label', 'value']));
+$__propNames = \Illuminate\View\ComponentAttributeBag::extractPropNames((['label' => '', 'value' => '']));
 
 foreach ($attributes->all() as $__key => $__value) {
     if (in_array($__key, $__propNames)) {
@@ -17,7 +16,7 @@ $attributes = new \Illuminate\View\ComponentAttributeBag($__newAttributes);
 unset($__propNames);
 unset($__newAttributes);
 
-foreach (array_filter((['label', 'value']), 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
+foreach (array_filter((['label' => '', 'value' => '']), 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
     $$__key = $$__key ?? $__value;
 }
 
@@ -29,7 +28,7 @@ foreach ($attributes->all() as $__key => $__value) {
 
 unset($__defined_vars); ?>
 <div class="info-row">
-    <span class="label"><?php echo e($label); ?></span>
-    <span class="value"><?php echo e($value); ?></span>
+    <span class="info-row-label"><?php echo e($label); ?></span>
+    <span class="info-row-value"><?php echo e($value); ?></span>
 </div>
 <?php /**PATH C:\xampp\htdocs\shipping-gateway-blade\cebx-code\resources\views/components/info-row.blade.php ENDPATH**/ ?>

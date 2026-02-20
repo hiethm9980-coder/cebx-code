@@ -130,7 +130,9 @@
                     ?>
                     <a href="<?php echo e(route($item['route'])); ?>"
                        class="sidebar-item <?php echo e($isActive ? 'active' : ''); ?>"
-                       style="<?php echo e($isActive && $portalType === 'b2c' ? 'background:rgba(13,148,136,0.13);color:#0D9488' : ($isActive && $portalType === 'admin' ? 'background:rgba(124,58,237,0.13);color:#7C3AED' : '')); ?>">
+                       <?php if($portalType === 'b2c' && $isActive): ?> style="background:rgba(13,148,136,0.13);color:#0D9488"
+                       <?php elseif($portalType === 'admin' && $isActive): ?> style="background:rgba(124,58,237,0.13);color:#7C3AED"
+                       <?php endif; ?>>
                         <span class="icon"><?php echo e($item['icon']); ?></span>
                         <span><?php echo e($item['label']); ?></span>
                         <?php if(isset($item['badge']) && $item['badge'] > 0): ?>

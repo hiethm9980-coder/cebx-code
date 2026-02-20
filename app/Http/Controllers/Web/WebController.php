@@ -20,15 +20,19 @@ class WebController extends Controller
         $this->middleware(function ($request, $next) {
             // Determine portal type from user's account
             $user = auth()->user();
-            // المنصة الرئيسية (web.php): قائمة Admin كاملة لمن دخل من /login
-            $this->portalType = 'admin';
+            $this->portalType = 'b2b'; // default
 
             if ($user && $user->account) {
-                if ($user->account->type === 'individual') {
-                    $this->portalType = 'b2c';
-                } else {
-                    $this->portalType = 'admin';
-                }
+                $this->portalType = match ($user->account->type) {
+                    'individual' => 'b2c',
+                    'admin'      => 'admin',
+                    default      => 'b2b',
+                };
+            }
+
+            // Also support role-based admin detection
+            if ($user && ($user->is_super_admin || $user->role === 'admin')) {
+                $this->portalType = 'admin';
             }
 
             // Share with all views

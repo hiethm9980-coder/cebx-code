@@ -1,8 +1,7 @@
-
 <?php $attributes ??= new \Illuminate\View\ComponentAttributeBag;
 
 $__newAttributes = [];
-$__propNames = \Illuminate\View\ComponentAttributeBag::extractPropNames((['icon' => '', 'label', 'value', 'trend' => null, 'up' => true]));
+$__propNames = \Illuminate\View\ComponentAttributeBag::extractPropNames((['icon' => '', 'label' => '', 'value' => '0', 'trend' => null, 'up' => true]));
 
 foreach ($attributes->all() as $__key => $__value) {
     if (in_array($__key, $__propNames)) {
@@ -17,7 +16,7 @@ $attributes = new \Illuminate\View\ComponentAttributeBag($__newAttributes);
 unset($__propNames);
 unset($__newAttributes);
 
-foreach (array_filter((['icon' => '', 'label', 'value', 'trend' => null, 'up' => true]), 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
+foreach (array_filter((['icon' => '', 'label' => '', 'value' => '0', 'trend' => null, 'up' => true]), 'is_string', ARRAY_FILTER_USE_KEY) as $__key => $__value) {
     $$__key = $$__key ?? $__value;
 }
 
@@ -29,10 +28,13 @@ foreach ($attributes->all() as $__key => $__value) {
 
 unset($__defined_vars); ?>
 <div class="stat-card">
-    <div class="label"><?php echo e($icon); ?> <?php echo e($label); ?></div>
-    <div class="value"><?php echo e($value); ?></div>
-    <?php if($trend): ?>
-        <div class="trend <?php echo e($up ? 'up' : 'down'); ?>"><?php echo e($up ? '↑' : '↓'); ?> <?php echo e($trend); ?></div>
-    <?php endif; ?>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="stat-icon"><?php echo e($icon); ?></span>
+        <?php if($trend): ?>
+            <span class="stat-trend <?php echo e($up ? 'up' : 'down'); ?>"><?php echo e($trend); ?></span>
+        <?php endif; ?>
+    </div>
+    <div class="stat-value"><?php echo e($value); ?></div>
+    <div class="stat-label"><?php echo e($label); ?></div>
 </div>
 <?php /**PATH C:\xampp\htdocs\shipping-gateway-blade\cebx-code\resources\views/components/stat-card.blade.php ENDPATH**/ ?>

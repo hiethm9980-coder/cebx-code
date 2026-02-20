@@ -1,73 +1,101 @@
 /**
  * Shipping Gateway — App JavaScript
- * Handles modals, toasts, and interactive UI
+ * Handles modals, toasts, confirmations, and interactive UI
  */
-
-// ═══ MODALS ═══
 document.addEventListener('DOMContentLoaded', function () {
-    // Open modal
+
+    // ═══ MODALS ═══
     document.querySelectorAll('[data-modal-open]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            var id = this.getAttribute('data-modal-open');
+            var id = 'modal-' + this.getAttribute('data-modal-open');
             var modal = document.getElementById(id);
-            if (modal) modal.style.display = 'flex';
+            if (modal) {
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
         });
     });
 
-    // Close modal (button)
     document.querySelectorAll('[data-modal-close]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            var modal = this.closest('.modal-bg');
-            if (modal) modal.style.display = 'none';
+            var modal = this.closest('.modal-backdrop');
+            if (modal) {
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
         });
     });
 
-    // Close modal (background click)
-    document.querySelectorAll('.modal-bg').forEach(function (bg) {
+    document.querySelectorAll('.modal-backdrop').forEach(function (bg) {
         bg.addEventListener('click', function (e) {
-            if (e.target === this) this.style.display = 'none';
+            if (e.target === this) {
+                this.classList.remove('active');
+                document.body.style.overflow = '';
+            }
         });
     });
 
-    // Close modal (Escape key)
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            document.querySelectorAll('.modal-bg').forEach(function (m) {
-                m.style.display = 'none';
+            document.querySelectorAll('.modal-backdrop.active').forEach(function (m) {
+                m.classList.remove('active');
+                document.body.style.overflow = '';
             });
         }
     });
 
-    // ═══ TOASTS ═══
-    var toasts = document.querySelectorAll('.toast');
-    toasts.forEach(function (toast) {
+    // ═══ TOASTS — Auto-hide ═══
+    document.querySelectorAll('.toast-container').forEach(function (container) {
         setTimeout(function () {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateX(100%)';
+            container.style.transition = 'opacity .5s ease, transform .5s ease';
+            container.style.opacity = '0';
+            container.style.transform = 'translateX(-50%) translateY(-20px)';
             setTimeout(function () {
-                toast.parentElement && toast.parentElement.removeChild(toast);
-            }, 300);
+                if (container.parentNode) container.parentNode.removeChild(container);
+            }, 500);
         }, 4000);
     });
 
-    // ═══ SELECT ALL CHECKBOX ═══
+    // ═══ CONFIRM DELETE / CANCEL ═══
+    document.querySelectorAll('[data-confirm]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            if (!confirm(this.getAttribute('data-confirm') || 'هل أنت متأكد؟')) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // ═══ SELECT ALL ═══
     var selectAll = document.getElementById('selectAll');
     if (selectAll) {
         selectAll.addEventListener('change', function () {
-            var checkboxes = document.querySelectorAll('input[name="selected[]"]');
-            checkboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+            document.querySelectorAll('input[name="selected[]"]').forEach(function (cb) {
+                cb.checked = selectAll.checked;
+            });
         });
     }
 
-    // ═══ AMOUNT BUTTONS (Wallet) ═══
-    document.querySelectorAll('.amount-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            document.querySelectorAll('.amount-btn').forEach(function (b) {
-                b.style.border = '1px solid var(--bd)';
-                b.style.background = 'var(--sf)';
+    // ═══ FORM DOUBLE-SUBMIT PROTECTION ═══
+    document.querySelectorAll('form').forEach(function (form) {
+        form.addEventListener('submit', function () {
+            form.querySelectorAll('button[type="submit"]').forEach(function (btn) {
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                setTimeout(function () { btn.disabled = false; btn.style.opacity = '1'; }, 5000);
             });
-            this.style.border = '2px solid var(--pr)';
-            this.style.background = 'rgba(59,130,246,0.13)';
         });
     });
+
+    // ═══ SIDEBAR ACTIVE SCROLL ═══
+    var activeItem = document.querySelector('.sidebar-item.active');
+    if (activeItem) activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+    // ═══ RESPONSIVE SIDEBAR ═══
+    var toggleBtn = document.getElementById('sidebarToggle');
+    var sidebar = document.getElementById('sidebar');
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', function () {
+            sidebar.classList.toggle('mobile-open');
+        });
+    }
 });

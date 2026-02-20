@@ -130,7 +130,9 @@
                     @endphp
                     <a href="{{ route($item['route']) }}"
                        class="sidebar-item {{ $isActive ? 'active' : '' }}"
-                       style="{{ $isActive && $portalType === 'b2c' ? 'background:rgba(13,148,136,0.13);color:#0D9488' : ($isActive && $portalType === 'admin' ? 'background:rgba(124,58,237,0.13);color:#7C3AED' : '') }}">
+                       @if($portalType === 'b2c' && $isActive) style="background:rgba(13,148,136,0.13);color:#0D9488"
+                       @elseif($portalType === 'admin' && $isActive) style="background:rgba(124,58,237,0.13);color:#7C3AED"
+                       @endif>
                         <span class="icon">{{ $item['icon'] }}</span>
                         <span>{{ $item['label'] }}</span>
                         @if(isset($item['badge']) && $item['badge'] > 0)

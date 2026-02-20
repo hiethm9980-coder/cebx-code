@@ -1,9 +1,11 @@
-{{-- resources/views/components/stat-card.blade.php --}}
-@props(['icon' => '', 'label', 'value', 'trend' => null, 'up' => true])
+@props(['icon' => '', 'label' => '', 'value' => '0', 'trend' => null, 'up' => true])
 <div class="stat-card">
-    <div class="label">{{ $icon }} {{ $label }}</div>
-    <div class="value">{{ $value }}</div>
-    @if($trend)
-        <div class="trend {{ $up ? 'up' : 'down' }}">{{ $up ? '↑' : '↓' }} {{ $trend }}</div>
-    @endif
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="stat-icon">{{ $icon }}</span>
+        @if($trend)
+            <span class="stat-trend {{ $up ? 'up' : 'down' }}">{{ $trend }}</span>
+        @endif
+    </div>
+    <div class="stat-value">{{ $value }}</div>
+    <div class="stat-label">{{ $label }}</div>
 </div>
