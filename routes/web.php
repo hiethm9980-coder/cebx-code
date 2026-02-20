@@ -11,6 +11,7 @@ use App\Http\Controllers\Web\UserWebController;
 use App\Http\Controllers\Web\SupportWebController;
 use App\Http\Controllers\Web\PageController;
 use App\Http\Middleware\EnsureIsAdmin;
+use App\Http\Middleware\DetectPortal;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,8 +37,8 @@ Route::post('/admin/login', [AuthWebController::class, 'loginAdmin'])->name('adm
 // ── Logout ──
 Route::post('/logout', [AuthWebController::class, 'logout'])->name('logout');
 
-// ── Protected Routes ──
-Route::middleware(['auth:web'])->group(function () {
+// ── Protected Routes (DetectPortal sets $portalType for all views) ──
+Route::middleware(['auth:web', DetectPortal::class])->group(function () {
 
     // Dashboard
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');

@@ -3,47 +3,55 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\View;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Base Web Controller
  *
- * Detects B2C/B2B/Admin portal type from the authenticated user's account
- * and shares it with all Blade views.
+ * Portal detection is handled by DetectPortal middleware.
+ * This class provides helpers for portal-aware queries.
  */
 class WebController extends Controller
 {
-    protected string $portalType;
-
-    public function __construct()
+    /**
+     * Get current portal type
+     */
+    protected function portalType(): string
     {
-        $this->middleware(function ($request, $next) {
-            // Determine portal type from user's account
-            $user = auth()->user();
-            $this->portalType = 'b2b'; // default
-
-            if ($user && $user->account) {
-                $this->portalType = match ($user->account->type) {
-                    'individual' => 'b2c',
-                    'admin'      => 'admin',
-                    default      => 'b2b',
-                };
-            }
-
-            // Also support role-based admin detection
-            if ($user && ($user->is_super_admin || $user->role === 'admin')) {
-                $this->portalType = 'admin';
-            }
-
-            // Share with all views
-            View::share('portalType', $this->portalType);
-
-            return $next($request);
-        });
+        return request()->attributes->get('portalType', 'b2b');
     }
 
     /**
-     * Helper: Convert shipment status to Arabic badge HTML
+     * Is current user in admin portal?
+     */
+    protected function isAdmin(): bool
+    {
+        return $this->portalType() === 'admin';
+    }
+
+    /**
+     * Scope a query by account_id — Admin sees ALL, others see only own account
+     */
+    protected function scopeByAccount(Builder $query, ?int $accountId = null): Builder
+    {
+        if ($this->isAdmin()) {
+            return $query; // Admin: NO filter — see all data
+        }
+
+        $id = $accountId ?? auth()->user()->account_id;
+        return $query->where('account_id', $id);
+    }
+
+    /**
+     * Get the account_id (or null for admin)
+     */
+    protected function accountIdOrNull(): ?int
+    {
+        return $this->isAdmin() ? null : auth()->user()->account_id;
+    }
+
+    /**
+     * Helper: Convert status to Arabic badge HTML
      */
     protected function statusBadge(string $status): string
     {

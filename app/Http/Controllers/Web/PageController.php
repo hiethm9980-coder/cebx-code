@@ -61,9 +61,11 @@ class PageController extends WebController
             }
         }
 
-        $activeShipments = Shipment::where('account_id', auth()->user()->account_id)
-            ->whereIn('status', ['pending', 'processing', 'shipped', 'in_transit', 'out_for_delivery'])
-            ->latest()->take(10)->get();
+        $activeQuery = Shipment::whereIn('status', ['pending', 'processing', 'shipped', 'in_transit', 'out_for_delivery']);
+        if (!$this->isAdmin()) {
+            $activeQuery->where('account_id', auth()->user()->account_id);
+        }
+        $activeShipments = $activeQuery->latest()->take(10)->get();
 
         return view('pages.tracking.index', compact('trackedShipment', 'trackingHistory', 'activeShipments'));
     }
@@ -82,7 +84,11 @@ class PageController extends WebController
     // ═══ INVITATIONS ═══
     public function invitations()
     {
-        $invitations = Invitation::where('account_id', auth()->user()->account_id)->latest()->paginate(15);
+        $query = Invitation::query();
+        if (!$this->isAdmin()) {
+            $query->where('account_id', auth()->user()->account_id);
+        }
+        $invitations = $query->latest()->paginate(15);
         return view('pages.invitations.index', compact('invitations'));
     }
 
@@ -108,8 +114,10 @@ class PageController extends WebController
     // ═══ NOTIFICATIONS ═══
     public function notifications(Request $request)
     {
-        $accountId = auth()->user()->account_id;
-        $query = Notification::where('account_id', $accountId);
+        $query = Notification::query();
+        if (!$this->isAdmin()) {
+            $query->where('account_id', auth()->user()->account_id);
+        }
 
         if ($filter = $request->get('filter')) {
             if ($filter === 'unread') $query->whereNull('read_at');
@@ -117,8 +125,10 @@ class PageController extends WebController
         }
 
         $notifications = $query->latest()->paginate(20)->withQueryString();
-        $unreadCount = Notification::where('account_id', $accountId)->whereNull('read_at')->count();
-        $readCount   = Notification::where('account_id', $accountId)->whereNotNull('read_at')->count();
+
+        $countQ = fn() => $this->isAdmin() ? Notification::query() : Notification::where('account_id', auth()->user()->account_id);
+        $unreadCount = $countQ()->whereNull('read_at')->count();
+        $readCount   = $countQ()->whereNotNull('read_at')->count();
 
         return view('pages.notifications.index', compact('notifications', 'unreadCount', 'readCount'));
     }
@@ -131,7 +141,11 @@ class PageController extends WebController
 
     public function notificationsReadAll()
     {
-        Notification::where('account_id', auth()->user()->account_id)->whereNull('read_at')->update(['read_at' => now()]);
+        $query = Notification::whereNull('read_at');
+        if (!$this->isAdmin()) {
+            $query->where('account_id', auth()->user()->account_id);
+        }
+        $query->update(['read_at' => now()]);
         return back()->with('success', 'تم تحديد الكل كمقروء');
     }
 
@@ -198,11 +212,15 @@ class PageController extends WebController
     // ═══ REPORTS ═══
     public function reports()
     {
-        $accountId = auth()->user()->account_id;
-        $totalShipments  = Shipment::where('account_id', $accountId)->count();
-        $deliveryRate    = $totalShipments > 0 ? round(Shipment::where('account_id', $accountId)->where('status', 'delivered')->count() / $totalShipments * 100, 1) : 0;
-        $totalCost       = Shipment::where('account_id', $accountId)->sum('total_cost');
-        $avgDeliveryDays = Shipment::where('account_id', $accountId)->where('status', 'delivered')
+        $shipQ = Shipment::query();
+        if (!$this->isAdmin()) {
+            $shipQ->where('account_id', auth()->user()->account_id);
+        }
+
+        $totalShipments  = (clone $shipQ)->count();
+        $deliveryRate    = $totalShipments > 0 ? round((clone $shipQ)->where('status', 'delivered')->count() / $totalShipments * 100, 1) : 0;
+        $totalCost       = (clone $shipQ)->sum('total_cost');
+        $avgDeliveryDays = (clone $shipQ)->where('status', 'delivered')
             ->whereNotNull('delivered_at')->avg(\DB::raw('DATEDIFF(delivered_at, created_at)')) ?? 0;
 
         return view('pages.reports.index', compact('totalShipments', 'deliveryRate', 'totalCost', 'avgDeliveryDays'));
@@ -216,10 +234,14 @@ class PageController extends WebController
     // ═══ FINANCIAL ═══
     public function financial()
     {
-        $accountId = auth()->user()->account_id;
-        $transactions    = WalletTransaction::where('account_id', $accountId)->latest()->paginate(15);
-        $totalRevenue    = WalletTransaction::where('account_id', $accountId)->where('type', 'credit')->sum('amount');
-        $totalPayouts    = WalletTransaction::where('account_id', $accountId)->where('type', 'debit')->sum(\DB::raw('ABS(amount)'));
+        $txQ = WalletTransaction::query();
+        if (!$this->isAdmin()) {
+            $txQ->where('account_id', auth()->user()->account_id);
+        }
+
+        $transactions    = (clone $txQ)->latest()->paginate(15);
+        $totalRevenue    = (clone $txQ)->where('type', 'credit')->sum('amount');
+        $totalPayouts    = (clone $txQ)->where('type', 'debit')->sum(\DB::raw('ABS(amount)'));
         $netProfit       = $totalRevenue - $totalPayouts;
         $pendingInvoices = 0;
 

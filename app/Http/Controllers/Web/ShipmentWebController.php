@@ -9,8 +9,14 @@ class ShipmentWebController extends WebController
 {
     public function index(Request $request)
     {
-        $accountId = auth()->user()->account_id;
-        $query = Shipment::where('account_id', $accountId);
+        $query = Shipment::query();
+
+        // Admin: see ALL — B2B/B2C: see only own account
+        if (!$this->isAdmin()) {
+            $query->where('account_id', auth()->user()->account_id);
+        } else {
+            $query->with('account');
+        }
 
         if ($status = $request->get('status'))  $query->where('status', $status);
         if ($carrier = $request->get('carrier')) $query->where('carrier_code', $carrier);
@@ -23,11 +29,13 @@ class ShipmentWebController extends WebController
 
         $shipments = $query->latest()->paginate(20)->withQueryString();
 
-        // Stats
-        $allCount       = Shipment::where('account_id', $accountId)->count();
-        $inTransitCount = Shipment::where('account_id', $accountId)->where('status', 'in_transit')->count();
-        $deliveredCount = Shipment::where('account_id', $accountId)->where('status', 'delivered')->count();
-        $pendingCount   = Shipment::where('account_id', $accountId)->where('status', 'pending')->count();
+        // Stats scoped the same way
+        $statsQuery = fn() => $this->isAdmin() ? Shipment::query() : Shipment::where('account_id', auth()->user()->account_id);
+
+        $allCount       = $statsQuery()->count();
+        $inTransitCount = $statsQuery()->where('status', 'in_transit')->count();
+        $deliveredCount = $statsQuery()->where('status', 'delivered')->count();
+        $pendingCount   = $statsQuery()->where('status', 'pending')->count();
 
         return view('pages.shipments.index', compact(
             'shipments', 'allCount', 'inTransitCount', 'deliveredCount', 'pendingCount'
@@ -95,12 +103,11 @@ class ShipmentWebController extends WebController
             ]);
         }
 
-        // Tracking event
         ShipmentEvent::create([
-            'shipment_id'  => $shipment->id,
-            'status'       => 'pending',
-            'description'  => 'تم إنشاء الشحنة',
-            'event_at'     => now(),
+            'shipment_id' => $shipment->id,
+            'status'      => 'pending',
+            'description' => 'تم إنشاء الشحنة',
+            'event_at'    => now(),
         ]);
 
         return redirect()->route('shipments.show', $shipment)->with('success', 'تم إنشاء الشحنة بنجاح');
@@ -108,7 +115,7 @@ class ShipmentWebController extends WebController
 
     public function show(Shipment $shipment)
     {
-        $shipment->load('events');
+        $shipment->load('events', 'account');
         $trackingHistory = $shipment->events->map(fn($e) => [
             'title'    => $e->description,
             'date'     => $e->event_at->format('d/m/Y — h:i A'),
@@ -133,7 +140,6 @@ class ShipmentWebController extends WebController
         $shipment->update(['status' => 'cancelled']);
         ShipmentEvent::create(['shipment_id' => $shipment->id, 'status' => 'cancelled', 'description' => 'تم إلغاء الشحنة', 'event_at' => now()]);
 
-        // Refund
         $wallet = Wallet::where('account_id', $shipment->account_id)->first();
         if ($wallet && $shipment->total_cost > 0) {
             $wallet->increment('available_balance', $shipment->total_cost);
@@ -170,7 +176,10 @@ class ShipmentWebController extends WebController
 
     public function export()
     {
-        $shipments = Shipment::where('account_id', auth()->user()->account_id)->latest()->get();
+        $query = Shipment::query();
+        if (!$this->isAdmin()) $query->where('account_id', auth()->user()->account_id);
+        $shipments = $query->latest()->get();
+
         $csv = "\xEF\xBB\xBF" . "رقم التتبع,المستلم,الناقل,المدينة,الحالة,التاريخ\n";
         foreach ($shipments as $s) {
             $csv .= "{$s->reference_number},{$s->recipient_name},{$s->carrier_name},{$s->recipient_city},{$s->status},{$s->created_at->format('Y-m-d')}\n";
