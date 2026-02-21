@@ -65,20 +65,20 @@ class TenantMiddleware
 
     /**
      * FIX P2-4: تحديد صفحة تسجيل الدخول بناءً على المسار.
+     * استخدام url() لتجنب خطأ "Route not defined" عند تعارض أو تأخر تحميل المسارات.
      */
     private function resolveLoginRoute(Request $request): string
     {
         $path = $request->path();
 
         if (str_starts_with($path, 'b2b')) {
-            return route('b2b.login');
+            return url('/b2b/login');
         }
 
         if (str_starts_with($path, 'b2c')) {
-            return route('b2c.login');
+            return url('/b2c/login');
         }
 
-        // Fallback: البوابة العامة (التوافق مع النظام الحالي)
-        return route('login');
+        return url('/login');
     }
 }

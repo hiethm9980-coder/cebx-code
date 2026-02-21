@@ -131,7 +131,8 @@ class DashboardController extends WebController
 
     // ── Helpers ──
 
-    private function monthlyChart(?int $accountId): array
+    /** @param int|string|null $accountId */
+    private function monthlyChart(int|string|null $accountId): array
     {
         $data = collect(range(5, 0))->map(function ($i) use ($accountId) {
             $date = now()->subMonths($i);
@@ -149,7 +150,8 @@ class DashboardController extends WebController
         return $data;
     }
 
-    private function statusDistribution(?int $accountId): array
+    /** @param int|string|null $accountId */
+    private function statusDistribution(int|string|null $accountId): array
     {
         $q = Shipment::query();
         if ($accountId) $q->where('account_id', $accountId);
@@ -168,7 +170,8 @@ class DashboardController extends WebController
         })->toArray();
     }
 
-    private function carrierStats(?int $accountId)
+    /** @param int|string|null $accountId */
+    private function carrierStats(int|string|null $accountId)
     {
         $q = Shipment::query()->whereNotNull('carrier_name');
         if ($accountId) $q->where('account_id', $accountId);

@@ -37,9 +37,18 @@
         <nav class="sidebar-nav">
             <?php
                 $currentRoute = Route::currentRouteName() ?? '';
-                $unreadNotifs = \App\Models\Notification::where('read_at', null)->count();
-                $openTickets = \App\Models\SupportTicket::where('status', 'open')->count();
-                $processingShipments = \App\Models\Shipment::whereIn('status', ['payment_pending','purchased','picked_up','in_transit','out_for_delivery'])->count();
+                $acctId = auth()->user()->account_id;
+                $isAdminPortal = ($portalType ?? 'b2b') === 'admin';
+
+                if ($isAdminPortal) {
+                    $unreadNotifs = \App\Models\Notification::whereNull('read_at')->count();
+                    $openTickets = \App\Models\SupportTicket::where('status', 'open')->count();
+                    $processingShipments = \App\Models\Shipment::whereIn('status', ['payment_pending','purchased','picked_up','in_transit','out_for_delivery'])->count();
+                } else {
+                    $unreadNotifs = \App\Models\Notification::where('account_id', $acctId)->whereNull('read_at')->count();
+                    $openTickets = \App\Models\SupportTicket::where('account_id', $acctId)->where('status', 'open')->count();
+                    $processingShipments = \App\Models\Shipment::where('account_id', $acctId)->whereIn('status', ['payment_pending','purchased','picked_up','in_transit','out_for_delivery'])->count();
+                }
 
                 $b2cMenu = [
                     ['id' => 'dashboard', 'route' => 'dashboard', 'icon' => '🏠', 'label' => 'الرئيسية'],
