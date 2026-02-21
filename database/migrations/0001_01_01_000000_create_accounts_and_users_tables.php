@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('accounts')) {
+            return;
+        }
+
         Schema::create('accounts', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -34,7 +38,7 @@ return new class extends Migration
             $table->enum('role', ['admin', 'manager', 'supervisor', 'operator', 'viewer'])->default('operator');
             $table->boolean('is_active')->default(true);
             $table->boolean('is_super_admin')->default(false);
-            $table->foreignId('branch_id')->nullable()->constrained()->nullOnDelete();
+            $table->unsignedBigInteger('branch_id')->nullable()->index();
             $table->timestamp('last_login_at')->nullable();
             $table->rememberToken();
             $table->timestamps();

@@ -15,6 +15,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('kyc_documents')) {
+            return;
+        }
+
         // ── KYC Documents (individual file records) ──────────────
         Schema::create('kyc_documents', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -34,21 +38,24 @@ return new class extends Migration
 
             $table->index(['account_id', 'document_type']);
             $table->index(['kyc_verification_id']);
-
-            $table->foreign('account_id')
-                  ->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('kyc_verification_id')
-                  ->references('id')->on('kyc_verifications')->onDelete('cascade');
-            $table->foreign('uploaded_by')
-                  ->references('id')->on('users')->onDelete('cascade');
+            $table->index('uploaded_by');
+            // FKs omitted: accounts.id and users.id may be bigint on server
         });
 
         // ── Enhance kyc_verifications ────────────────────────────
-        Schema::table('kyc_verifications', function (Blueprint $table) {
-            $table->string('verification_level', 30)->default('basic')->after('verification_type');
-            $table->text('review_notes')->nullable()->after('rejection_reason');
-            $table->unsignedSmallInteger('review_count')->default(0)->after('review_notes');
-        });
+        if (Schema::hasTable('kyc_verifications') && Schema::hasColumn('kyc_verifications', 'verification_type')) {
+            Schema::table('kyc_verifications', function (Blueprint $table) {
+                if (! Schema::hasColumn('kyc_verifications', 'verification_level')) {
+                    $table->string('verification_level', 30)->default('basic')->after('verification_type');
+                }
+                if (! Schema::hasColumn('kyc_verifications', 'review_notes')) {
+                    $table->text('review_notes')->nullable()->after('rejection_reason');
+                }
+                if (! Schema::hasColumn('kyc_verifications', 'review_count')) {
+                    $table->unsignedSmallInteger('review_count')->default(0)->after('review_notes');
+                }
+            });
+        }
     }
 
     public function down(): void

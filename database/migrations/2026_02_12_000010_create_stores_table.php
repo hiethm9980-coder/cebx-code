@@ -15,6 +15,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('stores')) {
+            return;
+        }
+
         Schema::create('stores', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('account_id');
@@ -66,11 +70,8 @@ return new class extends Migration
             $table->unique(['account_id', 'name']);
             $table->index(['account_id', 'status']);
             $table->index(['account_id', 'platform']);
-
-            $table->foreign('account_id')
-                  ->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('created_by')
-                  ->references('id')->on('users')->onDelete('set null');
+            $table->index('created_by');
+            // FKs omitted: accounts.id and users.id may be bigint on server
         });
     }
 

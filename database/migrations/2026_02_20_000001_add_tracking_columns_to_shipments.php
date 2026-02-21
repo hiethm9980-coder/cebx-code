@@ -16,19 +16,17 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('shipments', function (Blueprint $table) {
-            // FIX P0-4: أعمدة التتبع التي يعتمد عليها TrackingService
-            if (!Schema::hasColumn('shipments', 'tracking_status')) {
+            // FIX P0-4: أعمدة التتبع التي يعتمد عليها TrackingService (no ->after() for compatibility with differing server schema)
+            if (! Schema::hasColumn('shipments', 'tracking_status')) {
                 $table->string('tracking_status', 50)
                       ->nullable()
-                      ->after('tracking_url')
                       ->index()
                       ->comment('Carrier tracking status (e.g. in_transit, delivered)');
             }
 
-            if (!Schema::hasColumn('shipments', 'tracking_updated_at')) {
+            if (! Schema::hasColumn('shipments', 'tracking_updated_at')) {
                 $table->timestamp('tracking_updated_at')
                       ->nullable()
-                      ->after('tracking_status')
                       ->index()
                       ->comment('Last tracking event timestamp');
             }

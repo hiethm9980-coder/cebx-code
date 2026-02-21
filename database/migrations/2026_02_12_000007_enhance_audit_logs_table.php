@@ -18,17 +18,36 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('audit_logs', function (Blueprint $table) {
-            $table->string('severity', 20)->default('info')->after('action');         // info, warning, critical
-            $table->string('category', 50)->nullable()->after('severity');             // auth, users, roles, account, invitation, etc.
-            $table->string('request_id', 64)->nullable()->after('user_agent');         // Correlation/trace ID
-            $table->json('metadata')->nullable()->after('new_values');                // Additional context
+        if (! Schema::hasTable('audit_logs') || ! Schema::hasColumn('audit_logs', 'action')) {
+            return;
+        }
 
-            // Composite indexes for common query patterns
-            $table->index(['account_id', 'category', 'created_at'], 'idx_audit_account_category_time');
-            $table->index(['account_id', 'severity', 'created_at'], 'idx_audit_account_severity_time');
+        Schema::table('audit_logs', function (Blueprint $table) {
+            if (! Schema::hasColumn('audit_logs', 'severity')) {
+                $table->string('severity', 20)->default('info')->after('action');
+            }
+            if (! Schema::hasColumn('audit_logs', 'category')) {
+                $table->string('category', 50)->nullable()->after('severity');
+            }
+            if (Schema::hasColumn('audit_logs', 'user_agent') && ! Schema::hasColumn('audit_logs', 'request_id')) {
+                $table->string('request_id', 64)->nullable()->after('user_agent');
+            }
+            if (Schema::hasColumn('audit_logs', 'new_values') && ! Schema::hasColumn('audit_logs', 'metadata')) {
+                $table->json('metadata')->nullable()->after('new_values');
+            }
+        });
+
+        Schema::table('audit_logs', function (Blueprint $table) {
+            if (Schema::hasColumn('audit_logs', 'category')) {
+                $table->index(['account_id', 'category', 'created_at'], 'idx_audit_account_category_time');
+            }
+            if (Schema::hasColumn('audit_logs', 'severity')) {
+                $table->index(['account_id', 'severity', 'created_at'], 'idx_audit_account_severity_time');
+            }
             $table->index(['account_id', 'user_id', 'created_at'], 'idx_audit_account_user_time');
-            $table->index('request_id');
+            if (Schema::hasColumn('audit_logs', 'request_id')) {
+                $table->index('request_id');
+            }
         });
     }
 

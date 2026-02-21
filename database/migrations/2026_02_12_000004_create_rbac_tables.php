@@ -8,7 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('permissions')) {
+            return;
+        }
+
         // ── Permissions Catalog (system-wide, not tenant-scoped) ──
+        if (! Schema::hasTable('permissions')) {
         Schema::create('permissions', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('key', 100)->unique();         // e.g. "users:manage", "shipments:create"
@@ -19,8 +24,10 @@ return new class extends Migration
 
             $table->index('group');
         });
+        }
 
         // ── Roles (tenant-scoped) ─────────────────────────────────
+        if (! Schema::hasTable('roles')) {
         Schema::create('roles', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('account_id');
@@ -34,14 +41,12 @@ return new class extends Migration
 
             $table->unique(['account_id', 'name']);
             $table->index('account_id');
-
-            $table->foreign('account_id')
-                  ->references('id')
-                  ->on('accounts')
-                  ->onDelete('cascade');
+            // FK omitted: accounts.id may be bigint (0001 migration) or uuid (2026 migration); types must match
         });
+        }
 
         // ── Role ↔ Permission pivot ───────────────────────────────
+        if (! Schema::hasTable('role_permission')) {
         Schema::create('role_permission', function (Blueprint $table) {
             $table->uuid('role_id');
             $table->uuid('permission_id');
@@ -59,8 +64,10 @@ return new class extends Migration
                   ->on('permissions')
                   ->onDelete('cascade');
         });
+        }
 
         // ── User ↔ Role pivot ─────────────────────────────────────
+        if (! Schema::hasTable('user_role')) {
         Schema::create('user_role', function (Blueprint $table) {
             $table->uuid('user_id');
             $table->uuid('role_id');
@@ -68,22 +75,12 @@ return new class extends Migration
             $table->timestamp('assigned_at')->useCurrent();
 
             $table->primary(['user_id', 'role_id']);
-
-            $table->foreign('user_id')
-                  ->references('id')
-                  ->on('users')
-                  ->onDelete('cascade');
-
-            $table->foreign('role_id')
-                  ->references('id')
-                  ->on('roles')
-                  ->onDelete('cascade');
-
-            $table->foreign('assigned_by')
-                  ->references('id')
-                  ->on('users')
-                  ->onDelete('set null');
+            $table->index('user_id');
+            $table->index('role_id');
+            $table->index('assigned_by');
+            // FKs to users/roles omitted: users.id may be bigint or uuid depending on which migration created the table
         });
+        }
     }
 
     public function down(): void

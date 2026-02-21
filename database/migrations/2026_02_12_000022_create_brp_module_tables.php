@@ -25,7 +25,7 @@ return new class extends Migration
         if (!Schema::hasTable('pricing_rule_sets')) {
         Schema::create('pricing_rule_sets', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('account_id')->nullable()->constrained('accounts')->nullOnDelete(); // null = platform default
+                        $table->uuid('account_id')->nullable(); // null = platform default; FK omitted for server compatibility
 
             $table->string('name', 200);
             $table->integer('version')->default(1);
@@ -103,7 +103,7 @@ return new class extends Migration
         if (!Schema::hasTable('pricing_breakdowns')) {
         Schema::create('pricing_breakdowns', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
+                        $table->uuid('account_id');
 
             // ── Linkage (FR-BRP-006) ─────────────────────────
             $table->string('entity_type', 50);  // rate_quote, shipment

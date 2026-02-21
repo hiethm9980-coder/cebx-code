@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('organization_profiles')) {
+            return;
+        }
+
         // ── Organization Profile (created automatically for org accounts) ──
         Schema::create('organization_profiles', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -42,10 +46,8 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('account_id')
-                  ->references('id')
-                  ->on('accounts')
-                  ->onDelete('cascade');
+            $table->index('account_id');
+            // FK omitted: accounts.id may be bigint (0001 migration) or uuid (2026 migration)
         });
 
         // ── KYC Verification Status ──────────────────────────────
@@ -65,22 +67,16 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['account_id', 'status']);
-
-            $table->foreign('account_id')
-                  ->references('id')
-                  ->on('accounts')
-                  ->onDelete('cascade');
-
-            $table->foreign('reviewed_by')
-                  ->references('id')
-                  ->on('users')
-                  ->onDelete('set null');
+            $table->index('reviewed_by');
+            // FKs omitted: accounts.id and users.id may be bigint or uuid
         });
 
         // ── Add KYC status to accounts for quick lookup ──────────
-        Schema::table('accounts', function (Blueprint $table) {
-            $table->string('kyc_status', 30)->default('unverified')->after('status');
-        });
+        if (Schema::hasTable('accounts') && ! Schema::hasColumn('accounts', 'kyc_status')) {
+            Schema::table('accounts', function (Blueprint $table) {
+                $table->string('kyc_status', 30)->default('unverified')->after('status');
+            });
+        }
     }
 
     public function down(): void

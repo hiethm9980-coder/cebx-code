@@ -12,26 +12,28 @@ return new class extends Migration
         // 1. ROUTE OPTIMIZATION ENGINE
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('route_plans', function (Blueprint $t) {
-            $t->uuid('id')->primary();
-            $t->uuid('account_id')->index();
-            $t->uuid('shipment_id')->nullable()->index();
-            $t->string('origin_code', 10);        // IATA/UN-LOCODE
-            $t->string('destination_code', 10);
-            $t->string('mode', 20);                // air / sea / land / multimodal
-            $t->integer('legs_count')->default(1);
-            $t->decimal('total_cost', 14, 2)->nullable();
-            $t->decimal('total_distance_km', 10, 2)->nullable();
-            $t->integer('total_transit_hours')->nullable();
-            $t->decimal('co2_kg', 10, 2)->nullable();
-            $t->string('optimization_strategy', 30)->default('cost'); // cost / speed / balanced / green
-            $t->boolean('is_selected')->default(false);
-            $t->json('metadata')->nullable();
-            $t->timestamps();
-            $t->foreign('account_id')->references('id')->on('accounts')->cascadeOnDelete();
-        });
+        if (! Schema::hasTable('route_plans')) {
+            Schema::create('route_plans', function (Blueprint $t) {
+                $t->uuid('id')->primary();
+                $t->uuid('account_id')->index();
+                $t->uuid('shipment_id')->nullable()->index();
+                $t->string('origin_code', 10);        // IATA/UN-LOCODE
+                $t->string('destination_code', 10);
+                $t->string('mode', 20);                // air / sea / land / multimodal
+                $t->integer('legs_count')->default(1);
+                $t->decimal('total_cost', 14, 2)->nullable();
+                $t->decimal('total_distance_km', 10, 2)->nullable();
+                $t->integer('total_transit_hours')->nullable();
+                $t->decimal('co2_kg', 10, 2)->nullable();
+                $t->string('optimization_strategy', 30)->default('cost'); // cost / speed / balanced / green
+                $t->boolean('is_selected')->default(false);
+                $t->json('metadata')->nullable();
+                $t->timestamps();
+            });
+        }
 
-        Schema::create('route_legs', function (Blueprint $t) {
+        if (! Schema::hasTable('route_legs')) {
+            Schema::create('route_legs', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('route_plan_id')->index();
             $t->integer('sequence');
@@ -50,9 +52,11 @@ return new class extends Migration
             $t->json('metadata')->nullable();
             $t->timestamps();
             $t->foreign('route_plan_id')->references('id')->on('route_plans')->cascadeOnDelete();
-        });
+            });
+        }
 
-        Schema::create('route_cost_factors', function (Blueprint $t) {
+        if (! Schema::hasTable('route_cost_factors')) {
+            Schema::create('route_cost_factors', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->string('factor_name', 50);          // fuel / handling / insurance / customs / last_mile
@@ -67,13 +71,15 @@ return new class extends Migration
             $t->date('effective_to')->nullable();
             $t->boolean('is_active')->default(true);
             $t->timestamps();
-        });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 2. CAPACITY & LOAD MANAGEMENT
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('capacity_pools', function (Blueprint $t) {
+        if (! Schema::hasTable('capacity_pools')) {
+            Schema::create('capacity_pools', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('branch_id')->nullable()->index();
@@ -93,9 +99,11 @@ return new class extends Migration
             $t->string('status', 20)->default('open');   // open / full / closed / departed
             $t->json('metadata')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('capacity_bookings', function (Blueprint $t) {
+        if (! Schema::hasTable('capacity_bookings')) {
+            Schema::create('capacity_bookings', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('capacity_pool_id')->index();
             $t->uuid('shipment_id')->index();
@@ -105,13 +113,15 @@ return new class extends Migration
             $t->string('status', 20)->default('confirmed'); // confirmed / waitlisted / bumped / loaded
             $t->timestamps();
             $t->foreign('capacity_pool_id')->references('id')->on('capacity_pools')->cascadeOnDelete();
-        });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 3. PROFITABILITY ENGINE
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('shipment_costs', function (Blueprint $t) {
+        if (! Schema::hasTable('shipment_costs')) {
+            Schema::create('shipment_costs', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('shipment_id')->unique();
@@ -128,9 +138,11 @@ return new class extends Migration
             $t->string('currency', 3)->default('SAR');
             $t->json('cost_breakdown')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('branch_pnl', function (Blueprint $t) {
+        if (! Schema::hasTable('branch_pnl')) {
+            Schema::create('branch_pnl', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('branch_id')->index();
@@ -147,13 +159,15 @@ return new class extends Migration
             $t->json('breakdown')->nullable();
             $t->timestamps();
             $t->unique(['branch_id', 'period_start', 'period_type']);
-        });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 4. MULTI-CURRENCY LEDGER
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('exchange_rates', function (Blueprint $t) {
+        if (! Schema::hasTable('exchange_rates')) {
+            Schema::create('exchange_rates', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->string('from_currency', 3);
             $t->string('to_currency', 3);
@@ -163,9 +177,11 @@ return new class extends Migration
             $t->boolean('is_active')->default(true);
             $t->timestamps();
             $t->index(['from_currency', 'to_currency', 'effective_date']);
-        });
+            });
+        }
 
-        Schema::create('currency_transactions', function (Blueprint $t) {
+        if (! Schema::hasTable('currency_transactions')) {
+            Schema::create('currency_transactions', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->string('entity_type', 50);            // invoice / payment / refund
@@ -179,13 +195,15 @@ return new class extends Migration
             $t->timestamp('converted_at');
             $t->timestamps();
             $t->index(['entity_type', 'entity_id']);
-        });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 5. IATA / FIATA COMPLIANCE LAYER
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('transport_documents', function (Blueprint $t) {
+        if (! Schema::hasTable('transport_documents')) {
+            Schema::create('transport_documents', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('shipment_id')->index();
@@ -206,9 +224,11 @@ return new class extends Migration
             $t->string('status', 20)->default('draft');
             $t->json('metadata')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('cargo_manifests', function (Blueprint $t) {
+        if (! Schema::hasTable('cargo_manifests')) {
+            Schema::create('cargo_manifests', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->string('manifest_number', 50)->unique();
@@ -223,9 +243,11 @@ return new class extends Migration
             $t->string('status', 20)->default('draft');
             $t->json('metadata')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('cargo_manifest_items', function (Blueprint $t) {
+        if (! Schema::hasTable('cargo_manifest_items')) {
+            Schema::create('cargo_manifest_items', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('manifest_id')->index();
             $t->uuid('shipment_id')->index();
@@ -236,13 +258,15 @@ return new class extends Migration
             $t->string('goods_description', 255)->nullable();
             $t->timestamps();
             $t->foreign('manifest_id')->references('id')->on('cargo_manifests')->cascadeOnDelete();
-        });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 6. AUDIT & REGULATORY RETENTION
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('retention_policies', function (Blueprint $t) {
+        if (! Schema::hasTable('retention_policies')) {
+            Schema::create('retention_policies', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->string('data_category', 50);           // shipments / invoices / customs / audit
@@ -253,9 +277,11 @@ return new class extends Migration
             $t->date('last_archival_run')->nullable();
             $t->json('metadata')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('immutable_audit_log', function (Blueprint $t) {
+        if (! Schema::hasTable('immutable_audit_log')) {
+            Schema::create('immutable_audit_log', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->string('event_type', 50);
@@ -271,13 +297,15 @@ return new class extends Migration
             $t->timestamps();
             $t->index(['entity_type', 'entity_id']);
             $t->index('occurred_at');
-        });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 7. CUSTOMER SELF-SERVICE PORTAL (enhancements)
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('customer_api_keys', function (Blueprint $t) {
+        if (! Schema::hasTable('customer_api_keys')) {
+            Schema::create('customer_api_keys', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('user_id')->index();
@@ -290,9 +318,11 @@ return new class extends Migration
             $t->timestamp('expires_at')->nullable();
             $t->boolean('is_active')->default(true);
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('saved_quotes', function (Blueprint $t) {
+        if (! Schema::hasTable('saved_quotes')) {
+            Schema::create('saved_quotes', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('user_id');
@@ -310,13 +340,15 @@ return new class extends Migration
             $t->string('status', 20)->default('active'); // active / expired / converted
             $t->uuid('converted_shipment_id')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 8. DATA INTELLIGENCE LAYER
         // ═══════════════════════════════════════════════════════════
 
-        Schema::create('analytics_snapshots', function (Blueprint $t) {
+        if (! Schema::hasTable('analytics_snapshots')) {
+            Schema::create('analytics_snapshots', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->string('metric_type', 50);             // route_profitability / branch_performance / sla_breach / clv
@@ -329,9 +361,11 @@ return new class extends Migration
             $t->timestamps();
             $t->index(['metric_type', 'period_date']);
             $t->index(['dimension', 'dimension_value']);
-        });
+            });
+        }
 
-        Schema::create('sla_metrics', function (Blueprint $t) {
+        if (! Schema::hasTable('sla_metrics')) {
+            Schema::create('sla_metrics', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('shipment_id')->nullable()->index();
@@ -345,9 +379,11 @@ return new class extends Migration
             $t->string('root_cause', 100)->nullable();
             $t->timestamps();
             $t->index(['sla_type', 'breached']);
-        });
+            });
+        }
 
-        Schema::create('customer_lifetime_values', function (Blueprint $t) {
+        if (! Schema::hasTable('customer_lifetime_values')) {
+            Schema::create('customer_lifetime_values', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('customer_id')->unique();
@@ -363,9 +399,11 @@ return new class extends Migration
             $t->decimal('churn_probability', 5, 4)->default(0);
             $t->json('metrics')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('delay_predictions', function (Blueprint $t) {
+        if (! Schema::hasTable('delay_predictions')) {
+            Schema::create('delay_predictions', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('shipment_id')->index();
@@ -376,9 +414,11 @@ return new class extends Migration
             $t->boolean('was_accurate')->nullable();
             $t->integer('actual_delay_hours')->nullable();
             $t->timestamps();
-        });
+            });
+        }
 
-        Schema::create('fraud_signals', function (Blueprint $t) {
+        if (! Schema::hasTable('fraud_signals')) {
+            Schema::create('fraud_signals', function (Blueprint $t) {
             $t->uuid('id')->primary();
             $t->uuid('account_id')->index();
             $t->uuid('entity_id');
@@ -391,7 +431,8 @@ return new class extends Migration
             $t->uuid('reviewed_by')->nullable();
             $t->timestamps();
             $t->index(['entity_type', 'entity_id']);
-        });
+            });
+        }
     }
 
     public function down(): void
@@ -410,3 +451,4 @@ return new class extends Migration
         }
     }
 };
+6

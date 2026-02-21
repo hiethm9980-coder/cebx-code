@@ -17,14 +17,18 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('carrier_shipments')) {
+            return;
+        }
+
         // ═══════════════════════════════════════════════════════════════
         // 1. carrier_shipments — FR-CR-001/003/006
         //    Records from the carrier side (DHL) after shipment creation
         // ═══════════════════════════════════════════════════════════════
         Schema::create('carrier_shipments', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('shipment_id')->constrained('shipments')->cascadeOnDelete();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
+            $table->uuid('shipment_id');
+            $table->uuid('account_id');
 
             // ── Carrier Identification ───────────────────────────
             $table->string('carrier_code', 50)->default('dhl');
@@ -83,16 +87,18 @@ return new class extends Migration
             $table->index(['shipment_id', 'status']);
             $table->index(['carrier_code', 'tracking_number']);
             $table->index(['account_id', 'status']);
+            // FKs omitted: shipments.id, accounts.id may be bigint on server
         });
 
         // ═══════════════════════════════════════════════════════════════
         // 2. carrier_documents — FR-CR-002/005/007/008
         //    Stored labels and shipping documents
         // ═══════════════════════════════════════════════════════════════
+        if (! Schema::hasTable('carrier_documents')) {
         Schema::create('carrier_documents', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('carrier_shipment_id')->constrained('carrier_shipments')->cascadeOnDelete();
-            $table->foreignUuid('shipment_id')->constrained('shipments')->cascadeOnDelete();
+            $table->uuid('carrier_shipment_id');
+            $table->uuid('shipment_id');
 
             // ── Document Type ────────────────────────────────────
             $table->enum('type', [
@@ -136,16 +142,19 @@ return new class extends Migration
 
             $table->index(['shipment_id', 'type']);
             $table->index(['carrier_shipment_id', 'type']);
+            // FKs omitted for server compatibility
         });
+        }
 
         // ═══════════════════════════════════════════════════════════════
         // 3. carrier_errors — FR-CR-004
         //    Normalized error log for carrier API calls
         // ═══════════════════════════════════════════════════════════════
+        if (! Schema::hasTable('carrier_errors')) {
         Schema::create('carrier_errors', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('shipment_id')->nullable()->constrained('shipments')->nullOnDelete();
-            $table->foreignUuid('carrier_shipment_id')->nullable()->constrained('carrier_shipments')->nullOnDelete();
+            $table->uuid('shipment_id')->nullable();
+            $table->uuid('carrier_shipment_id')->nullable();
 
             $table->string('carrier_code', 50)->default('dhl');
             $table->string('correlation_id', 64)->index();
@@ -178,7 +187,9 @@ return new class extends Migration
 
             $table->index(['shipment_id', 'operation']);
             $table->index(['is_retriable', 'was_resolved']);
+            // FKs omitted for server compatibility
         });
+        }
     }
 
     public function down(): void

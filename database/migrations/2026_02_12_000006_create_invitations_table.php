@@ -19,6 +19,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('invitations')) {
+            return;
+        }
+
         Schema::create('invitations', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('account_id');
@@ -38,17 +42,14 @@ return new class extends Migration
             $table->unsignedInteger('send_count')->default(1); // How many times sent/resent
             $table->timestamps();
 
-            // Foreign keys
-            $table->foreign('account_id')->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('role_id')->references('id')->on('roles')->onDelete('set null');
-            $table->foreign('invited_by')->references('id')->on('users')->onDelete('cascade');
-            $table->foreign('accepted_by')->references('id')->on('users')->onDelete('set null');
+            $table->index('account_id');
+            $table->index('role_id');
+            $table->index('invited_by');
+            $table->index('accepted_by');
+            // FKs omitted: accounts.id and users.id may be bigint on server
 
             // Note: uniqueness of pending invitation per email+account enforced in InvitationService
-            // We allow multiple rows (cancelled/expired) but only one pending at a time
             $table->index(['account_id', 'email']);
-
-            // Indexes for common queries
             $table->index(['account_id', 'status']);
             $table->index('token');
             $table->index('expires_at');

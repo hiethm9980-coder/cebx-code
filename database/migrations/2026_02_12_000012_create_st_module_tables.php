@@ -16,6 +16,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('orders')) {
+            return;
+        }
+
         // ── Canonical Orders (FR-ST-004) ─────────────────────────
         Schema::create('orders', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -93,13 +97,12 @@ return new class extends Migration
             $table->index(['account_id', 'store_id', 'status']);
             $table->index(['account_id', 'created_at']);
             $table->index('shipment_id');
-
-            $table->foreign('account_id')->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('store_id')->references('id')->on('stores')->onDelete('cascade');
-            $table->foreign('imported_by')->references('id')->on('users')->onDelete('set null');
+            $table->index('imported_by');
+            // FKs omitted: accounts.id, stores.id, users.id may be bigint on server
         });
 
         // ── Order Items ──────────────────────────────────────────
+        if (! Schema::hasTable('order_items')) {
         Schema::create('order_items', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('order_id');
@@ -119,8 +122,10 @@ return new class extends Migration
             $table->index(['order_id']);
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');
         });
+        }
 
         // ── Webhook Events (FR-ST-002 + FR-ST-005) ───────────────
+        if (! Schema::hasTable('webhook_events')) {
         Schema::create('webhook_events', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('account_id');
@@ -144,12 +149,14 @@ return new class extends Migration
             $table->unique(['store_id', 'external_event_id'], 'webhook_events_dedup');
             $table->index(['account_id', 'store_id', 'status']);
             $table->index(['store_id', 'event_type', 'created_at']);
-
-            $table->foreign('account_id')->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('store_id')->references('id')->on('stores')->onDelete('cascade');
+            $table->index('account_id');
+            $table->index('store_id');
+            // FKs omitted: accounts.id, stores.id may be bigint on server
         });
+        }
 
         // ── Store Sync Log (FR-ST-003 + FR-ST-010) ───────────────
+        if (! Schema::hasTable('store_sync_logs')) {
         Schema::create('store_sync_logs', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('account_id');
@@ -168,9 +175,11 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['store_id', 'created_at']);
-            $table->foreign('account_id')->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('store_id')->references('id')->on('stores')->onDelete('cascade');
+            $table->index('account_id');
+            $table->index('store_id');
+            // FKs omitted: accounts.id, stores.id may be bigint on server
         });
+        }
     }
 
     public function down(): void

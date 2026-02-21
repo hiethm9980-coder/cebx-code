@@ -19,14 +19,18 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('tracking_events')) {
+            return;
+        }
+
         // ═══════════════════════════════════════════════════════════════
         // 1. tracking_events — FR-TR-001/003/005
         //    Every tracking event (raw from carrier + normalized)
         // ═══════════════════════════════════════════════════════════════
         Schema::create('tracking_events', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('shipment_id')->constrained('shipments')->cascadeOnDelete();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
+            $table->uuid('shipment_id');
+            $table->uuid('account_id');
 
             // ── Carrier Raw Data ─────────────────────────────
             $table->string('carrier_code', 50)->default('dhl');
@@ -68,12 +72,14 @@ return new class extends Migration
             $table->index(['shipment_id', 'unified_status']);
             $table->index(['account_id', 'unified_status']);
             $table->index(['carrier_code', 'tracking_number']);
+            // FKs omitted: shipments.id, accounts.id may be bigint on server
         });
 
         // ═══════════════════════════════════════════════════════════════
         // 2. tracking_webhooks — FR-TR-001/002
         //    Log of received webhooks (security + audit)
         // ═══════════════════════════════════════════════════════════════
+        if (! Schema::hasTable('tracking_webhooks')) {
         Schema::create('tracking_webhooks', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('carrier_code', 50)->default('dhl');
@@ -106,11 +112,13 @@ return new class extends Migration
             $table->index(['carrier_code', 'status']);
             $table->index(['tracking_number', 'created_at']);
         });
+        }
 
         // ═══════════════════════════════════════════════════════════════
         // 3. status_mappings — FR-TR-004/006
         //    Carrier → Unified status mapping (configurable)
         // ═══════════════════════════════════════════════════════════════
+        if (! Schema::hasTable('status_mappings')) {
         Schema::create('status_mappings', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('carrier_code', 50);
@@ -136,15 +144,17 @@ return new class extends Migration
             $table->unique(['carrier_code', 'carrier_status', 'carrier_status_code'], 'status_mapping_unique');
             $table->index(['carrier_code', 'unified_status']);
         });
+        }
 
         // ═══════════════════════════════════════════════════════════════
         // 4. tracking_subscriptions — FR-TR-004
         //    Users/systems subscribed to shipment status changes
         // ═══════════════════════════════════════════════════════════════
+        if (! Schema::hasTable('tracking_subscriptions')) {
         Schema::create('tracking_subscriptions', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('shipment_id')->constrained('shipments')->cascadeOnDelete();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
+            $table->uuid('shipment_id');
+            $table->uuid('account_id');
 
             // ── Subscriber ───────────────────────────────────
             $table->enum('channel', ['email', 'sms', 'webhook', 'in_app'])->default('email');
@@ -164,17 +174,20 @@ return new class extends Migration
 
             $table->index(['shipment_id', 'channel']);
             $table->index(['account_id', 'is_active']);
+            // FKs omitted for server compatibility
         });
+        }
 
         // ═══════════════════════════════════════════════════════════════
         // 5. shipment_exceptions — FR-TR-007
         //    Exception management with reasons & suggested actions
         // ═══════════════════════════════════════════════════════════════
+        if (! Schema::hasTable('shipment_exceptions')) {
         Schema::create('shipment_exceptions', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('shipment_id')->constrained('shipments')->cascadeOnDelete();
-            $table->foreignUuid('tracking_event_id')->nullable()->constrained('tracking_events')->nullOnDelete();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
+            $table->uuid('shipment_id');
+            $table->uuid('tracking_event_id')->nullable();
+            $table->uuid('account_id');
 
             // ── Exception Details ────────────────────────────
             $table->string('exception_code', 100)->index();
@@ -207,7 +220,10 @@ return new class extends Migration
 
             $table->index(['shipment_id', 'status']);
             $table->index(['account_id', 'status', 'priority']);
+            $table->index('tracking_event_id');
+            // FKs omitted for server compatibility
         });
+        }
     }
 
     public function down(): void

@@ -2,15 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class User extends Authenticatable
 {
-    use HasUuids;
-
+    // لا نستخدم HasUuids لأن جدول users على السيرفر قد يكون من الـ migration الأولى (id = bigint)
     protected $guarded = [];
     protected $hidden = ['password', 'remember_token'];
     protected $casts = ['last_login_at' => 'datetime', 'is_active' => 'boolean', 'is_super_admin' => 'boolean'];

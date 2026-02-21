@@ -26,8 +26,8 @@ return new class extends Migration
         if (!Schema::hasTable('billing_wallets')) {
         Schema::create('billing_wallets', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
-            $table->foreignUuid('organization_id')->nullable()->constrained('organizations')->nullOnDelete();
+                        $table->uuid('account_id');
+            $table->uuid('organization_id')->nullable();
 
             $table->string('currency', 3)->default('SAR');
             $table->decimal('available_balance', 14, 2)->default(0);
@@ -58,8 +58,8 @@ return new class extends Migration
         if (!Schema::hasTable('wallet_topups')) {
         Schema::create('wallet_topups', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('wallet_id')->constrained('billing_wallets')->cascadeOnDelete();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
+                        $table->foreignUuid('wallet_id')->constrained('billing_wallets')->cascadeOnDelete();
+            $table->uuid('account_id');
 
             $table->decimal('amount', 14, 2);
             $table->string('currency', 3)->default('SAR');

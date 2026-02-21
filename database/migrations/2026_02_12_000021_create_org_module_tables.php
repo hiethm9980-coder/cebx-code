@@ -19,12 +19,16 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('organizations')) {
+            return;
+        }
+
         // ═══════════════════════════════════════════════════════════
         // 1. organizations — FR-ORG-001/002/008
         // ═══════════════════════════════════════════════════════════
         Schema::create('organizations', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
+            $table->uuid('account_id');
 
             $table->string('legal_name', 300);
             $table->string('trade_name', 300)->nullable();
@@ -54,105 +58,116 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['account_id']);
+            // FK omitted: accounts.id may be bigint on server
         });
 
         // ═══════════════════════════════════════════════════════════
         // 2. organization_members — FR-ORG-003/005/006/007
         // ═══════════════════════════════════════════════════════════
-        Schema::create('organization_members', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->foreignUuid('organization_id')->constrained('organizations')->cascadeOnDelete();
-            $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
-            $table->foreignUuid('role_id')->nullable()->constrained('roles')->nullOnDelete();
+        if (! Schema::hasTable('organization_members')) {
+            Schema::create('organization_members', function (Blueprint $table) {
+                $table->uuid('id')->primary();
+                $table->foreignUuid('organization_id')->constrained('organizations')->cascadeOnDelete();
+                $table->uuid('user_id');
+                $table->uuid('role_id')->nullable();
 
-            $table->enum('membership_role', ['owner', 'admin', 'member'])->default('member');
-            $table->enum('status', ['active', 'suspended', 'removed'])->default('active');
+                $table->enum('membership_role', ['owner', 'admin', 'member'])->default('member');
+                $table->enum('status', ['active', 'suspended', 'removed'])->default('active');
 
-            // ── Financial visibility (FR-ORG-005) ────────────
-            $table->boolean('can_view_financial')->default(false);
+                // ── Financial visibility (FR-ORG-005) ────────────
+                $table->boolean('can_view_financial')->default(false);
 
-            $table->json('custom_permissions')->nullable();
-            $table->timestamp('joined_at')->nullable();
-            $table->timestamp('suspended_at')->nullable();
-            $table->string('suspended_reason', 300)->nullable();
+                $table->json('custom_permissions')->nullable();
+                $table->timestamp('joined_at')->nullable();
+                $table->timestamp('suspended_at')->nullable();
+                $table->string('suspended_reason', 300)->nullable();
 
-            $table->timestamps();
+                $table->timestamps();
 
-            $table->unique(['organization_id', 'user_id']);
-            $table->index(['user_id', 'status']);
-        });
+                $table->unique(['organization_id', 'user_id']);
+                $table->index(['user_id', 'status']);
+                // FKs user_id, role_id omitted for server compatibility
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 3. organization_invites — FR-ORG-003
         // ═══════════════════════════════════════════════════════════
-        Schema::create('organization_invites', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->foreignUuid('organization_id')->constrained('organizations')->cascadeOnDelete();
-            $table->foreignUuid('invited_by')->constrained('users')->cascadeOnDelete();
+        if (! Schema::hasTable('organization_invites')) {
+            Schema::create('organization_invites', function (Blueprint $table) {
+                $table->uuid('id')->primary();
+                $table->foreignUuid('organization_id')->constrained('organizations')->cascadeOnDelete();
+                $table->uuid('invited_by');
 
-            $table->string('email', 200)->nullable();
-            $table->string('phone', 20)->nullable();
-            $table->string('token', 64)->unique();
-            $table->foreignUuid('role_id')->nullable()->constrained('roles')->nullOnDelete();
-            $table->enum('membership_role', ['admin', 'member'])->default('member');
+                $table->string('email', 200)->nullable();
+                $table->string('phone', 20)->nullable();
+                $table->string('token', 64)->unique();
+                $table->uuid('role_id')->nullable();
+                $table->enum('membership_role', ['admin', 'member'])->default('member');
 
-            $table->enum('status', ['pending', 'accepted', 'expired', 'cancelled'])->default('pending');
-            $table->timestamp('expires_at');
-            $table->timestamp('accepted_at')->nullable();
-            $table->timestamp('cancelled_at')->nullable();
-            $table->unsignedInteger('resend_count')->default(0);
+                $table->enum('status', ['pending', 'accepted', 'expired', 'cancelled'])->default('pending');
+                $table->timestamp('expires_at');
+                $table->timestamp('accepted_at')->nullable();
+                $table->timestamp('cancelled_at')->nullable();
+                $table->unsignedInteger('resend_count')->default(0);
 
-            $table->timestamps();
+                $table->timestamps();
 
-            $table->index(['organization_id', 'status']);
-            $table->index(['email', 'status']);
-        });
+                $table->index(['organization_id', 'status']);
+                $table->index(['email', 'status']);
+                // FKs invited_by, role_id omitted for server compatibility
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 4. organization_wallets — FR-ORG-009/010
         // ═══════════════════════════════════════════════════════════
-        Schema::create('organization_wallets', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->foreignUuid('organization_id')->constrained('organizations')->cascadeOnDelete();
+        if (! Schema::hasTable('organization_wallets')) {
+            Schema::create('organization_wallets', function (Blueprint $table) {
+                $table->uuid('id')->primary();
+                $table->foreignUuid('organization_id')->constrained('organizations')->cascadeOnDelete();
 
-            $table->string('currency', 3)->default('SAR');
-            $table->decimal('balance', 12, 2)->default(0);
-            $table->decimal('reserved_balance', 12, 2)->default(0);   // FR-SH-016 holds
-            $table->decimal('low_balance_threshold', 12, 2)->default(100);
+                $table->string('currency', 3)->default('SAR');
+                $table->decimal('balance', 12, 2)->default(0);
+                $table->decimal('reserved_balance', 12, 2)->default(0);   // FR-SH-016 holds
+                $table->decimal('low_balance_threshold', 12, 2)->default(100);
 
-            // ── Wallet settings (FR-ORG-010) ─────────────────
-            $table->boolean('is_active')->default(true);
-            $table->boolean('allow_negative')->default(false);
-            $table->boolean('auto_topup_enabled')->default(false);
-            $table->decimal('auto_topup_amount', 12, 2)->nullable();
-            $table->decimal('auto_topup_threshold', 12, 2)->nullable();
+                // ── Wallet settings (FR-ORG-010) ─────────────────
+                $table->boolean('is_active')->default(true);
+                $table->boolean('allow_negative')->default(false);
+                $table->boolean('auto_topup_enabled')->default(false);
+                $table->decimal('auto_topup_amount', 12, 2)->nullable();
+                $table->decimal('auto_topup_threshold', 12, 2)->nullable();
 
-            $table->json('freeze_policy')->nullable();
+                $table->json('freeze_policy')->nullable();
 
-            $table->timestamps();
+                $table->timestamps();
 
-            $table->unique(['organization_id']);
-        });
+                $table->unique(['organization_id']);
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // 5. permission_catalog — FR-ORG-004/005/006
         // ═══════════════════════════════════════════════════════════
-        Schema::create('permission_catalog', function (Blueprint $table) {
-            $table->uuid('id')->primary();
+        if (! Schema::hasTable('permission_catalog')) {
+            Schema::create('permission_catalog', function (Blueprint $table) {
+                $table->uuid('id')->primary();
 
-            $table->string('key', 100)->unique();             // e.g. shipments.create, finance.view
-            $table->string('name', 200);
-            $table->text('description')->nullable();
-            $table->string('module', 50);                     // IAM, SH, PAY, RPT, etc.
-            $table->enum('category', ['operational', 'financial', 'admin'])->default('operational');
+                $table->string('key', 100)->unique();             // e.g. shipments.create, finance.view
+                $table->string('name', 200);
+                $table->text('description')->nullable();
+                $table->string('module', 50);                     // IAM, SH, PAY, RPT, etc.
+                $table->enum('category', ['operational', 'financial', 'admin'])->default('operational');
 
-            $table->boolean('is_active')->default(true);
-            $table->integer('sort_order')->default(0);
+                $table->boolean('is_active')->default(true);
+                $table->integer('sort_order')->default(0);
 
-            $table->timestamps();
+                $table->timestamps();
 
-            $table->index(['module', 'category']);
-        });
+                $table->index(['module', 'category']);
+            });
+        }
     }
 
     public function down(): void

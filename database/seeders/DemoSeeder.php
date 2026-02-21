@@ -43,7 +43,7 @@ class DemoSeeder extends Seeder
         // ═══════════════════════════════════════
         $account = Account::firstOrCreate(
             ['slug' => 'techco'],
-            ['name' => 'شركة التقنية المتقدمة', 'type' => 'organization', 'status' => 'active']
+            ['name' => 'شركة التقنية المتقدمة', 'type' => 'business', 'status' => 'active']
         );
 
         $admin = User::firstOrCreate(
@@ -60,10 +60,10 @@ class DemoSeeder extends Seeder
             array_merge($u, ['password' => Hash::make('password'), 'is_active' => $u['is_active'] ?? true, 'last_login_at' => now()->subHours(rand(1, 168))])
         ));
 
-        // Super admin account (نوع الحساب organization — الصلاحيات من is_super_admin)
+        // Super admin account (نوع الحساب admin — الصلاحيات من is_super_admin)
         $sysAccount = Account::firstOrCreate(
             ['slug' => 'system-admin'],
-            ['name'=>'مدير النظام','type'=>'organization','status'=>'active']
+            ['name'=>'مدير النظام','type'=>'admin','status'=>'active']
         );
         User::firstOrCreate(
             ['account_id'=>$sysAccount->id,'email'=>'admin@system.sa'],

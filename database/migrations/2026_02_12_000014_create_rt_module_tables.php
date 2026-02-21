@@ -13,6 +13,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('pricing_rules')) {
+            return;
+        }
+
         // ── Pricing Rules (FR-RT-002/003/008) ────────────────────
         Schema::create('pricing_rules', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -63,9 +67,11 @@ return new class extends Migration
 
             $table->index(['account_id', 'is_active', 'priority']);
             $table->index(['carrier_code', 'service_code']);
+            $table->index('store_id');
         });
 
         // ── Rate Quotes (FR-RT-001/005/006/007) ──────────────────
+        if (! Schema::hasTable('rate_quotes')) {
         Schema::create('rate_quotes', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('account_id');
@@ -108,13 +114,13 @@ return new class extends Migration
             $table->index(['account_id', 'status']);
             $table->index(['shipment_id']);
             $table->index('correlation_id');
-
-            $table->foreign('account_id')->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('shipment_id')->references('id')->on('shipments')->onDelete('set null');
-            $table->foreign('requested_by')->references('id')->on('users')->onDelete('cascade');
+            $table->index('requested_by');
+            // FKs omitted: accounts.id, shipments.id, users.id may be bigint on server
         });
+        }
 
         // ── Rate Options (individual carrier/service quotes) ─────
+        if (! Schema::hasTable('rate_options')) {
         Schema::create('rate_options', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('rate_quote_id');
@@ -163,8 +169,10 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index('rate_quote_id');
-            $table->foreign('rate_quote_id')->references('id')->on('rate_quotes')->onDelete('cascade');
+            $table->index('pricing_rule_id');
+            // FK omitted for server compatibility
         });
+        }
     }
 
     public function down(): void

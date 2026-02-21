@@ -13,6 +13,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('addresses')) {
+            return;
+        }
+
         // ── Address Book (FR-SH-004) ─────────────────────────────
         Schema::create('addresses', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -39,10 +43,11 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index(['account_id', 'type']);
-            $table->foreign('account_id')->references('id')->on('accounts')->onDelete('cascade');
+            // FK omitted: accounts.id may be bigint on server
         });
 
         // ── Shipments (FR-SH-001/002/006) ────────────────────────
+        if (! Schema::hasTable('shipments')) {
         Schema::create('shipments', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('account_id');
@@ -171,16 +176,17 @@ return new class extends Migration
             $table->index(['account_id', 'created_at']);
             $table->index('tracking_number');
             $table->index('order_id');
-
-            $table->foreign('account_id')->references('id')->on('accounts')->onDelete('cascade');
-            $table->foreign('store_id')->references('id')->on('stores')->onDelete('set null');
-            $table->foreign('order_id')->references('id')->on('orders')->onDelete('set null');
-            $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
-            $table->foreign('sender_address_id')->references('id')->on('addresses')->onDelete('set null');
-            $table->foreign('recipient_address_id')->references('id')->on('addresses')->onDelete('set null');
+            $table->index('store_id');
+            $table->index('created_by');
+            $table->index('sender_address_id');
+            $table->index('recipient_address_id');
+            $table->index('cancelled_by');
+            // FKs omitted: accounts, stores, orders, users, addresses may have bigint id on server
         });
+        }
 
         // ── Parcels / Multi-parcel (FR-SH-003) ──────────────────
+        if (! Schema::hasTable('parcels')) {
         Schema::create('parcels', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('shipment_id');
@@ -204,10 +210,12 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index('shipment_id');
-            $table->foreign('shipment_id')->references('id')->on('shipments')->onDelete('cascade');
+            // FK omitted for server compatibility
         });
+        }
 
         // ── Shipment Status History (FR-SH-006) ──────────────────
+        if (! Schema::hasTable('shipment_status_history')) {
         Schema::create('shipment_status_history', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('shipment_id');
@@ -220,8 +228,10 @@ return new class extends Migration
             $table->timestamp('created_at');
 
             $table->index(['shipment_id', 'created_at']);
-            $table->foreign('shipment_id')->references('id')->on('shipments')->onDelete('cascade');
+            $table->index('changed_by');
+            // FK omitted for server compatibility
         });
+        }
     }
 
     public function down(): void

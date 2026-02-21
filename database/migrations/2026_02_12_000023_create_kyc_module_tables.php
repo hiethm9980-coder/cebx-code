@@ -5,171 +5,191 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * KYC Module — KYC Compliance & Verification
- * FR-KYC-001→008 (8 requirements)
+ * BRP Module — Business Rules: Pricing
+ * FR-BRP-001→008 (8 requirements)
  *
  * Tables:
- *   1. verification_cases     — FR-KYC-001/003: Case per account/org with status flow
- *   2. verification_documents — FR-KYC-002/007: Uploaded documents (PII, encrypted)
- *   3. verification_reviews   — FR-KYC-005: Reviewer decisions (accept/reject + reason)
- *   4. verification_restrictions — FR-KYC-004: Restrictions applied to unverified accounts
- *   5. kyc_audit_logs         — FR-KYC-008: Dedicated audit trail for KYC operations
+ *   1. pricing_rule_sets     — FR-BRP-001/008: Versioned rule-set containers
+ *   2. pricing_rules         — FR-BRP-002/003/004: Conditional pricing rules
+ *   3. pricing_breakdowns    — FR-BRP-001/006: Stored pricing audit trail
+ *   4. rounding_policies     — FR-BRP-005: Per-currency rounding config
+ *   5. expired_plan_policies — FR-BRP-007: Alternative pricing on expired subscription
  */
 return new class extends Migration
 {
     public function up(): void
     {
         // ═══════════════════════════════════════════════════════════
-        // 1. verification_cases — FR-KYC-001/003
+        // 1. pricing_rule_sets — FR-BRP-001/008
         // ═══════════════════════════════════════════════════════════
-        Schema::create('verification_cases', function (Blueprint $table) {
+        if (!Schema::hasTable('pricing_rule_sets')) {
+        Schema::create('pricing_rule_sets', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('account_id')->constrained('accounts')->cascadeOnDelete();
-            $table->foreignUuid('organization_id')->nullable()->constrained('organizations')->nullOnDelete();
+                        $table->uuid('account_id')->nullable(); // null = platform default; FK omitted for server compatibility
 
-            $table->string('case_number', 20)->unique();
-            $table->enum('account_type', ['individual', 'organization'])->default('individual');
-            $table->enum('status', [
-                'unverified',       // FR-KYC-001: Default
-                'pending_review',   // After document submission
-                'under_review',     // Reviewer opened
-                'verified',         // Approved
-                'rejected',         // Rejected with reason
-                'expired',          // Verification expired (future)
-            ])->default('unverified');
+            $table->string('name', 200);
+            $table->integer('version')->default(1);
+            $table->enum('status', ['draft', 'active', 'archived'])->default('draft');
 
-            // ── Applicant Info ───────────────────────────────
-            $table->string('applicant_name', 300)->nullable();
-            $table->string('applicant_email', 200)->nullable();
-            $table->string('applicant_phone', 20)->nullable();
-            $table->string('country_code', 2)->default('SA');
+            $table->boolean('is_default')->default(false);
+            $table->text('description')->nullable();
 
-            // ── Decision ─────────────────────────────────────
-            $table->text('rejection_reason')->nullable();
-            $table->string('reviewed_by', 100)->nullable();
-            $table->timestamp('submitted_at')->nullable();
-            $table->timestamp('reviewed_at')->nullable();
-            $table->timestamp('verified_at')->nullable();
-            $table->timestamp('expires_at')->nullable();
-
-            $table->unsignedInteger('submission_count')->default(0);
-            $table->json('required_documents')->nullable(); // List of doc types needed
+            $table->timestamp('activated_at')->nullable();
+            $table->timestamp('archived_at')->nullable();
+            $table->string('created_by', 100)->nullable();
 
             $table->timestamps();
 
             $table->index(['account_id', 'status']);
-            $table->index(['status', 'submitted_at']);
+            $table->index(['is_default', 'status']);
         });
+        }
 
         // ═══════════════════════════════════════════════════════════
-        // 2. verification_documents — FR-KYC-002/007
+        // 2. pricing_rules — FR-BRP-002/003/004/008 (skipped if already from RT module)
         // ═══════════════════════════════════════════════════════════
-        Schema::create('verification_documents', function (Blueprint $table) {
+        if (!Schema::hasTable('pricing_rules')) {
+        Schema::create('pricing_rules', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('case_id')->constrained('verification_cases')->cascadeOnDelete();
-
-            $table->enum('document_type', [
-                'national_id',          // هوية وطنية
-                'passport',             // جواز سفر
-                'commercial_register',  // سجل تجاري
-                'tax_certificate',      // بطاقة ضريبية
-                'bank_statement',       // كشف حساب بنكي
-                'utility_bill',         // فاتورة خدمات
-                'other',
-            ]);
-
-            $table->string('original_filename', 500);
-            $table->string('stored_path', 1000);      // Encrypted storage path
-            $table->string('mime_type', 100);
-            $table->unsignedBigInteger('file_size');   // bytes
-            $table->string('file_hash', 128);          // SHA-256 integrity check
-
-            $table->enum('status', ['uploaded', 'accepted', 'rejected'])->default('uploaded');
-            $table->text('rejection_note')->nullable();
-
-            // ── Security (FR-KYC-007) ────────────────────────
-            $table->boolean('is_encrypted')->default(true);
-            $table->string('encryption_key_id', 100)->nullable();
-
-            $table->timestamp('uploaded_at');
-            $table->string('uploaded_by', 100);
-            $table->timestamps();
-
-            $table->index(['case_id', 'document_type']);
-        });
-
-        // ═══════════════════════════════════════════════════════════
-        // 3. verification_reviews — FR-KYC-005
-        // ═══════════════════════════════════════════════════════════
-        Schema::create('verification_reviews', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->foreignUuid('case_id')->constrained('verification_cases')->cascadeOnDelete();
-            $table->foreignUuid('reviewer_id')->constrained('users');
-
-            $table->enum('decision', ['approved', 'rejected', 'needs_more_info']);
-            $table->text('reason')->nullable();
-            $table->text('internal_notes')->nullable();
-
-            $table->json('document_decisions')->nullable(); // Per-document accept/reject
-
-            $table->timestamps();
-
-            $table->index(['case_id', 'created_at']);
-        });
-
-        // ═══════════════════════════════════════════════════════════
-        // 4. verification_restrictions — FR-KYC-004
-        // ═══════════════════════════════════════════════════════════
-        Schema::create('verification_restrictions', function (Blueprint $table) {
-            $table->uuid('id')->primary();
+            $table->foreignUuid('rule_set_id')->constrained('pricing_rule_sets')->cascadeOnDelete();
 
             $table->string('name', 200);
-            $table->string('restriction_key', 100)->unique(); // e.g. intl_shipping, max_shipments
-            $table->text('description')->nullable();
-
-            // What statuses this restriction applies to
-            $table->json('applies_to_statuses');  // ['unverified', 'rejected']
-
-            $table->enum('restriction_type', [
-                'block_feature',    // Completely block a feature
-                'quota_limit',      // Limit quantity
+            $table->enum('type', [
+                'markup_percentage',    // Markup % on net rate
+                'markup_fixed',         // Fixed amount added to net rate
+                'service_fee_fixed',    // FR-BRP-003: Independent fixed fee
+                'service_fee_percent',  // FR-BRP-003: Independent % fee
+                'discount_percentage',  // Discount %
+                'discount_fixed',       // Discount fixed
+                'surcharge',            // Additional surcharge
+                'min_price',            // FR-BRP-004: Minimum price guardrail
+                'min_profit',           // FR-BRP-004: Minimum profit guardrail
             ]);
-            $table->integer('quota_value')->nullable();       // For quota_limit type
-            $table->string('feature_key', 100)->nullable();   // Feature being restricted
+
+            $table->decimal('value', 12, 4);              // Amount or percentage
+            $table->integer('priority')->default(100);     // FR-BRP-008: Lower = higher priority
+            $table->boolean('is_cumulative')->default(false); // FR-BRP-008: Stack with other rules
+
+            // ── Conditions (FR-BRP-002) ──────────────────────
+            $table->json('conditions')->nullable();
+            /*
+             * Conditions structure:
+             * {
+             *   "carrier": ["DHL", "ARAMEX"],
+             *   "service": ["express", "economy"],
+             *   "destination_country": ["SA", "AE"],
+             *   "origin_country": ["SA"],
+             *   "zone": ["domestic", "international"],
+             *   "weight_min": 0, "weight_max": 30,
+             *   "shipment_type": ["standard", "cod", "return"],
+             *   "store_id": ["store-1"],
+             *   "plan_slug": ["pro", "enterprise"]
+             * }
+             */
+
+            $table->boolean('is_fallback')->default(false);  // Default rule when no match
+            $table->boolean('is_active')->default(true);
+
+            $table->timestamps();
+
+            $table->index(['rule_set_id', 'priority']);
+            $table->index(['type', 'is_active']);
+        });
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 3. pricing_breakdowns — FR-BRP-001/006
+        // ═══════════════════════════════════════════════════════════
+        if (!Schema::hasTable('pricing_breakdowns')) {
+        Schema::create('pricing_breakdowns', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+                        $table->uuid('account_id');
+
+            // ── Linkage (FR-BRP-006) ─────────────────────────
+            $table->string('entity_type', 50);  // rate_quote, shipment
+            $table->string('entity_id', 100);
+            $table->string('correlation_id', 200);
+
+            // ── Input Snapshot ───────────────────────────────
+            $table->string('carrier_code', 50);
+            $table->string('service_code', 100);
+            $table->string('origin_country', 2)->nullable();
+            $table->string('destination_country', 2)->nullable();
+            $table->decimal('weight', 8, 2)->nullable();
+            $table->string('zone', 50)->nullable();
+            $table->string('shipment_type', 50)->default('standard');
+
+            // ── Pricing Result ───────────────────────────────
+            $table->decimal('net_rate', 12, 2);             // From carrier
+            $table->decimal('markup_amount', 12, 2)->default(0);
+            $table->decimal('service_fee', 12, 2)->default(0);    // FR-BRP-003
+            $table->decimal('surcharge', 12, 2)->default(0);
+            $table->decimal('discount', 12, 2)->default(0);
+            $table->decimal('tax_amount', 12, 2)->default(0);
+            $table->decimal('pre_rounding_total', 12, 2);    // FR-BRP-005
+            $table->decimal('retail_rate', 12, 2);            // Final after rounding
+
+            // ── Audit Trail (FR-BRP-001) ─────────────────────
+            $table->string('rule_set_id', 100)->nullable();
+            $table->integer('rule_set_version')->nullable();
+            $table->json('applied_rules');                    // Array of {rule_id, name, type, value, effect}
+            $table->json('guardrail_adjustments')->nullable(); // FR-BRP-004: Any min price/profit applied
+            $table->string('rounding_policy', 50)->nullable(); // FR-BRP-005
+            $table->string('currency', 3)->default('SAR');
+
+            // ── Subscription context (FR-BRP-007) ────────────
+            $table->string('plan_slug', 50)->nullable();
+            $table->boolean('expired_plan_surcharge')->default(false);
+
+            $table->timestamps();
+
+            $table->index(['entity_type', 'entity_id']);
+            $table->index(['correlation_id']);
+            $table->index(['account_id', 'created_at']);
+        });
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 4. rounding_policies — FR-BRP-005
+        // ═══════════════════════════════════════════════════════════
+        if (!Schema::hasTable('rounding_policies')) {
+        Schema::create('rounding_policies', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+
+            $table->string('currency', 3)->unique();
+            $table->enum('method', ['up', 'down', 'nearest', 'none'])->default('nearest');
+            $table->unsignedTinyInteger('precision')->default(2);   // Decimal places
+            $table->decimal('step', 8, 4)->default(0.01);           // e.g. 0.50 = round to nearest 0.50
 
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
+        }
 
         // ═══════════════════════════════════════════════════════════
-        // 5. kyc_audit_logs — FR-KYC-008
+        // 5. expired_plan_policies — FR-BRP-007
         // ═══════════════════════════════════════════════════════════
-        Schema::create('kyc_audit_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('expired_plan_policies')) {
+        Schema::create('expired_plan_policies', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('case_id')->nullable()->constrained('verification_cases')->nullOnDelete();
-            $table->foreignUuid('document_id')->nullable()->constrained('verification_documents')->nullOnDelete();
 
-            $table->string('actor_id', 100);
-            $table->string('actor_type', 50);        // user, admin, system
-            $table->string('action', 100);            // upload, view, download, decision, status_change
-            $table->string('ip_address', 45)->nullable();
+            $table->string('plan_slug', 50)->nullable();            // null = all plans
+            $table->enum('policy_type', ['surcharge_percent', 'surcharge_fixed', 'markup_override']);
+            $table->decimal('value', 12, 4);
+            $table->text('reason_label')->nullable();               // Shown in breakdown
 
-            $table->json('metadata')->nullable();     // Extra context (no document content)
-            $table->string('result', 50)->default('success'); // success, denied, error
-
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
-
-            $table->index(['case_id', 'created_at']);
-            $table->index(['actor_id', 'action']);
         });
+        }
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('kyc_audit_logs');
-        Schema::dropIfExists('verification_restrictions');
-        Schema::dropIfExists('verification_reviews');
-        Schema::dropIfExists('verification_documents');
-        Schema::dropIfExists('verification_cases');
+        Schema::dropIfExists('expired_plan_policies');
+        Schema::dropIfExists('rounding_policies');
+        Schema::dropIfExists('pricing_breakdowns');
+        Schema::dropIfExists('pricing_rules');
+        Schema::dropIfExists('pricing_rule_sets');
     }
 };

@@ -15,32 +15,75 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('accounts')) {
+            return;
+        }
+
         Schema::table('accounts', function (Blueprint $table) {
-            $table->string('language', 10)->default('ar')->after('settings');
-            $table->string('currency', 3)->default('SAR')->after('language');
-            $table->string('timezone', 50)->default('Asia/Riyadh')->after('currency');
-            $table->string('country', 3)->default('SA')->after('timezone');
-            $table->string('contact_phone', 20)->nullable()->after('country');
-            $table->string('contact_email', 255)->nullable()->after('contact_phone');
-            $table->string('address_line_1', 255)->nullable()->after('contact_email');
-            $table->string('address_line_2', 255)->nullable()->after('address_line_1');
-            $table->string('city', 100)->nullable()->after('address_line_2');
-            $table->string('postal_code', 20)->nullable()->after('city');
-            $table->string('date_format', 20)->default('Y-m-d')->after('postal_code');
-            $table->string('weight_unit', 5)->default('kg')->after('date_format');
-            $table->string('dimension_unit', 5)->default('cm')->after('weight_unit');
+            if (! Schema::hasColumn('accounts', 'language')) {
+                if (Schema::hasColumn('accounts', 'settings')) {
+                    $table->string('language', 10)->default('ar')->after('settings');
+                } else {
+                    $table->string('language', 10)->default('ar');
+                }
+            }
+            if (! Schema::hasColumn('accounts', 'currency')) {
+                $table->string('currency', 3)->default('SAR')->after('language');
+            }
+            if (! Schema::hasColumn('accounts', 'timezone')) {
+                $table->string('timezone', 50)->default('Asia/Riyadh')->after('currency');
+            }
+            if (! Schema::hasColumn('accounts', 'country')) {
+                $table->string('country', 3)->default('SA')->after('timezone');
+            }
+            if (! Schema::hasColumn('accounts', 'contact_phone')) {
+                $table->string('contact_phone', 20)->nullable()->after('country');
+            }
+            if (! Schema::hasColumn('accounts', 'contact_email')) {
+                $table->string('contact_email', 255)->nullable()->after('contact_phone');
+            }
+            if (! Schema::hasColumn('accounts', 'address_line_1')) {
+                $table->string('address_line_1', 255)->nullable()->after('contact_email');
+            }
+            if (! Schema::hasColumn('accounts', 'address_line_2')) {
+                $table->string('address_line_2', 255)->nullable()->after('address_line_1');
+            }
+            if (! Schema::hasColumn('accounts', 'city')) {
+                $table->string('city', 100)->nullable()->after('address_line_2');
+            }
+            if (! Schema::hasColumn('accounts', 'postal_code')) {
+                $table->string('postal_code', 20)->nullable()->after('city');
+            }
+            if (! Schema::hasColumn('accounts', 'date_format')) {
+                $table->string('date_format', 20)->default('Y-m-d')->after('postal_code');
+            }
+            if (! Schema::hasColumn('accounts', 'weight_unit')) {
+                $table->string('weight_unit', 5)->default('kg')->after('date_format');
+            }
+            if (! Schema::hasColumn('accounts', 'dimension_unit')) {
+                $table->string('dimension_unit', 5)->default('cm')->after('weight_unit');
+            }
         });
     }
 
     public function down(): void
     {
+        if (! Schema::hasTable('accounts')) {
+            return;
+        }
+
         Schema::table('accounts', function (Blueprint $table) {
-            $table->dropColumn([
+            $columns = [
                 'language', 'currency', 'timezone', 'country',
                 'contact_phone', 'contact_email',
                 'address_line_1', 'address_line_2', 'city', 'postal_code',
                 'date_format', 'weight_unit', 'dimension_unit',
-            ]);
+            ];
+            foreach ($columns as $col) {
+                if (Schema::hasColumn('accounts', $col)) {
+                    $table->dropColumn($col);
+                }
+            }
         });
     }
 };
