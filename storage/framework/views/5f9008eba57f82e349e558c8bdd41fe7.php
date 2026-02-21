@@ -42,17 +42,31 @@
             z-index: 1;
         }
         .portal-header .logo {
-            width: 72px; height: 72px;
-            background: linear-gradient(135deg, #3B82F6, #7C3AED);
+            width: 88px; height: 88px;
+            margin: 0 auto 20px;
             border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #fff;
-            font-size: 24px;
-            font-weight: 800;
-            margin: 0 auto 20px;
+            overflow: hidden;
             box-shadow: 0 8px 32px rgba(59,130,246,0.3);
+            background: linear-gradient(135deg, #3B82F6, #7C3AED);
+        }
+        .portal-header .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 8px;
+        }
+        .portal-header .logo .logo-fallback {
+            display: none;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 28px;
+            font-weight: 800;
         }
         .portal-header h1 {
             color: #F8FAFC;
@@ -193,7 +207,10 @@
 <body>
 <div class="portal-page">
     <div class="portal-header">
-        <div class="logo">SG</div>
+        <div class="logo">
+            <img src="<?php echo e(asset('images/logo.png')); ?>" alt="Shipping Gateway" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <span class="logo-fallback" style="display:none;">SG</span>
+        </div>
         <h1>Shipping Gateway</h1>
         <p>اختر بوابتك للدخول إلى نظام إدارة الشحن</p>
     </div>
