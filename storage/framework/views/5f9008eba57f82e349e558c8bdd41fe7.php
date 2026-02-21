@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shipping Gateway — اختر بوابتك</title>
+    <?php echo $__env->make('components.pwa-meta', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+    <meta name="pwa-sw-url" content="<?php echo e(asset('sw.js')); ?>">
     <link rel="stylesheet" href="<?php echo e(asset('css/app.css')); ?>">
     <style>
         .portal-page {
@@ -232,6 +234,8 @@
         <p>© <?php echo e(date('Y')); ?> Shipping Gateway — بوابة إدارة الشحن الموحّدة</p>
     </div>
 </div>
+<script>window.PWA={swUrl:'<?php echo e(asset("sw.js")); ?>',scope:'<?php echo e(rtrim(url("/"), "/")); ?>/'};</script>
+<script src="<?php echo e(asset('js/pwa.js')); ?>" defer></script>
 </body>
 </html>
 <?php /**PATH C:\xampp\htdocs\shipping-gateway-blade\cebx-code\resources\views/pages/auth/portal-selector.blade.php ENDPATH**/ ?>

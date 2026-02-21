@@ -19,6 +19,19 @@ use App\Http\Middleware\DetectPortal;
 |--------------------------------------------------------------------------
 */
 
+// ── PWA ──
+Route::get('/offline', fn () => view('offline'))->name('offline');
+Route::get('/manifest.json', function () {
+    $path = public_path('manifest.json');
+    if (!file_exists($path)) {
+        abort(404);
+    }
+    return response()->file($path, [
+        'Content-Type' => 'application/manifest+json',
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+});
+
 // ── Portal Selector (Landing) ──
 Route::get('/login', [AuthWebController::class, 'portalSelector'])->name('login');
 

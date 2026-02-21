@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'تسجيل الدخول') — Shipping Gateway</title>
+    @include('components.pwa-meta')
+    <meta name="pwa-sw-url" content="{{ asset('sw.js') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -301,5 +303,7 @@
         </div>
     </div>
 </div>
+<script>window.PWA={swUrl:'{{ asset("sw.js") }}',scope:'{{ rtrim(url("/"), "/") }}/'};</script>
+<script src="{{ asset('js/pwa.js') }}" defer></script>
 </body>
 </html>

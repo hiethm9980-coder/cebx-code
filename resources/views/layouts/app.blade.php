@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'بوابة إدارة الشحن') — Shipping Gateway</title>
+    @include('components.pwa-meta')
+    <meta name="pwa-sw-url" content="{{ asset('sw.js') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     @stack('styles')
 </head>
@@ -217,7 +219,13 @@
     </div>
 </div>
 
+<script>
+    window.PWA = window.PWA || {};
+    window.PWA.swUrl = document.querySelector('meta[name="pwa-sw-url"]')?.getAttribute('content') || '{{ asset("sw.js") }}';
+    window.PWA.scope = '{{ rtrim(url("/"), "/") }}/';
+</script>
 <script src="{{ asset('js/app.js') }}"></script>
+<script src="{{ asset('js/pwa.js') }}" defer></script>
 @stack('scripts')
 </body>
 </html>

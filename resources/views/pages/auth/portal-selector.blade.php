@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shipping Gateway — اختر بوابتك</title>
+    @include('components.pwa-meta')
+    <meta name="pwa-sw-url" content="{{ asset('sw.js') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <style>
         .portal-page {
@@ -232,5 +234,7 @@
         <p>© {{ date('Y') }} Shipping Gateway — بوابة إدارة الشحن الموحّدة</p>
     </div>
 </div>
+<script>window.PWA={swUrl:'{{ asset("sw.js") }}',scope:'{{ rtrim(url("/"), "/") }}/'};</script>
+<script src="{{ asset('js/pwa.js') }}" defer></script>
 </body>
 </html>
