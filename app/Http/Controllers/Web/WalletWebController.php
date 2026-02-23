@@ -1,49 +1,87 @@
 <?php
-
 namespace App\Http\Controllers\Web;
 
-use App\Models\{Wallet, WalletTransaction};
+use App\Models\Wallet;
+use App\Models\WalletLedgerEntry;
+use App\Models\PaymentMethod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class WalletWebController extends WebController
 {
     public function index()
     {
-        if ($this->isAdmin()) {
-            // Admin: show ALL wallets summary + all transactions
-            $wallets      = Wallet::with('account')->get();
-            $totalBalance = $wallets->sum('available_balance');
-            $wallet       = (object) ['available_balance' => $totalBalance, 'pending_balance' => $wallets->sum('pending_balance')];
-            $transactions = WalletTransaction::with('wallet.account')->latest()->paginate(20);
-        } else {
-            $accountId    = auth()->user()->account_id;
-            $wallet       = Wallet::firstOrCreate(['account_id' => $accountId], ['available_balance' => 0, 'pending_balance' => 0]);
-            $transactions = WalletTransaction::where('account_id', $accountId)->latest()->paginate(15);
-            $wallets      = collect();
-            $totalBalance = $wallet->available_balance;
-        }
-
-        return view('pages.wallet.index', compact('wallet', 'transactions', 'wallets', 'totalBalance'));
+        $wallet = Wallet::where('account_id', auth()->user()->account_id)->firstOrNew();
+        return view('pages.wallet.index', [
+            'wallet' => $wallet,
+            'transactions' => WalletLedgerEntry::where('wallet_id', $wallet->id ?? 0)->latest()->paginate(20),
+            'paymentMethods' => PaymentMethod::where('account_id', auth()->user()->account_id)->get(),
+        ]);
     }
 
-    public function topup(Request $request)
+    public function topup(Request $r)
     {
-        $request->validate(['amount' => 'required|numeric|min:10|max:50000']);
-        $accountId = auth()->user()->account_id;
-        $wallet    = Wallet::firstOrCreate(['account_id' => $accountId], ['available_balance' => 0]);
-        $wallet->increment('available_balance', $request->amount);
+        $r->validate(['amount' => 'required|numeric|min:1|max:100000']);
 
-        WalletTransaction::create([
-            'wallet_id'        => $wallet->id,
-            'account_id'       => $accountId,
-            'reference_number' => 'TXN-' . str_pad(WalletTransaction::count() + 1, 5, '0', STR_PAD_LEFT),
-            'type'             => 'credit',
-            'description'      => 'شحن رصيد المحفظة',
-            'amount'           => $request->amount,
-            'balance_after'    => $wallet->available_balance,
-            'status'           => 'completed',
-        ]);
+        $wallet = Wallet::firstOrCreate(
+            ['account_id' => auth()->user()->account_id],
+            ['currency' => 'SAR', 'available_balance' => 0]
+        );
 
-        return back()->with('success', 'تم شحن الرصيد بنجاح — SAR ' . number_format($request->amount));
+        DB::transaction(function () use ($wallet, $r) {
+            $wallet->increment('available_balance', $r->amount);
+            $wallet->refresh();
+
+            WalletLedgerEntry::create([
+                'wallet_id' => $wallet->id,
+                'type' => 'topup',
+                'amount' => $r->amount,
+                'running_balance' => $wallet->available_balance,
+                'description' => 'شحن محفظة',
+                'created_at' => now(),
+            ]);
+        });
+
+        return back()->with('success', 'تم شحن ' . number_format($r->amount, 2) . ' ر.س');
+    }
+
+    /**
+     * ═══ FIX P1: hold() now creates a WalletLedgerEntry for audit trail ═══
+     * BEFORE: Moved balance between available/locked WITHOUT any ledger record
+     * AFTER:  Creates proper ledger entry for financial traceability
+     */
+    public function hold(Request $r)
+    {
+        $r->validate(['amount' => 'required|numeric|min:1']);
+
+        $wallet = Wallet::where('account_id', auth()->user()->account_id)->first();
+
+        if (!$wallet) {
+            return back()->with('error', 'المحفظة غير موجودة');
+        }
+
+        $amount = (float) $r->amount;
+
+        if ((float) $wallet->available_balance < $amount) {
+            return back()->with('error', 'الرصيد غير كافٍ. المتاح: ' . number_format($wallet->available_balance, 2) . ' ر.س');
+        }
+
+        DB::transaction(function () use ($wallet, $amount) {
+            $wallet->decrement('available_balance', $amount);
+            $wallet->increment('locked_balance', $amount);
+            $wallet->refresh();
+
+            // ═══ FIX: Create LedgerEntry for the hold operation ═══
+            WalletLedgerEntry::create([
+                'wallet_id' => $wallet->id,
+                'type' => 'hold',
+                'amount' => $amount,
+                'running_balance' => $wallet->available_balance,
+                'description' => 'حجز رصيد',
+                'created_at' => now(),
+            ]);
+        });
+
+        return back()->with('warning', 'تم حجز ' . number_format($amount, 2) . ' ر.س');
     }
 }

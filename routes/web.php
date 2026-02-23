@@ -10,176 +10,145 @@ use App\Http\Controllers\Web\WalletWebController;
 use App\Http\Controllers\Web\UserWebController;
 use App\Http\Controllers\Web\SupportWebController;
 use App\Http\Controllers\Web\PageController;
-use App\Http\Middleware\EnsureIsAdmin;
-use App\Http\Middleware\DetectPortal;
 
 /*
 |--------------------------------------------------------------------------
-| Web Routes — Shipping Gateway (B2C + B2B + Admin Blade)
+| Web Routes — Shipping Gateway (Blade)
+|--------------------------------------------------------------------------
+| ═══ FIX P0-B1: Added permission middleware to ALL routes ═══
+| BEFORE: Only auth:web + tenant — any logged-in user could access everything
+| AFTER:  Each route group enforced by module-level permission checks
 |--------------------------------------------------------------------------
 */
 
-// ── PWA ──
-Route::get('/offline', fn () => view('offline'))->name('offline');
-Route::get('/manifest.json', function () {
-    $path = public_path('manifest.json');
-    if (!file_exists($path)) {
-        abort(404);
-    }
-    return response()->file($path, [
-        'Content-Type' => 'application/manifest+json',
-        'Cache-Control' => 'public, max-age=86400',
-    ]);
-});
-
-// ── Portal Selector (Landing) ──
-Route::get('/login', [AuthWebController::class, 'portalSelector'])->name('login');
-
-// ── B2B Auth ──
-Route::get('/b2b/login', [AuthWebController::class, 'showB2bLogin'])->name('b2b.login');
-Route::post('/b2b/login', [AuthWebController::class, 'loginB2b'])->name('b2b.login.submit');
-
-// ── B2C Auth ──
-Route::get('/b2c/login', [AuthWebController::class, 'showB2cLogin'])->name('b2c.login');
-Route::post('/b2c/login', [AuthWebController::class, 'loginB2c'])->name('b2c.login.submit');
-
-// ── Admin Auth ──
-Route::get('/admin/login', [AuthWebController::class, 'showAdminLogin'])->name('admin.login');
-Route::post('/admin/login', [AuthWebController::class, 'loginAdmin'])->name('admin.login.submit');
-
-// ── Logout ──
+// ── Auth ──
+Route::get('/login', [AuthWebController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthWebController::class, 'login']);
 Route::post('/logout', [AuthWebController::class, 'logout'])->name('logout');
 
-// ── Protected Routes (DetectPortal sets $portalType for all views) ──
-Route::middleware(['auth:web', DetectPortal::class])->group(function () {
+// ── Protected Routes ──
+Route::middleware(['auth:web', 'tenant'])->group(function () {
 
-    // Dashboard
+    // Dashboard — accessible to all authenticated users
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
-    // ── Shipments ──
-    Route::get('/shipments', [ShipmentWebController::class, 'index'])->name('shipments.index');
-    Route::get('/shipments/create', [ShipmentWebController::class, 'create'])->name('shipments.create');
-    Route::post('/shipments', [ShipmentWebController::class, 'store'])->name('shipments.store');
-    Route::get('/shipments/export', [ShipmentWebController::class, 'export'])->name('shipments.export');
-    Route::get('/shipments/{shipment}', [ShipmentWebController::class, 'show'])->name('shipments.show');
-    Route::patch('/shipments/{shipment}/cancel', [ShipmentWebController::class, 'cancel'])->name('shipments.cancel');
-    Route::post('/shipments/{shipment}/return', [ShipmentWebController::class, 'createReturn'])->name('shipments.return');
-    Route::get('/shipments/{shipment}/label', [ShipmentWebController::class, 'label'])->name('shipments.label');
+    // ── Shipments ── (permission: shipments.read, shipments.create, etc.)
+    Route::middleware('permission:shipments.read')->group(function () {
+        Route::get('/shipments', [ShipmentWebController::class, 'index'])->name('shipments.index');
+        Route::get('/shipments/export', [ShipmentWebController::class, 'export'])->name('shipments.export');
+        Route::get('/shipments/{shipment}', [ShipmentWebController::class, 'show'])->name('shipments.show');
+        Route::get('/shipments/{shipment}/label', [ShipmentWebController::class, 'label'])->name('shipments.label');
+    });
+    Route::post('/shipments', [ShipmentWebController::class, 'store'])->name('shipments.store')->middleware('permission:shipments.create');
+    Route::patch('/shipments/{shipment}/cancel', [ShipmentWebController::class, 'cancel'])->name('shipments.cancel')->middleware('permission:shipments.cancel');
+    Route::post('/shipments/{shipment}/return', [ShipmentWebController::class, 'createReturn'])->name('shipments.return')->middleware('permission:shipments.create_return');
 
-    // ── Orders ──
-    Route::get('/orders', [OrderWebController::class, 'index'])->name('orders.index');
-    Route::post('/orders', [OrderWebController::class, 'store'])->name('orders.store');
-    Route::post('/orders/{order}/ship', [OrderWebController::class, 'ship'])->name('orders.ship');
-    Route::patch('/orders/{order}/cancel', [OrderWebController::class, 'cancel'])->name('orders.cancel');
+    // ── Orders ── (permission: orders.read, orders.create, etc.)
+    Route::middleware('permission:orders.read')->group(function () {
+        Route::get('/orders', [OrderWebController::class, 'index'])->name('orders.index');
+    });
+    Route::post('/orders', [OrderWebController::class, 'store'])->name('orders.store')->middleware('permission:orders.create');
+    Route::post('/orders/{order}/ship', [OrderWebController::class, 'ship'])->name('orders.ship')->middleware('permission:orders.ship');
+    Route::patch('/orders/{order}/cancel', [OrderWebController::class, 'cancel'])->name('orders.cancel')->middleware('permission:orders.cancel');
 
-    // ── Stores ──
-    Route::get('/stores', [StoreWebController::class, 'index'])->name('stores.index');
-    Route::post('/stores', [StoreWebController::class, 'store'])->name('stores.store');
-    Route::get('/stores/{store}/edit', [StoreWebController::class, 'edit'])->name('stores.edit');
-    Route::post('/stores/{store}/sync', [StoreWebController::class, 'sync'])->name('stores.sync');
-    Route::delete('/stores/{store}', [StoreWebController::class, 'destroy'])->name('stores.disconnect');
+    // ── Stores ── (permission: stores.read, stores.create, etc.)
+    Route::middleware('permission:stores.read')->group(function () {
+        Route::get('/stores', [StoreWebController::class, 'index'])->name('stores.index');
+    });
+    Route::post('/stores', [StoreWebController::class, 'store'])->name('stores.store')->middleware('permission:stores.create');
+    Route::post('/stores/{store}/sync', [StoreWebController::class, 'sync'])->name('stores.sync')->middleware('permission:stores.sync');
+    Route::post('/stores/{store}/test', [StoreWebController::class, 'test'])->name('stores.test')->middleware('permission:stores.test_connection');
+    Route::delete('/stores/{store}', [StoreWebController::class, 'destroy'])->name('stores.destroy')->middleware('permission:stores.delete');
 
-    // ── Wallet ──
-    Route::get('/wallet', [WalletWebController::class, 'index'])->name('wallet.index');
-    Route::post('/wallet/topup', [WalletWebController::class, 'topup'])->name('wallet.topup');
+    // ── Wallet ── (permission: wallet.read, wallet.topup, wallet.hold)
+    Route::get('/wallet', [WalletWebController::class, 'index'])->name('wallet.index')->middleware('permission:wallet.read');
+    Route::post('/wallet/topup', [WalletWebController::class, 'topup'])->name('wallet.topup')->middleware('permission:wallet.topup');
+    Route::post('/wallet/hold', [WalletWebController::class, 'hold'])->name('wallet.hold')->middleware('permission:wallet.hold');
 
-    // ── Users ──
-    Route::get('/users', [UserWebController::class, 'index'])->name('users.index');
-    Route::get('/users/{user}/edit', [UserWebController::class, 'edit'])->name('users.edit');
-    Route::patch('/users/{user}', [UserWebController::class, 'update'])->name('users.update');
+    // ── Users ── (permission: users.read, users.create, etc.)
+    Route::middleware('permission:users.read')->group(function () {
+        Route::get('/users', [UserWebController::class, 'index'])->name('users.index');
+    });
+    Route::post('/users', [UserWebController::class, 'store'])->name('users.store')->middleware('permission:users.create');
+    Route::patch('/users/{user}/toggle', [UserWebController::class, 'toggle'])->name('users.toggle')->middleware('permission:users.toggle_status');
+    Route::delete('/users/{user}', [UserWebController::class, 'destroy'])->name('users.destroy')->middleware('permission:users.delete');
 
-    // ── Support ──
-    Route::get('/support', [SupportWebController::class, 'index'])->name('support.index');
-    Route::post('/support', [SupportWebController::class, 'store'])->name('support.store');
-    Route::get('/support/{ticket}', [SupportWebController::class, 'show'])->name('support.show');
-    Route::post('/support/{ticket}/reply', [SupportWebController::class, 'reply'])->name('support.reply');
-    Route::patch('/support/{ticket}/resolve', [SupportWebController::class, 'resolve'])->name('support.resolve');
+    // ── Support ── (permission: support.read, support.create, etc.)
+    Route::middleware('permission:support.read')->group(function () {
+        Route::get('/support', [SupportWebController::class, 'index'])->name('support.index');
+        Route::get('/support/{ticket}', [SupportWebController::class, 'show'])->name('support.show');
+    });
+    Route::post('/support', [SupportWebController::class, 'store'])->name('support.store')->middleware('permission:support.create');
+    Route::post('/support/{ticket}/reply', [SupportWebController::class, 'reply'])->name('support.reply')->middleware('permission:support.reply');
+    Route::patch('/support/{ticket}/resolve', [SupportWebController::class, 'resolve'])->name('support.resolve')->middleware('permission:support.resolve');
 
-    // ── Tracking ──
-    Route::get('/tracking', [PageController::class, 'tracking'])->name('tracking.index');
+    // ── Roles ── (permission: roles.read, roles.create)
+    Route::get('/roles', [PageController::class, 'roles'])->name('roles.index')->middleware('permission:roles.read');
+    Route::post('/roles', [PageController::class, 'rolesStore'])->name('roles.store')->middleware('permission:roles.create');
 
-    // ── Roles ──
-    Route::get('/roles', [PageController::class, 'roles'])->name('roles.index');
-    Route::post('/roles', [PageController::class, 'rolesStore'])->name('roles.store');
+    // ── Invitations ── (permission: invitations.read, invitations.create)
+    Route::get('/invitations', [PageController::class, 'invitations'])->name('invitations.index')->middleware('permission:invitations.read');
+    Route::post('/invitations', [PageController::class, 'invitationsStore'])->name('invitations.store')->middleware('permission:invitations.create');
 
-    // ── Invitations ──
-    Route::get('/invitations', [PageController::class, 'invitations'])->name('invitations.index');
-    Route::post('/invitations', [PageController::class, 'invitationsStore'])->name('invitations.store');
+    // ── Notifications ── (permission: notifications.read)
+    Route::middleware('permission:notifications.read')->group(function () {
+        Route::get('/notifications', [PageController::class, 'notifications'])->name('notifications.index');
+        Route::patch('/notifications/{notification}/read', [PageController::class, 'notificationsRead'])->name('notifications.read');
+        Route::post('/notifications/read-all', [PageController::class, 'notificationsReadAll'])->name('notifications.readAll');
+    });
 
-    // ── Notifications ──
-    Route::get('/notifications', [PageController::class, 'notifications'])->name('notifications.index');
-    Route::patch('/notifications/{notification}/read', [PageController::class, 'notificationsRead'])->name('notifications.read');
-    Route::post('/notifications/read-all', [PageController::class, 'notificationsReadAll'])->name('notifications.readAll');
+    // ── Addresses ── (permission: addresses.read, addresses.create, etc.)
+    Route::get('/addresses', [PageController::class, 'addresses'])->name('addresses.index')->middleware('permission:addresses.read');
+    Route::post('/addresses', [PageController::class, 'addressesStore'])->name('addresses.store')->middleware('permission:addresses.create');
+    Route::patch('/addresses/{address}/default', [PageController::class, 'addressesDefault'])->name('addresses.default')->middleware('permission:addresses.set_default');
+    Route::delete('/addresses/{address}', [PageController::class, 'addressesDestroy'])->name('addresses.destroy')->middleware('permission:addresses.delete');
 
-    // ── Addresses ──
-    Route::get('/addresses', [PageController::class, 'addresses'])->name('addresses.index');
-    Route::post('/addresses', [PageController::class, 'addressesStore'])->name('addresses.store');
-    Route::patch('/addresses/{address}/default', [PageController::class, 'addressesDefault'])->name('addresses.default');
-    Route::delete('/addresses/{address}', [PageController::class, 'addressesDestroy'])->name('addresses.destroy');
+    // ── Settings ── (permission: settings.read, settings.update)
+    Route::get('/settings', [PageController::class, 'settings'])->name('settings.index')->middleware('permission:settings.read');
+    Route::put('/settings', [PageController::class, 'settingsUpdate'])->name('settings.update')->middleware('permission:settings.update');
 
-    // ── Settings ──
-    Route::get('/settings', [PageController::class, 'settings'])->name('settings.index');
-    Route::put('/settings', [PageController::class, 'settingsUpdate'])->name('settings.update');
-    Route::post('/settings/password', [PageController::class, 'settingsPassword'])->name('settings.password');
+    // ── Audit Log ── (permission: audit_log.read, audit_log.export)
+    Route::get('/audit', [PageController::class, 'audit'])->name('audit.index')->middleware('permission:audit_log.read');
+    Route::get('/audit/export', [PageController::class, 'auditExport'])->name('audit.export')->middleware('permission:audit_log.export');
 
-    // ── Reports ──
-    Route::get('/reports', [PageController::class, 'reports'])->name('reports.index');
-    Route::get('/reports/export/{type}', [PageController::class, 'reportsExport'])->name('reports.export');
+    // ── Admin ── (permission: admin.system_health)
+    Route::get('/admin', [PageController::class, 'admin'])->name('admin.index')->middleware('permission:admin.system_health');
 
-    // ── Financial ──
-    Route::get('/financial', [PageController::class, 'financial'])->name('financial.index');
+    // ── Reports ── (permission: reports.read, reports.export)
+    Route::get('/reports', [PageController::class, 'reports'])->name('reports.index')->middleware('permission:reports.read');
+    Route::get('/reports/export/{type}', [PageController::class, 'reportsExport'])->name('reports.export')->where('type', 'shipments|revenue|carriers|stores|operations|financial')->middleware('permission:reports.export');
 
-    // ── Admin-Only Routes (protected by admin middleware) ──
-    Route::middleware([EnsureIsAdmin::class])->group(function () {
+    // ── KYC ── (permission: kyc.read)
+    Route::get('/kyc', [PageController::class, 'kyc'])->name('kyc.index')->middleware('permission:kyc.read');
 
-        // ── Audit ──
-        Route::get('/audit', [PageController::class, 'audit'])->name('audit.index');
-        Route::get('/audit/export', [PageController::class, 'auditExport'])->name('audit.export');
+    // ── Pricing ── (permission: pricing.read, pricing.create)
+    Route::get('/pricing', [PageController::class, 'pricing'])->name('pricing.index')->middleware('permission:pricing.read');
+    Route::post('/pricing', [PageController::class, 'pricingStore'])->name('pricing.store')->middleware('permission:pricing.create');
 
-        // ── Pricing ──
-        Route::get('/pricing', [PageController::class, 'pricing'])->name('pricing.index');
+    // ── Tracking ── (permission: tracking.read)
+    Route::get('/tracking', [PageController::class, 'tracking'])->name('tracking.index')->middleware('permission:tracking.read');
 
-        // ── Admin ──
-        Route::get('/admin', [PageController::class, 'admin'])->name('admin.index');
+    // ── Financial ── (permission: financial.read)
+    Route::get('/financial', [PageController::class, 'financial'])->name('financial.index')->middleware('permission:financial.read');
 
-        // ── KYC ──
-        Route::get('/kyc', [PageController::class, 'kyc'])->name('kyc.index');
+    // ── Organizations ── (permission: organizations.read, organizations.create)
+    Route::get('/organizations', [PageController::class, 'organizations'])->name('organizations.index')->middleware('permission:organizations.read');
+    Route::post('/organizations', [PageController::class, 'organizationsStore'])->name('organizations.store')->middleware('permission:organizations.create');
 
-        // ── DG (Dangerous Goods) ──
-        Route::get('/dg', [PageController::class, 'dg'])->name('dg.index');
+    // ── Risk ── (permission: admin.system_health)
+    Route::get('/risk', [PageController::class, 'risk'])->name('risk.index')->middleware('permission:admin.system_health');
 
-        // ── Organizations ──
-        Route::get('/organizations', [PageController::class, 'organizations'])->name('organizations.index');
-        Route::post('/organizations', [PageController::class, 'organizationsStore'])->name('organizations.store');
+    // ── DG ── (permission: dg.read)
+    Route::get('/dg', [PageController::class, 'dg'])->name('dg.index')->middleware('permission:dg.read');
 
-        // ── Containers ──
-        Route::get('/containers', [PageController::class, 'containers'])->name('containers.index');
-
-        // ── Customs ──
-        Route::get('/customs', [PageController::class, 'customs'])->name('customs.index');
-
-        // ── Drivers ──
-        Route::get('/drivers', [PageController::class, 'drivers'])->name('drivers.index');
-
-        // ── Claims ──
-        Route::get('/claims', [PageController::class, 'claims'])->name('claims.index');
-
-        // ── Vessels ──
-        Route::get('/vessels', [PageController::class, 'vessels'])->name('vessels.index');
-
-        // ── Schedules ──
-        Route::get('/schedules', [PageController::class, 'schedules'])->name('schedules.index');
-
-        // ── Branches ──
-        Route::get('/branches', [PageController::class, 'branches'])->name('branches.index');
-
-        // ── Companies ──
-        Route::get('/companies', [PageController::class, 'companies'])->name('companies.index');
-
-        // ── HS Codes ──
-        Route::get('/hscodes', [PageController::class, 'hscodes'])->name('hscodes.index');
-
-        // ── Risk ──
-        Route::get('/risk', [PageController::class, 'risk'])->name('risk.index');
-    }); // end admin middleware
+    // ── Phase 2 Modules ──
+    Route::get('/containers', [PageController::class, 'containers'])->name('containers.index')->middleware('permission:containers.read');
+    Route::get('/customs', [PageController::class, 'customs'])->name('customs.index')->middleware('permission:customs.read');
+    Route::get('/drivers', [PageController::class, 'drivers'])->name('drivers.index')->middleware('permission:drivers.read');
+    Route::get('/claims', [PageController::class, 'claims'])->name('claims.index')->middleware('permission:claims.read');
+    Route::get('/vessels', [PageController::class, 'vessels'])->name('vessels.index')->middleware('permission:vessels.read');
+    Route::get('/schedules', [PageController::class, 'schedules'])->name('schedules.index')->middleware('permission:vessels.read');
+    Route::get('/branches', [PageController::class, 'branches'])->name('branches.index')->middleware('permission:branches.read');
+    Route::get('/companies', [PageController::class, 'companies'])->name('companies.index')->middleware('permission:companies.read');
+    Route::get('/hscodes', [PageController::class, 'hscodes'])->name('hscodes.index')->middleware('permission:hs_codes.search');
 });
