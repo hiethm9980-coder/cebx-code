@@ -15,7 +15,16 @@ class DashboardController extends WebController
 {
     public function index()
     {
-        $accountId = auth()->user()->account_id;
+        $user = auth()->user();
+        $accountId = $user->account_id;
+        $accountType = $user->account?->type ?? null;
+
+        // نوع البوابة: admin | b2c | b2b (للعرض في الـ view)
+        $portalType = match (true) {
+            (bool) ($user->is_super_admin ?? false), $user->role === 'admin', $accountType === 'admin' => 'admin',
+            $accountType === 'individual' => 'b2c',
+            default => 'b2b',
+        };
 
         // ═══ FIX P0-B7: All counts scoped by account_id ═══
         $shipmentsCount = Shipment::where('account_id', $accountId)->count();
@@ -35,6 +44,16 @@ class DashboardController extends WebController
         $openTickets = SupportTicket::where('account_id', $accountId)
             ->where('status', 'open')
             ->count();
+
+        // للوحة الأدمن و B2C
+        $todayShipments = Shipment::where('account_id', $accountId)->whereDate('created_at', today())->count();
+        $deliveredCount = Shipment::where('account_id', $accountId)->where('status', 'delivered')->count();
+        $totalShipments = $shipmentsCount;
+        $totalAccounts = $organizationsCount;
+        $totalUsers = $usersCount;
+        $newOrders = Order::where('account_id', $accountId)->whereDate('created_at', today())->count();
+        $totalRevenue = (float) Shipment::where('account_id', $accountId)->sum('total_charge');
+        $shipmentsTrend = 0; // يمكن حسابه لاحقاً من مقارنة الأسبوع الحالي بالسابق
 
         // ═══ FIX P0-B5: Remove rand() fallback — show 0 when no data ═══
         $monthlyData = collect(['يناير','فبراير','مارس','أبريل','مايو','يونيو'])->map(fn($name, $i) => [
@@ -69,12 +88,30 @@ class DashboardController extends WebController
             ]);
         }
 
-        // Status distribution (scoped)
-        $statusDistribution = Shipment::where('account_id', $accountId)
+        // Status distribution (scoped) — للعرض: مصفوفة [label, pct, color]
+        $statusCounts = Shipment::where('account_id', $accountId)
             ->select('status', DB::raw('count(*) as total'))
             ->groupBy('status')
             ->pluck('total', 'status')
             ->toArray();
+        $statusTotal = array_sum($statusCounts);
+        $statusColors = ['var(--pr)', 'var(--ac)', 'var(--wn)', 'var(--in)', 'var(--dg)', 'var(--pp)'];
+        $statusLabels = [
+            'draft' => 'مسودة', 'validated' => 'تم التحقق', 'rated' => 'مُسعّر', 'payment_pending' => 'بانتظار الدفع',
+            'purchased' => 'مُشترى', 'ready_for_pickup' => 'جاهز للاستلام', 'picked_up' => 'تم الاستلام',
+            'in_transit' => 'في الطريق', 'out_for_delivery' => 'خارج للتسليم', 'delivered' => 'تم التسليم',
+            'returned' => 'مرتجع', 'exception' => 'استثناء', 'cancelled' => 'ملغي', 'failed' => 'فاشل',
+        ];
+        $statusDistribution = [];
+        $i = 0;
+        foreach ($statusCounts as $status => $count) {
+            $statusDistribution[] = [
+                'label' => $statusLabels[$status] ?? $status,
+                'pct' => $statusTotal > 0 ? round(($count / $statusTotal) * 100) : 0,
+                'color' => $statusColors[$i % count($statusColors)],
+            ];
+            $i++;
+        }
 
         $recentShipments = Shipment::where('account_id', $accountId)
             ->latest()
@@ -82,8 +119,11 @@ class DashboardController extends WebController
             ->get();
 
         return view('pages.dashboard.index', compact(
+            'portalType',
             'shipmentsCount', 'ordersCount', 'walletBalance', 'unreadNotifs',
             'usersCount', 'organizationsCount', 'openTickets',
+            'todayShipments', 'deliveredCount', 'totalShipments', 'totalAccounts', 'totalUsers',
+            'newOrders', 'totalRevenue', 'shipmentsTrend',
             'monthlyData', 'maxMonthly', 'carrierStats', 'recentShipments',
             'statusDistribution'
         ));

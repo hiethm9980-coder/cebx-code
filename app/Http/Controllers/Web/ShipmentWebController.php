@@ -36,6 +36,27 @@ class ShipmentWebController extends WebController
         return view('pages.shipments.index', compact('shipments', 'totalCount'));
     }
 
+    /**
+     * عرض صفحة إنشاء شحنة جديدة.
+     */
+    public function create()
+    {
+        $user = auth()->user();
+        $accountType = $user->account?->type ?? null;
+        $portalType = match (true) {
+            (bool) ($user->is_super_admin ?? false), $user->role === 'admin', $accountType === 'admin' => 'admin',
+            $accountType === 'individual' => 'b2c',
+            default => 'b2b',
+        };
+
+        $savedAddresses = [];
+        if ($portalType === 'b2b' && $user->account_id) {
+            $savedAddresses = \App\Models\Address::where('account_id', $user->account_id)->orderBy('label')->get();
+        }
+
+        return view('pages.shipments.create', compact('portalType', 'savedAddresses'));
+    }
+
     public function show(Shipment $shipment)
     {
         // Security: verify ownership

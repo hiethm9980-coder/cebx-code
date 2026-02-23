@@ -8,6 +8,30 @@ use Illuminate\Support\Facades\Auth;
 
 class AuthWebController extends Controller
 {
+    /** Route name 'login' and GET /login — show portal selector (or redirect to it). */
+    public function showLogin()
+    {
+        return $this->portalSelector();
+    }
+
+    /** POST /login — unified entry; redirects to the correct portal or attempts login. */
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        if (!Auth::attempt($credentials, $request->boolean('remember'))) {
+            return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة'])->onlyInput('email');
+        }
+
+        $user = Auth::user();
+        $request->session()->regenerate();
+        $user->update(['last_login_at' => now()]);
+        return redirect()->intended(url('/'));
+    }
+
     // ── Portal Selector ──
     public function portalSelector()
     {
