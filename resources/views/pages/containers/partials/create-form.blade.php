@@ -8,19 +8,24 @@
         <div class="form-group">
             <label class="form-label">النوع</label>
             <select name="type" class="form-control">
-                <option value="20ft">20ft Standard</option>
-                <option value="40ft">40ft Standard</option>
-                <option value="40hc">40ft High Cube</option>
+                <option value="dry">Dry (جاف)</option>
                 <option value="reefer">Reefer (مبرّد)</option>
+                <option value="open_top">Open Top</option>
+                <option value="flat_rack">Flat Rack</option>
             </select>
         </div>
         <div class="form-group">
-            <label class="form-label">رمز ISO</label>
-            <input type="text" name="iso_code" class="form-control" value="{{ old('iso_code') }}" placeholder="22G1">
+            <label class="form-label">الحجم</label>
+            <select name="size" class="form-control">
+                <option value="20ft">20ft Standard</option>
+                <option value="40ft">40ft Standard</option>
+                <option value="40hc">40ft High Cube</option>
+                <option value="45ft">45ft</option>
+            </select>
         </div>
         <div class="form-group">
-            <label class="form-label">الميناء</label>
-            <input type="text" name="port" class="form-control" value="{{ old('port') }}" placeholder="جدة الإسلامي">
+            <label class="form-label">الموقع</label>
+            <input type="text" name="location" class="form-control" value="{{ old('location') }}" placeholder="ميناء جدة الإسلامي">
         </div>
     </div>
     <button type="submit" class="btn btn-pr" style="margin-top:12px">إنشاء حاوية</button>

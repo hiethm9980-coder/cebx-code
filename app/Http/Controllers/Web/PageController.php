@@ -358,7 +358,23 @@ class PageController extends WebController
     // ═══ TRACKING ═══
     public function tracking()
     {
-        $active = Shipment::whereIn('status', ['purchased', 'ready_for_pickup', 'picked_up', 'in_transit', 'out_for_delivery'])->latest()->paginate(20);
+        // FIX: البحث يستخدم tracking_number و carrier_shipment_id (وليس carrier_tracking_number الذي لا يوجد)
+        $trackedShipment = null;
+        $trackingHistory = null;
+        $ref = request()->get('q') ?? request()->get('tracking_number');
+
+        if ($ref) {
+            $trackedShipment = Shipment::where('reference_number', $ref)
+                ->orWhere('tracking_number', $ref)           // FIX: كان carrier_tracking_number
+                ->orWhere('carrier_shipment_id', $ref)       // FIX: عمود صحيح
+                ->first();
+
+            if ($trackedShipment) {
+                $trackingHistory = $trackedShipment->events ?? collect();
+            }
+        }
+
+        $active = Shipment::whereIn('status', ['pending', 'purchased', 'ready_for_pickup', 'picked_up', 'in_transit', 'out_for_delivery'])->latest()->paginate(20);
         return view('pages.tracking.index', [
             'columns' => ['التتبع', 'الناقل', 'الحالة', 'المسار', 'العميل', 'الخدمة'],
             'rows' => $active->map(fn($s) => [
@@ -370,6 +386,8 @@ class PageController extends WebController
                 e($s->service_name ?? $s->service_code ?? '—'),
             ]),
             'pagination' => $active,
+            'trackedShipment' => $trackedShipment,
+            'trackingHistory' => $trackingHistory,
         ]);
     }
 
@@ -456,35 +474,38 @@ class PageController extends WebController
         $data = Container::latest()->paginate(20);
         return view('pages.containers.index', [
             'subtitle' => $data->total() . ' حاوية',
-            'columns' => ['الرقم', 'رقم الحاوية', 'النوع', 'الحالة', 'السفينة', 'الميناء', 'ETA'],
+            'columns' => ['رقم الحاوية', 'الحجم', 'النوع', 'الحالة', 'السفينة', 'الموقع'],
             'rows' => $data->map(fn($c) => [
-                '<span class="td-link">' . e($c->container_number) . '</span>',
-                '<span class="td-mono">' . e($c->iso_code ?? '—') . '</span>',
+                '<span class="td-link td-mono">' . e($c->container_number) . '</span>',
+                e($c->size ?? '—'),
                 e($c->type ?? '—'),
                 $this->statusBadge($c->status ?? 'loading'),
-                e($c->vessel?->name ?? '—'),
-                e($c->port ?? '—'),
-                e($c->eta ?? '—'),
+                e($c->vesselSchedule?->vessel?->vessel_name ?? '—'),
+                e($c->location ?? '—'),
             ]),
             'pagination' => $data,
             'createRoute' => true,
-            'createForm' => view('pages.containers.partials.create-form')->render(), // FIX #7: كان مفقود
+            'createForm' => view('pages.containers.partials.create-form')->render(),
         ]);
     }
 
-    // FIX #7: method جديد
+    // FIX #7: method جديد — إصلاح أسماء الأعمدة حسب Container model
     public function containersStore(Request $request)
     {
         $data = $request->validate([
             'container_number' => 'required|string|max:20',
             'type' => 'nullable|string|max:20',
-            'iso_code' => 'nullable|string|max:10',
-            'port' => 'nullable|string|max:100',
+            'size' => 'nullable|string|max:10',
+            'location' => 'nullable|string|max:100',
         ]);
-        Container::create(array_merge($data, [
-            'account_id' => auth()->user()->account_id,
-            'status' => 'loading',
-        ]));
+        Container::create([
+            'account_id'       => auth()->user()->account_id,
+            'container_number' => $data['container_number'],
+            'type'             => $data['type'] ?? 'dry',
+            'size'             => $data['size'] ?? '20ft',
+            'location'         => $data['location'] ?? null,
+            'status'           => 'loading',
+        ]);
         return back()->with('success', 'تم إنشاء الحاوية');
     }
 
@@ -494,19 +515,26 @@ class PageController extends WebController
         $data = CustomsDeclaration::latest()->paginate(20);
         return view('pages.customs.index', [
             'subtitle' => $data->total() . ' إقرار',
+            // FIX: إضافة إحصائيات مع customs_status (وليس status)
+            'stats' => [
+                ['icon' => '📋', 'label' => 'الإجمالي', 'value' => CustomsDeclaration::count()],
+                ['icon' => '⏳', 'label' => 'قيد الانتظار', 'value' => CustomsDeclaration::where('customs_status', 'draft')->orWhere('customs_status', 'submitted')->count()],
+                ['icon' => '✅', 'label' => 'مخلّص', 'value' => CustomsDeclaration::where('customs_status', 'cleared')->count()],
+                ['icon' => '🔒', 'label' => 'محتجز', 'value' => CustomsDeclaration::where('customs_status', 'held')->count()],
+            ],
             'columns' => ['الرقم', 'الشحنة', 'النوع', 'الحالة', 'القيمة', 'الرسوم', 'الوسيط'],
             'rows' => $data->map(fn($c) => [
                 '<span class="td-link">' . e($c->declaration_number ?? $c->id) . '</span>',
                 e($c->shipment?->tracking_number ?? '—'),
-                '<span class="badge badge-pp">' . e($c->type ?? '—') . '</span>',
-                $this->statusBadge($c->status ?? 'pending'),
+                '<span class="badge badge-pp">' . e($c->declaration_type ?? '—') . '</span>',
+                $this->statusBadge($c->customs_status ?? 'draft'),  // FIX: customs_status بدل status
                 number_format($c->declared_value ?? 0) . ' ر.س',
-                number_format($c->duties_amount ?? 0) . ' ر.س',
+                number_format($c->duty_amount ?? 0) . ' ر.س',
                 e($c->broker?->name ?? '—'),
             ]),
             'pagination' => $data,
             'createRoute' => true,
-            'createForm' => view('pages.customs.partials.create-form')->render(), // FIX #8: كان مفقود
+            'createForm' => view('pages.customs.partials.create-form')->render(),
         ]);
     }
 
@@ -515,16 +543,21 @@ class PageController extends WebController
     {
         $data = $request->validate([
             'declaration_number' => 'nullable|string|max:50',
-            'type' => 'required|in:import,export,transit',
+            'declaration_type' => 'required|in:import,export,transit',
             'declared_value' => 'required|numeric|min:0',
             'origin_country' => 'nullable|string|max:2',
         ]);
-        CustomsDeclaration::create(array_merge($data, [
+        CustomsDeclaration::create([
             'account_id' => auth()->user()->account_id,
+            'shipment_id' => Shipment::where('account_id', auth()->user()->account_id)->latest()->value('id') ?? '00000000-0000-0000-0000-000000000000',
             'declaration_number' => $data['declaration_number'] ?: ('CD-' . strtoupper(uniqid())),
-            'status' => 'pending',
-            'currency' => 'SAR',
-        ]));
+            'declaration_type' => $data['declaration_type'],
+            'declared_value' => $data['declared_value'],
+            'declared_currency' => 'SAR',
+            'origin_country' => $data['origin_country'] ?? 'SA',
+            'destination_country' => 'SA',
+            'customs_status' => 'draft',  // FIX: customs_status بدل status
+        ]);
         return back()->with('success', 'تم إنشاء الإقرار الجمركي');
     }
 
@@ -594,16 +627,38 @@ class PageController extends WebController
         $data = Vessel::all();
         return view('pages.vessels.index', [
             'subtitle' => $data->count() . ' سفينة',
-            'columns' => ['الرقم', 'الاسم', 'العلم', 'السعة', 'الحالة', 'المسار'],
+            'columns' => ['الرقم', 'الاسم', 'العلم', 'السعة', 'الحالة', 'المشغّل'],
             'rows' => $data->map(fn($v) => [
                 e($v->imo_number ?? $v->id),
-                '<span style="font-weight:600">' . e($v->name) . '</span>',
+                '<span style="font-weight:600">' . e($v->vessel_name ?? '—') . '</span>', // FIX: vessel_name بدل name
                 e($v->flag ?? '—'),
-                e($v->capacity ?? '—'),
+                e($v->capacity_teu ?? '—'),  // FIX: capacity_teu بدل capacity
                 $this->statusBadge($v->status ?? 'active'),
-                '<span class="badge badge-in">' . e($v->route ?? '—') . '</span>',
+                '<span class="badge badge-in">' . e($v->operator ?? '—') . '</span>',  // FIX: operator بدل route
             ]),
+            'createRoute' => true,
+            'createForm' => view('pages.vessels.partials.create-form')->render(),
         ]);
+    }
+
+    // إضافة سفينة
+    public function vesselsStore(Request $request)
+    {
+        $data = $request->validate([
+            'vessel_name' => 'required|string|max:200',
+            'imo_number' => 'nullable|string|max:20',
+            'flag' => 'nullable|string|max:3',
+            'vessel_type' => 'nullable|string|max:50',
+        ]);
+        Vessel::create([
+            'account_id'  => auth()->user()->account_id,
+            'vessel_name' => $data['vessel_name'],
+            'imo_number'  => $data['imo_number'] ?? null,
+            'flag'        => $data['flag'] ?? 'SA',
+            'vessel_type' => $data['vessel_type'] ?? 'container',
+            'status'      => 'active',
+        ]);
+        return back()->with('success', 'تم إنشاء السفينة');
     }
 
     // ═══ SCHEDULES ═══
@@ -613,10 +668,10 @@ class PageController extends WebController
         return view('pages.schedules.index', [
             'columns' => ['السفينة', 'المسار', 'المغادرة', 'الوصول', 'الحالة'],
             'rows' => $data->map(fn($s) => [
-                e($s->vessel?->name ?? '—'),
-                '<span class="badge badge-in">' . e($s->route ?? '—') . '</span>',
-                e($s->departure_date ?? '—'),
-                e($s->arrival_date ?? '—'),
+                e($s->vessel?->vessel_name ?? '—'),
+                '<span class="badge badge-in">' . e($s->service_route ?? '—') . '</span>',
+                e($s->etd?->format('Y-m-d') ?? '—'),
+                e($s->eta?->format('Y-m-d') ?? '—'),
                 $this->statusBadge($s->status ?? 'active'),
             ]),
             'pagination' => $data,

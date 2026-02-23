@@ -7,7 +7,7 @@
         </div>
         <div class="form-group">
             <label class="form-label">النوع *</label>
-            <select name="type" class="form-control" required>
+            <select name="declaration_type" class="form-control" required>
                 <option value="import">استيراد</option>
                 <option value="export">تصدير</option>
                 <option value="transit">عبور</option>

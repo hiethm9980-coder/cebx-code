@@ -15,17 +15,6 @@ use App\Http\Controllers\Web\PageController;
 |--------------------------------------------------------------------------
 | Web Routes — Shipping Gateway (Blade)
 |--------------------------------------------------------------------------
-| ═══ FIX P0-B1: Added permission middleware to ALL routes ═══
-| BEFORE: Only auth:web + tenant — any logged-in user could access everything
-| AFTER:  Each route group enforced by module-level permission checks
-|--------------------------------------------------------------------------
-*/
-
-// ── Auth ──
-/*
-|--------------------------------------------------------------------------
-| Web Routes — Shipping Gateway (Blade)
-|--------------------------------------------------------------------------
 */
 
 // ── Auth ──
@@ -149,6 +138,7 @@ Route::middleware(['auth:web', 'tenant'])->group(function () {
     Route::post('/claims', [PageController::class, 'claimsStore'])->name('claims.store');               // FIX #9
 
     Route::get('/vessels', [PageController::class, 'vessels'])->name('vessels.index');
+    Route::post('/vessels', [PageController::class, 'vesselsStore'])->name('vessels.store');    // FIX: كان مفقود
     Route::get('/schedules', [PageController::class, 'schedules'])->name('schedules.index');
     Route::get('/branches', [PageController::class, 'branches'])->name('branches.index');
     Route::get('/companies', [PageController::class, 'companies'])->name('companies.index');
