@@ -21,7 +21,7 @@ class DashboardController extends WebController
 
         // نوع البوابة: admin | b2c | b2b (للعرض في الـ view)
         $portalType = match (true) {
-            (bool) ($user->is_super_admin ?? false), $user->role === 'admin', $accountType === 'admin' => 'admin',
+            ($user->user_type ?? null) === 'internal' => 'admin',
             $accountType === 'individual' => 'b2c',
             default => 'b2b',
         };

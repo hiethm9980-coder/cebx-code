@@ -3,100 +3,88 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Services\OrderService;
+use App\Models\Order;
 use App\Models\Store;
+use App\Services\OrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * OrderController — FR-ST module API endpoints.
- *
- * Orders: list, show, create (manual), status update, cancel, stats
- * Store Sync: test connection, register webhooks, trigger sync
- */
 class OrderController extends Controller
 {
     public function __construct(
         protected OrderService $service
     ) {}
 
-    // ─── Orders ──────────────────────────────────────────────────
-
-    /**
-     * GET /api/v1/orders
-     */
     public function index(Request $request): JsonResponse
     {
+        $accountId = $this->currentAccountId();
+        $this->authorize('viewAny', Order::class);
+
         $filters = $request->only(['store_id', 'status', 'source', 'search', 'from', 'to', 'limit', 'offset']);
 
-        $result = $this->service->listOrders(
-            $request->user()->account_id,
-            $filters
-        );
+        $result = $this->service->listOrders($accountId, $filters);
 
         return response()->json([
             'success' => true,
-            'data'    => $result['orders'],
-            'meta'    => [
-                'total'  => $result['total'],
-                'limit'  => $result['limit'],
+            'data' => $result['orders'],
+            'meta' => [
+                'total' => $result['total'],
+                'limit' => $result['limit'],
                 'offset' => $result['offset'],
             ],
         ]);
     }
 
-    /**
-     * GET /api/v1/orders/stats
-     */
     public function stats(Request $request): JsonResponse
     {
-        $stats = $this->service->getOrderStats(
-            $request->user()->account_id,
-            $request->query('store_id')
-        );
+        $accountId = $this->currentAccountId();
+        $this->authorize('viewAny', Order::class);
+
+        $stats = $this->service->getOrderStats($accountId, $request->query('store_id'));
 
         return response()->json(['success' => true, 'data' => $stats]);
     }
 
-    /**
-     * GET /api/v1/orders/{id}
-     */
-    public function show(Request $request, string $id): JsonResponse
+    public function show(Request $request, string $orderId): JsonResponse
     {
-        $order = $this->service->getOrder(
-            $request->user()->account_id, $id
-        );
+        $accountId = $this->currentAccountId();
+        $order = $this->findOrderForCurrentTenant($orderId);
+
+        $this->authorize('view', $order);
+
+        $order = $this->service->getOrder($accountId, $orderId);
 
         return response()->json(['success' => true, 'data' => $order]);
     }
 
-    /**
-     * POST /api/v1/orders (manual creation)
-     */
     public function store(Request $request): JsonResponse
     {
+        $accountId = $this->currentAccountId();
+
         $request->validate([
-            'store_id'               => 'required|uuid',
-            'customer_name'          => 'required|string|max:200',
-            'customer_email'         => 'sometimes|email|max:255',
-            'customer_phone'         => 'sometimes|string|max:30',
-            'shipping_name'          => 'sometimes|string|max:200',
-            'shipping_phone'         => 'sometimes|string|max:30',
+            'store_id' => 'required|uuid',
+            'customer_name' => 'required|string|max:200',
+            'customer_email' => 'sometimes|email|max:255',
+            'customer_phone' => 'sometimes|string|max:30',
+            'shipping_name' => 'sometimes|string|max:200',
+            'shipping_phone' => 'sometimes|string|max:30',
             'shipping_address_line_1' => 'required|string|max:300',
-            'shipping_city'          => 'required|string|max:100',
-            'shipping_country'       => 'required|string|size:2',
-            'shipping_postal_code'   => 'sometimes|string|max:20',
-            'items'                  => 'required|array|min:1',
-            'items.*.name'           => 'required|string|max:300',
-            'items.*.quantity'       => 'required|integer|min:1',
-            'items.*.unit_price'     => 'required|numeric|min:0',
-            'items.*.weight'         => 'sometimes|numeric|min:0',
-            'items.*.sku'            => 'sometimes|string|max:100',
-            'currency'               => 'sometimes|string|size:3',
+            'shipping_city' => 'required|string|max:100',
+            'shipping_country' => 'required|string|size:2',
+            'shipping_postal_code' => 'sometimes|string|max:20',
+            'items' => 'required|array|min:1',
+            'items.*.name' => 'required|string|max:300',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.unit_price' => 'required|numeric|min:0',
+            'items.*.weight' => 'sometimes|numeric|min:0',
+            'items.*.sku' => 'sometimes|string|max:100',
+            'currency' => 'sometimes|string|size:3',
         ]);
 
+        $this->authorize('create', Order::class);
+
         $order = $this->service->createManualOrder(
-            $request->user()->account_id,
+            $accountId,
             $request->store_id,
             $request->all(),
             $request->user()
@@ -104,24 +92,26 @@ class OrderController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'تم إنشاء الطلب بنجاح.',
-            'data'    => $order,
+            'message' => 'Order created successfully.',
+            'data' => $order,
         ], 201);
     }
 
-    /**
-     * PUT /api/v1/orders/{id}/status
-     */
-    public function updateStatus(Request $request, string $id): JsonResponse
+    public function updateStatus(Request $request, string $orderId): JsonResponse
     {
+        $accountId = $this->currentAccountId();
+
         $request->validate([
             'status' => 'required|in:pending,ready,processing,shipped,delivered,cancelled,on_hold,failed',
             'reason' => 'sometimes|string|max:500',
         ]);
 
+        $order = $this->findOrderForCurrentTenant($orderId);
+        $this->authorize('updateStatus', $order);
+
         $order = $this->service->updateOrderStatus(
-            $request->user()->account_id,
-            $id,
+            $accountId,
+            $orderId,
             $request->status,
             $request->user(),
             $request->reason
@@ -129,41 +119,38 @@ class OrderController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'تم تحديث حالة الطلب.',
-            'data'    => $order,
+            'message' => 'Order status updated.',
+            'data' => $order,
         ]);
     }
 
-    /**
-     * POST /api/v1/orders/{id}/cancel
-     */
-    public function cancel(Request $request, string $id): JsonResponse
+    public function cancel(Request $request, string $orderId): JsonResponse
     {
+        $accountId = $this->currentAccountId();
+
         $request->validate(['reason' => 'sometimes|string|max:500']);
 
+        $order = $this->findOrderForCurrentTenant($orderId);
+        $this->authorize('cancel', $order);
+
         $order = $this->service->cancelOrder(
-            $request->user()->account_id,
-            $id,
+            $accountId,
+            $orderId,
             $request->user(),
             $request->reason
         );
 
         return response()->json([
             'success' => true,
-            'message' => 'تم إلغاء الطلب.',
-            'data'    => $order,
+            'message' => 'Order cancelled.',
+            'data' => $order,
         ]);
     }
 
-    // ─── Store Connection & Sync ─────────────────────────────────
-
-    /**
-     * POST /api/v1/stores/{id}/test-connection
-     */
-    public function testConnection(Request $request, string $id): JsonResponse
+    public function testConnection(Request $request, string $storeId): JsonResponse
     {
-        $store = Store::where('id', $id)
-            ->where('account_id', $request->user()->account_id)
+        $store = Store::where('id', $storeId)
+            ->where('account_id', $this->currentAccountId())
             ->firstOrFail();
 
         $result = $this->service->testStoreConnection($store, $request->user());
@@ -171,13 +158,10 @@ class OrderController extends Controller
         return response()->json(['success' => true, 'data' => $result]);
     }
 
-    /**
-     * POST /api/v1/stores/{id}/register-webhooks
-     */
-    public function registerWebhooks(Request $request, string $id): JsonResponse
+    public function registerWebhooks(Request $request, string $storeId): JsonResponse
     {
-        $store = Store::where('id', $id)
-            ->where('account_id', $request->user()->account_id)
+        $store = Store::where('id', $storeId)
+            ->where('account_id', $this->currentAccountId())
             ->firstOrFail();
 
         $result = $this->service->registerWebhooks($store, $request->user());
@@ -185,21 +169,39 @@ class OrderController extends Controller
         return response()->json(['success' => true, 'data' => $result]);
     }
 
-    /**
-     * POST /api/v1/stores/{id}/sync
-     */
-    public function syncStore(Request $request, string $id): JsonResponse
+    public function syncStore(Request $request, string $storeId): JsonResponse
     {
-        $store = Store::where('id', $id)
-            ->where('account_id', $request->user()->account_id)
+        $store = Store::where('id', $storeId)
+            ->where('account_id', $this->currentAccountId())
             ->firstOrFail();
 
         $syncLog = $this->service->syncStore($store, $request->user(), $request->all());
 
         return response()->json([
             'success' => true,
-            'message' => 'تمت المزامنة.',
-            'data'    => $syncLog,
+            'message' => 'Sync completed.',
+            'data' => $syncLog,
         ]);
+    }
+
+    private function currentAccountId(): string
+    {
+        $accountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($accountId !== '') {
+            return $accountId;
+        }
+
+        return trim((string) request()->user()?->account_id);
+    }
+
+    private function findOrderForCurrentTenant(string $orderId): Order
+    {
+        return Order::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $orderId)
+            ->firstOrFail();
     }
 }

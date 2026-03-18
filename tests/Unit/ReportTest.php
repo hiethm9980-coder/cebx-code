@@ -51,7 +51,7 @@ class ReportTest extends TestCase
     // FR-RPT-001: Shipment Dashboard (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_shipment_dashboard_returns_totals(): void
     {
         $this->seedShipments(10);
@@ -63,7 +63,7 @@ class ReportTest extends TestCase
         $this->assertArrayHasKey('by_service', $dashboard);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dashboard_with_date_filter(): void
     {
         Shipment::factory()->create(['account_id' => $this->account->id, 'created_at' => now()->subDays(5)]);
@@ -77,7 +77,7 @@ class ReportTest extends TestCase
         $this->assertEquals(1, $dashboard['total_shipments']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dashboard_delivery_rate(): void
     {
         Shipment::factory()->count(3)->create(['account_id' => $this->account->id, 'status' => 'delivered']);
@@ -87,7 +87,7 @@ class ReportTest extends TestCase
         $this->assertEquals(60.00, $dashboard['delivery_rate']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dashboard_by_store_filter(): void
     {
         Shipment::factory()->count(3)->create(['account_id' => $this->account->id, 'store_id' => 'store-A']);
@@ -97,7 +97,7 @@ class ReportTest extends TestCase
         $this->assertEquals(3, $dashboard['total_shipments']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_empty_dashboard(): void
     {
         $dashboard = $this->service->shipmentDashboard($this->account);
@@ -109,7 +109,7 @@ class ReportTest extends TestCase
     // FR-RPT-002: Profit Report (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_profit_report_structure(): void
     {
         $this->seedShipments(3);
@@ -121,7 +121,7 @@ class ReportTest extends TestCase
         $this->assertArrayHasKey('total_profit', $report['totals']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_profit_report_count(): void
     {
         $this->seedShipments(5);
@@ -129,7 +129,7 @@ class ReportTest extends TestCase
         $this->assertEquals(5, $report['totals']['shipment_count']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_profit_report_filtered(): void
     {
         Shipment::factory()->create(['account_id' => $this->account->id, 'carrier_code' => 'DHL']);
@@ -143,7 +143,7 @@ class ReportTest extends TestCase
     // FR-RPT-003: Export (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_csv_export(): void
     {
         $this->seedShipments(3);
@@ -153,14 +153,14 @@ class ReportTest extends TestCase
         $this->assertNotNull($export->file_path);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_excel_export(): void
     {
         $export = $this->service->createExport($this->account, $this->owner, 'shipment_summary', 'excel');
         $this->assertEquals('excel', $export->format);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_export_with_filters(): void
     {
         $export = $this->service->createExport(
@@ -170,7 +170,7 @@ class ReportTest extends TestCase
         $this->assertEquals(['date_from' => '2026-01-01', 'date_to' => '2026-01-31'], $export->filters);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_exports(): void
     {
         ReportExport::factory()->count(3)->create(['account_id' => $this->account->id, 'user_id' => $this->owner->id]);
@@ -182,7 +182,7 @@ class ReportTest extends TestCase
     // FR-RPT-004: Exception Reports (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exception_report_structure(): void
     {
         $report = $this->service->exceptionReport($this->account);
@@ -192,7 +192,7 @@ class ReportTest extends TestCase
         $this->assertArrayHasKey('by_carrier', $report);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exception_rate_calculation(): void
     {
         $this->seedShipments(10);
@@ -202,7 +202,7 @@ class ReportTest extends TestCase
         $this->assertEquals(10, $report['total_shipments']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exception_report_with_date_filter(): void
     {
         $report = $this->service->exceptionReport($this->account, [
@@ -215,7 +215,7 @@ class ReportTest extends TestCase
     // FR-RPT-005: Operational vs Financial (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_operational_report_no_profit(): void
     {
         $report = $this->service->operationalReport($this->account);
@@ -225,7 +225,7 @@ class ReportTest extends TestCase
         $this->assertArrayNotHasKey('profit_loss', $report);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_financial_report_has_profit(): void
     {
         $report = $this->service->financialReport($this->account);
@@ -234,7 +234,7 @@ class ReportTest extends TestCase
         $this->assertArrayHasKey('revenue', $report);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_reports_separated(): void
     {
         $ops = $this->service->operationalReport($this->account);
@@ -247,7 +247,7 @@ class ReportTest extends TestCase
     // FR-RPT-006: Filter & Group (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_group_by_day(): void
     {
         $this->seedShipments(5);
@@ -255,7 +255,7 @@ class ReportTest extends TestCase
         $this->assertIsArray($data);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_group_by_month(): void
     {
         $this->seedShipments(5);
@@ -263,7 +263,7 @@ class ReportTest extends TestCase
         $this->assertIsArray($data);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_group_with_filter(): void
     {
         $this->seedShipments(3);
@@ -275,7 +275,7 @@ class ReportTest extends TestCase
     // FR-RPT-007: Charts & Analytics (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_carrier_performance(): void
     {
         $this->seedShipments(5);
@@ -283,7 +283,7 @@ class ReportTest extends TestCase
         $this->assertIsArray($data);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_store_performance(): void
     {
         $this->seedShipments(5);
@@ -291,7 +291,7 @@ class ReportTest extends TestCase
         $this->assertIsArray($data);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_revenue_by_period(): void
     {
         PaymentTransaction::factory()->create([
@@ -306,7 +306,7 @@ class ReportTest extends TestCase
     // FR-RPT-008: Scheduled Reports (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_scheduled_report(): void
     {
         $schedule = $this->service->createScheduledReport($this->account, $this->owner, [
@@ -317,7 +317,7 @@ class ReportTest extends TestCase
         $this->assertNotNull($schedule->next_send_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_schedule(): void
     {
         $schedule = ScheduledReport::factory()->create([
@@ -327,7 +327,7 @@ class ReportTest extends TestCase
         $this->assertFalse($schedule->fresh()->is_active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_scheduled_report_is_due(): void
     {
         $due = ScheduledReport::factory()->due()->make();
@@ -337,7 +337,7 @@ class ReportTest extends TestCase
         $this->assertFalse($notDue->isDue());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_process_scheduled_reports(): void
     {
         ScheduledReport::factory()->due()->create([
@@ -351,7 +351,7 @@ class ReportTest extends TestCase
     // FR-RPT-009: Wallet Report (2 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_report_structure(): void
     {
         $report = $this->service->walletReport($this->account);
@@ -361,7 +361,7 @@ class ReportTest extends TestCase
         $this->assertArrayHasKey('net_balance', $report);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_report_with_data(): void
     {
         PaymentTransaction::factory()->create([
@@ -376,7 +376,7 @@ class ReportTest extends TestCase
     // FR-RPT-010: Reports API (2 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_generic_report_api(): void
     {
         $this->seedShipments(3);
@@ -384,7 +384,7 @@ class ReportTest extends TestCase
         $this->assertArrayHasKey('total_shipments', $data);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_invalid_report_type_throws(): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -395,7 +395,7 @@ class ReportTest extends TestCase
     // Saved Reports (2 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_save_report(): void
     {
         $report = $this->service->saveReport($this->account, $this->owner, [
@@ -404,7 +404,7 @@ class ReportTest extends TestCase
         $this->assertEquals('My Report', $report->name);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_saved_reports(): void
     {
         SavedReport::factory()->count(2)->create([

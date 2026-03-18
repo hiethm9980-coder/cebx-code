@@ -28,7 +28,7 @@ class AccountTypeTest extends TestCase
 
     // ─── AC: نجاح — إنشاء حساب منظمة ────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function organization_account_auto_creates_organization_profile(): void
     {
         $result = $this->accountService->createAccount([
@@ -46,7 +46,7 @@ class AccountTypeTest extends TestCase
         $this->assertEquals('شركة التوصيل السريع', $account->organizationProfile->legal_name);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function organization_account_starts_with_kyc_unverified(): void
     {
         $result = $this->accountService->createAccount([
@@ -64,7 +64,7 @@ class AccountTypeTest extends TestCase
         $this->assertEquals('organization', $account->kycVerification->verification_type);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function organization_kyc_has_required_documents_list(): void
     {
         $result = $this->accountService->createAccount([
@@ -83,7 +83,7 @@ class AccountTypeTest extends TestCase
 
     // ─── إنشاء حساب فردي ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function individual_account_does_not_create_organization_profile(): void
     {
         $result = $this->accountService->createAccount([
@@ -100,7 +100,7 @@ class AccountTypeTest extends TestCase
         $this->assertNull($account->organizationProfile);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function individual_account_has_kyc_with_individual_docs(): void
     {
         $result = $this->accountService->createAccount([
@@ -117,7 +117,7 @@ class AccountTypeTest extends TestCase
         $this->assertArrayHasKey('national_id', $kyc->required_documents);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function default_account_type_is_individual(): void
     {
         $result = $this->accountService->createAccount([
@@ -132,7 +132,7 @@ class AccountTypeTest extends TestCase
 
     // ─── تحديث ملف المنظمة ───────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_update_organization_profile(): void
     {
         $result = $this->accountService->createAccount([
@@ -158,7 +158,7 @@ class AccountTypeTest extends TestCase
         $this->assertEquals('SA', $profile->country);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_update_org_profile_on_individual_account(): void
     {
         $result = $this->accountService->createAccount([
@@ -180,7 +180,7 @@ class AccountTypeTest extends TestCase
 
     // ─── AC: حالة حدية — تغيير نوع الحساب ────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_change_type_before_active_usage(): void
     {
         $result = $this->accountService->createAccount([
@@ -201,7 +201,7 @@ class AccountTypeTest extends TestCase
         $this->assertNotNull($account->organizationProfile);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function type_change_to_org_creates_profile_and_resets_kyc(): void
     {
         $result = $this->accountService->createAccount([
@@ -224,7 +224,7 @@ class AccountTypeTest extends TestCase
         $this->assertEquals('organization', $account->kycVerification->verification_type);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_change_type_after_active_usage(): void
     {
         $result = $this->accountService->createAccount([
@@ -253,7 +253,7 @@ class AccountTypeTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function type_change_blocked_returns_correct_error_code(): void
     {
         $result = $this->accountService->createAccount([
@@ -282,7 +282,7 @@ class AccountTypeTest extends TestCase
         }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_change_to_same_type(): void
     {
         $result = $this->accountService->createAccount([
@@ -302,7 +302,7 @@ class AccountTypeTest extends TestCase
 
     // ─── AC: فشل شائع — وثائق ناقصة ─────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function submitting_kyc_with_missing_documents_fails(): void
     {
         $result = $this->accountService->createAccount([
@@ -323,7 +323,7 @@ class AccountTypeTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function submitting_all_kyc_documents_sets_status_pending(): void
     {
         $result = $this->accountService->createAccount([
@@ -352,7 +352,7 @@ class AccountTypeTest extends TestCase
 
     // ─── Audit Logging ───────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function type_change_is_logged(): void
     {
         $result = $this->accountService->createAccount([
@@ -373,7 +373,7 @@ class AccountTypeTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function kyc_submission_is_logged(): void
     {
         $result = $this->accountService->createAccount([

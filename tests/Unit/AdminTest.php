@@ -35,14 +35,14 @@ class AdminTest extends TestCase
         $this->service = $this->app->make(AdminService::class);
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id, 'slug' => 'admin']);
-        $this->admin = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->admin = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
     // ═══════════════════════════════════════════════════════════
     // FR-ADM-001: System Settings (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_set_and_get_setting(): void
     {
         $this->service->updateSetting('carrier', 'dhl_sandbox', 'true', 'boolean');
@@ -50,7 +50,7 @@ class AdminTest extends TestCase
         $this->assertTrue($val);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_encrypted_setting(): void
     {
         SystemSetting::setValue('carrier', 'dhl_api_key', 'secret123', 'encrypted');
@@ -59,7 +59,7 @@ class AdminTest extends TestCase
         $this->assertEquals('secret123', $setting->getTypedValue());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_json_setting(): void
     {
         SystemSetting::setValue('platform', 'languages', ['ar', 'en'], 'json');
@@ -67,7 +67,7 @@ class AdminTest extends TestCase
         $this->assertEquals(['ar', 'en'], $val);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_settings_by_group(): void
     {
         SystemSetting::setValue('carrier', 'key1', 'val1');
@@ -78,7 +78,7 @@ class AdminTest extends TestCase
         $this->assertCount(2, $settings);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_carrier_connection_test(): void
     {
         $result = $this->service->testCarrierConnection('dhl');
@@ -90,7 +90,7 @@ class AdminTest extends TestCase
     // FR-ADM-002/006: Health Monitoring (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_record_health_check(): void
     {
         $log = $this->service->recordHealthCheck('dhl_api', 'healthy', 150);
@@ -98,14 +98,14 @@ class AdminTest extends TestCase
         $this->assertEquals(150, $log->response_time_ms);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_degraded_status(): void
     {
         $log = IntegrationHealthLog::recordCheck('aramex_api', 'degraded', 3000, 'Slow response');
         $this->assertFalse($log->isHealthy());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_integration_health(): void
     {
         IntegrationHealthLog::recordCheck('dhl_api', 'healthy', 100);
@@ -115,7 +115,7 @@ class AdminTest extends TestCase
         $this->assertCount(2, $logs);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_system_health_dashboard(): void
     {
         IntegrationHealthLog::recordCheck('dhl_api', 'healthy', 100);
@@ -125,7 +125,7 @@ class AdminTest extends TestCase
         $this->assertArrayHasKey('services', $dashboard);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_down_service_degrades_overall(): void
     {
         IntegrationHealthLog::recordCheck('dhl_api', 'down', 0, 'Connection refused');
@@ -137,25 +137,29 @@ class AdminTest extends TestCase
     // FR-ADM-003: User Management (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_platform_users(): void
     {
         $users = $this->service->listPlatformUsers();
         $this->assertGreaterThanOrEqual(1, $users->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_suspend_user(): void
     {
-        $user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $userRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $user = $this->createUserWithRole((string) $this->account->id, (string) $userRole->id);
         $suspended = $this->service->suspendUser($user->id, 'Policy violation');
         $this->assertEquals('suspended', $suspended->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_activate_user(): void
     {
-        $user = User::factory()->create(['account_id' => $this->account->id, 'status' => 'suspended', 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $userRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $user = $this->createUserWithRole((string) $this->account->id, (string) $userRole->id, [
+            'status' => 'suspended',
+        ]);
         $activated = $this->service->activateUser($user->id);
         $this->assertEquals('active', $activated->status);
     }
@@ -164,14 +168,14 @@ class AdminTest extends TestCase
     // FR-ADM-005: Tax Rules (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_tax_rule(): void
     {
         $rule = $this->service->createTaxRule(['name' => 'UAE VAT', 'country_code' => 'AE', 'rate' => 5.00]);
         $this->assertEquals(5.00, $rule->rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_tax_rate_for_country(): void
     {
         TaxRule::factory()->create(['country_code' => 'SA', 'rate' => 15.00]);
@@ -179,7 +183,7 @@ class AdminTest extends TestCase
         $this->assertEquals(15.00, $rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_tax_rules_for_country(): void
     {
         TaxRule::factory()->create(['country_code' => 'SA']);
@@ -192,7 +196,7 @@ class AdminTest extends TestCase
     // FR-ADM-006: Role Templates (2 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_role_template(): void
     {
         $tpl = $this->service->createRoleTemplate([
@@ -202,7 +206,7 @@ class AdminTest extends TestCase
         $this->assertEquals(['invoices.view', 'transactions.view'], $tpl->permissions);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_role_templates(): void
     {
         RoleTemplate::create(['name' => 'T1', 'slug' => 't1', 'permissions' => ['a']]);
@@ -214,7 +218,7 @@ class AdminTest extends TestCase
     // FR-ADM-008: Support Tickets (8 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_ticket(): void
     {
         $ticket = $this->service->createTicket($this->account, $this->admin, [
@@ -224,7 +228,7 @@ class AdminTest extends TestCase
         $this->assertNotNull($ticket->ticket_number);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_reply_to_ticket(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -232,7 +236,7 @@ class AdminTest extends TestCase
         $this->assertEquals('Here is my response', $reply->body);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_assign_ticket(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -240,7 +244,7 @@ class AdminTest extends TestCase
         $this->assertEquals(SupportTicket::STATUS_IN_PROGRESS, $assigned->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_resolve_ticket(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -249,7 +253,7 @@ class AdminTest extends TestCase
         $this->assertNotNull($resolved->resolved_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_close_ticket(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -257,7 +261,7 @@ class AdminTest extends TestCase
         $this->assertEquals(SupportTicket::STATUS_CLOSED, $ticket->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_tickets_filtered(): void
     {
         SupportTicket::factory()->count(3)->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id, 'priority' => 'high']);
@@ -267,7 +271,7 @@ class AdminTest extends TestCase
         $this->assertEquals(3, $tickets->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_ticket_with_replies(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -278,7 +282,7 @@ class AdminTest extends TestCase
         $this->assertCount(2, $loaded->replies);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_internal_note(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -290,7 +294,7 @@ class AdminTest extends TestCase
     // FR-ADM-009: API Keys (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_api_key(): void
     {
         $result = $this->service->createApiKey($this->account, $this->admin, 'Test Key', ['shipments:read']);
@@ -298,7 +302,7 @@ class AdminTest extends TestCase
         $this->assertTrue(str_starts_with($result['raw_key'], 'sgw_'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_find_by_raw_key(): void
     {
         $result = $this->service->createApiKey($this->account, $this->admin, 'Lookup Test');
@@ -307,7 +311,7 @@ class AdminTest extends TestCase
         $this->assertEquals($result['api_key']->id, $found->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_revoke_api_key(): void
     {
         $result = $this->service->createApiKey($this->account, $this->admin, 'Revoke Test');
@@ -315,7 +319,7 @@ class AdminTest extends TestCase
         $this->assertFalse($result['api_key']->fresh()->is_active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rotate_api_key(): void
     {
         $old = $this->service->createApiKey($this->account, $this->admin, 'Rotate Test');
@@ -325,7 +329,7 @@ class AdminTest extends TestCase
         $this->assertTrue($new['api_key']->is_active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_key_scope_check(): void
     {
         $key = ApiKey::factory()->create([
@@ -340,7 +344,7 @@ class AdminTest extends TestCase
     // FR-ADM-010: Feature Flags (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_feature_flag(): void
     {
         $flag = $this->service->createFeatureFlag([
@@ -349,7 +353,7 @@ class AdminTest extends TestCase
         $this->assertFalse($flag->is_enabled);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_toggle_feature_flag(): void
     {
         $flag = FeatureFlag::factory()->create();
@@ -357,21 +361,21 @@ class AdminTest extends TestCase
         $this->assertTrue($toggled->is_enabled);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_feature_enabled_check(): void
     {
         FeatureFlag::factory()->enabled()->create(['key' => 'test_feature']);
         $this->assertTrue($this->service->isFeatureEnabled('test_feature'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_disabled_feature(): void
     {
         FeatureFlag::factory()->create(['key' => 'disabled_feature', 'is_enabled' => false]);
         $this->assertFalse($this->service->isFeatureEnabled('disabled_feature'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rollout_percentage(): void
     {
         $flag = FeatureFlag::factory()->create(['key' => 'gradual', 'is_enabled' => true, 'rollout_percentage' => 50]);

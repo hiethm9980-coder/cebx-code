@@ -7,6 +7,7 @@ use App\Models\Shipment;
 use App\Services\TrackingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * TrackingController — FR-TR-001→007
@@ -60,6 +61,36 @@ class TrackingController extends Controller
         return response()->json([
             'status' => 'success',
             'data'   => $this->trackingService->getTimeline($shipment),
+        ]);
+    }
+
+    public function events(Request $request, string $shipmentId): JsonResponse
+    {
+        $user = $request->user();
+        $shipment = Shipment::where('id', $shipmentId)
+            ->where('account_id', $user->account_id)
+            ->firstOrFail();
+
+        $this->authorize('view', $shipment);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $this->trackingService->getEvents($shipment),
+        ]);
+    }
+
+    public function status(Request $request, string $shipmentId): JsonResponse
+    {
+        $user = $request->user();
+        $shipment = Shipment::where('id', $shipmentId)
+            ->where('account_id', $user->account_id)
+            ->firstOrFail();
+
+        $this->authorize('view', $shipment);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $this->trackingService->getCurrentStatus($shipment),
         ]);
     }
 
@@ -248,12 +279,37 @@ class TrackingController extends Controller
      */
     public function apiTrack(Request $request, string $trackingNumber): JsonResponse
     {
-        $shipment = Shipment::where('tracking_number', $trackingNumber)->firstOrFail();
+        $trackingColumn = $this->resolvePublicTrackingColumn();
+        if ($trackingColumn === null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tracking is currently unavailable',
+            ], 404);
+        }
+
+        $shipment = Shipment::where($trackingColumn, $trackingNumber)->first();
+        if (!$shipment) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Shipment not found',
+            ], 404);
+        }
 
         // API key auth checked via middleware
         return response()->json([
             'status' => 'success',
             'data'   => $this->trackingService->getTimeline($shipment),
         ]);
+    }
+
+    private function resolvePublicTrackingColumn(): ?string
+    {
+        foreach (['tracking_number', 'carrier_tracking_number', 'reference_number'] as $column) {
+            if (Schema::hasColumn('shipments', $column)) {
+                return $column;
+            }
+        }
+
+        return null;
     }
 }

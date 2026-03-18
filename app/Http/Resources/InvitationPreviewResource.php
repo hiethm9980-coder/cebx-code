@@ -18,8 +18,8 @@ class InvitationPreviewResource extends JsonResource
             'name'         => $this->name,
             'status'       => $this->status,
             'is_usable'    => $this->isUsable(),
-            'account_name' => $this->whenLoaded('account', fn () => $this->account->name),
-            'role_name'    => $this->whenLoaded('role', fn () => $this->role?->display_name),
+            'account_name' => $this->account?->name,
+            'role_name'    => $this->resolvedRole()?->display_name ?? $this->role_name,
             'expires_at'   => $this->expires_at?->toISOString(),
         ];
     }

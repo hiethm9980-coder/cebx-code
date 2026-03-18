@@ -1,17 +1,26 @@
 <?php
+
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Intelligence;
+use App\Models\Shipment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class IntelligenceController extends Controller
 {
-    // ── Analytics Snapshots ──────────────────────────────────
     public function snapshots(Request $request): JsonResponse
     {
-        $query = DB::table('analytics_snapshots')->where('account_id', $request->user()->account_id);
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
+        $query = DB::table('analytics_snapshots')->where('account_id', $accountId);
         if ($request->filled('metric_type')) $query->where('metric_type', $request->metric_type);
         if ($request->filled('dimension')) $query->where('dimension', $request->dimension);
         if ($request->filled('period_type')) $query->where('period_type', $request->period_type);
@@ -22,7 +31,13 @@ class IntelligenceController extends Controller
 
     public function routeProfitability(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $data = DB::table('analytics_snapshots')
             ->where('account_id', $accountId)->where('metric_type', 'route_profitability')
             ->where('period_type', $request->period_type ?? 'monthly')
@@ -30,10 +45,16 @@ class IntelligenceController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    // ── SLA Metrics ─────────────────────────────────────────
     public function slaMetrics(Request $request): JsonResponse
     {
-        $query = DB::table('sla_metrics')->where('account_id', $request->user()->account_id);
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
+        $query = DB::table('sla_metrics')->where('account_id', $accountId);
         if ($request->filled('sla_type')) $query->where('sla_type', $request->sla_type);
         if ($request->filled('breached')) $query->where('breached', $request->boolean('breached'));
         if ($request->filled('region')) $query->where('region', $request->region);
@@ -43,7 +64,13 @@ class IntelligenceController extends Controller
 
     public function slaDashboard(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $base = DB::table('sla_metrics')->where('account_id', $accountId);
         $total = (clone $base)->count();
         $breached = (clone $base)->where('breached', true)->count();
@@ -66,12 +93,18 @@ class IntelligenceController extends Controller
         ]]);
     }
 
-    // ── Customer Lifetime Value ──────────────────────────────
     public function clv(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $query = DB::table('customer_lifetime_values as clv')
             ->leftJoin('users as u', 'clv.customer_id', '=', 'u.id')
-            ->where('clv.account_id', $request->user()->account_id)
+            ->where('clv.account_id', $accountId)
             ->select('clv.*', 'u.name as customer_name', 'u.email');
         if ($request->filled('segment')) $query->where('clv.segment', $request->segment);
         if ($request->filled('min_value')) $query->where('clv.lifetime_value', '>=', $request->min_value);
@@ -80,7 +113,13 @@ class IntelligenceController extends Controller
 
     public function clvSummary(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $base = DB::table('customer_lifetime_values')->where('account_id', $accountId);
         return response()->json(['data' => [
             'total_customers' => (clone $base)->count(),
@@ -93,10 +132,16 @@ class IntelligenceController extends Controller
         ]]);
     }
 
-    // ── Delay Predictions ────────────────────────────────────
     public function delayPredictions(Request $request): JsonResponse
     {
-        $query = DB::table('delay_predictions')->where('account_id', $request->user()->account_id);
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
+        $query = DB::table('delay_predictions')->where('account_id', $accountId);
         if ($request->filled('shipment_id')) $query->where('shipment_id', $request->shipment_id);
         if ($request->filled('min_probability')) $query->where('delay_probability', '>=', $request->min_probability);
         return response()->json($query->orderByDesc('created_at')->paginate($request->per_page ?? 25));
@@ -104,31 +149,35 @@ class IntelligenceController extends Controller
 
     public function predictDelay(Request $request): JsonResponse
     {
-        $data = $request->validate(['shipment_id' => 'required|uuid']);
-        $accountId = $request->user()->account_id;
+        $this->authorize('manage', Intelligence::class);
 
-        // Simulated ML prediction — in production, call ML service
+        $data = $request->validate(['shipment_id' => 'required|uuid']);
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $factors = [];
         $probability = 0.0;
 
-        // Check carrier history
-        $shipment = DB::table('shipments')->where('id', $data['shipment_id'])->first();
-        if ($shipment) {
-            $carrierDelays = DB::table('sla_metrics')->where('account_id', $accountId)
-                ->where('carrier_code', $shipment->carrier_code ?? '')->where('breached', true)->count();
-            $carrierTotal = DB::table('sla_metrics')->where('account_id', $accountId)
-                ->where('carrier_code', $shipment->carrier_code ?? '')->count();
-            if ($carrierTotal > 0) {
-                $carrierRisk = $carrierDelays / $carrierTotal;
-                $probability += $carrierRisk * 0.4;
-                if ($carrierRisk > 0.2) $factors[] = ['factor' => 'carrier_history', 'weight' => round($carrierRisk, 3), 'description' => 'Carrier has elevated delay rate'];
-            }
-            // Route risk
-            $factors[] = ['factor' => 'route_complexity', 'weight' => rand(5, 25) / 100, 'description' => 'Route complexity assessment'];
-            $probability += rand(5, 20) / 100;
-            // Season/weather
-            $factors[] = ['factor' => 'seasonal', 'weight' => rand(1, 15) / 100, 'description' => 'Seasonal demand factor'];
+        $shipment = Shipment::query()
+            ->where('account_id', $accountId)
+            ->where('id', $data['shipment_id'])
+            ->firstOrFail();
+
+        $carrierDelays = DB::table('sla_metrics')->where('account_id', $accountId)
+            ->where('carrier_code', $shipment->carrier_code ?? '')->where('breached', true)->count();
+        $carrierTotal = DB::table('sla_metrics')->where('account_id', $accountId)
+            ->where('carrier_code', $shipment->carrier_code ?? '')->count();
+        if ($carrierTotal > 0) {
+            $carrierRisk = $carrierDelays / $carrierTotal;
+            $probability += $carrierRisk * 0.4;
+            if ($carrierRisk > 0.2) $factors[] = ['factor' => 'carrier_history', 'weight' => round($carrierRisk, 3), 'description' => 'Carrier has elevated delay rate'];
         }
+
+        $factors[] = ['factor' => 'route_complexity', 'weight' => rand(5, 25) / 100, 'description' => 'Route complexity assessment'];
+        $probability += rand(5, 20) / 100;
+        $factors[] = ['factor' => 'seasonal', 'weight' => rand(1, 15) / 100, 'description' => 'Seasonal demand factor'];
 
         $probability = min(round($probability, 4), 0.95);
         $predictedHours = $probability > 0.3 ? rand(2, 48) : 0;
@@ -144,10 +193,16 @@ class IntelligenceController extends Controller
         return response()->json(['data' => array_merge($prediction, ['risk_factors' => $factors, 'risk_level' => $probability > 0.6 ? 'high' : ($probability > 0.3 ? 'medium' : 'low')])]);
     }
 
-    // ── Fraud Detection ──────────────────────────────────────
     public function fraudSignals(Request $request): JsonResponse
     {
-        $query = DB::table('fraud_signals')->where('account_id', $request->user()->account_id);
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
+        $query = DB::table('fraud_signals')->where('account_id', $accountId);
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('entity_type')) $query->where('entity_type', $request->entity_type);
         if ($request->filled('min_confidence')) $query->where('confidence', '>=', $request->min_confidence);
@@ -156,15 +211,38 @@ class IntelligenceController extends Controller
 
     public function reviewFraud(Request $request, string $id): JsonResponse
     {
+        $this->authorize('manage', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $data = $request->validate(['status' => 'required|in:investigating,confirmed,dismissed']);
-        DB::table('fraud_signals')->where('account_id', $request->user()->account_id)->where('id', $id)
+
+        $signal = DB::table('fraud_signals')
+            ->where('account_id', $accountId)
+            ->where('id', $id)
+            ->first();
+
+        if ($signal === null) {
+            abort(404);
+        }
+
+        DB::table('fraud_signals')->where('account_id', $accountId)->where('id', $id)
             ->update(['status' => $data['status'], 'reviewed_by' => $request->user()->id, 'updated_at' => now()]);
         return response()->json(['data' => ['id' => $id, 'status' => $data['status']]]);
     }
 
     public function fraudDashboard(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $base = DB::table('fraud_signals')->where('account_id', $accountId);
         return response()->json(['data' => [
             'total' => (clone $base)->count(),
@@ -180,10 +258,15 @@ class IntelligenceController extends Controller
         ]]);
     }
 
-    // ── Branch Performance ───────────────────────────────────
     public function branchComparison(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $branches = DB::table('branch_pnl as bp')
             ->leftJoin('branches as b', 'bp.branch_id', '=', 'b.id')
             ->where('bp.account_id', $accountId)
@@ -195,10 +278,14 @@ class IntelligenceController extends Controller
         return response()->json(['data' => $branches]);
     }
 
-    // ── Master Dashboard ─────────────────────────────────────
     public function dashboard(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Intelligence::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
 
         $slaBase = DB::table('sla_metrics')->where('account_id', $accountId);
         $slaTotal = (clone $slaBase)->count();
@@ -218,5 +305,20 @@ class IntelligenceController extends Controller
             'high_delay_risk' => (clone $delayBase)->where('delay_probability', '>', 0.6)->count(),
             'avg_delay_probability' => round((clone $delayBase)->avg('delay_probability') ?? 0, 3),
         ]]);
+    }
+
+    private function resolveCurrentAccountId(Request $request): ?string
+    {
+        $accountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($accountId !== '') {
+            return $accountId;
+        }
+
+        $fallback = trim((string) ($request->user()?->account_id ?? ''));
+
+        return $fallback === '' ? null : $fallback;
     }
 }

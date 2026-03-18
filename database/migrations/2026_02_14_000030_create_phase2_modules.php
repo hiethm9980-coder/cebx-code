@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -55,6 +56,7 @@ return new class extends Migration
         // ══════════════════════════════════════════════════════════════
         if (! Schema::hasTable('branches')) {
             Schema::create('branches', function (Blueprint $t) {
+                $t->engine = 'InnoDB';
                 $t->uuid('id')->primary();
                 $t->uuid('account_id');
                 $t->uuid('company_id');
@@ -84,11 +86,19 @@ return new class extends Migration
             });
         }
 
+        $this->ensureInnoDbTable('branches');
+        $branchIdType = $this->resolveBranchIdType();
+
         // Branch Staff
         if (! Schema::hasTable('branch_staff')) {
-            Schema::create('branch_staff', function (Blueprint $t) {
+            Schema::create('branch_staff', function (Blueprint $t) use ($branchIdType) {
+                $t->engine = 'InnoDB';
                 $t->uuid('id')->primary();
-                $t->uuid('branch_id');
+                if ($branchIdType === 'unsigned_bigint') {
+                    $t->unsignedBigInteger('branch_id');
+                } else {
+                    $t->uuid('branch_id');
+                }
                 $t->uuid('user_id');
                 $t->string('role', 50)->default('agent');
                 $t->date('assigned_at');
@@ -100,6 +110,7 @@ return new class extends Migration
                 $t->unique(['branch_id', 'user_id']);
             });
         }
+        $this->ensureInnoDbTable('branch_staff');
 
         // ══════════════════════════════════════════════════════════════
         // INC-001: INCOTERMS
@@ -807,5 +818,37 @@ return new class extends Migration
             'branch_staff', 'branches', 'companies',
         ];
         foreach ($tables as $table) Schema::dropIfExists($table);
+    }
+
+    private function resolveBranchIdType(): string
+    {
+        if (! Schema::hasTable('branches') || ! Schema::hasColumn('branches', 'id')) {
+            return 'uuid';
+        }
+
+        $type = strtolower((string) Schema::getColumnType('branches', 'id'));
+
+        if (in_array($type, [
+            'bigint',
+            'biginteger',
+            'int',
+            'integer',
+            'smallint',
+            'tinyint',
+            'mediumint',
+        ], true)) {
+            return 'unsigned_bigint';
+        }
+
+        return 'uuid';
+    }
+
+    private function ensureInnoDbTable(string $table): void
+    {
+        if (DB::getDriverName() !== 'mysql' || ! Schema::hasTable($table)) {
+            return;
+        }
+
+        DB::statement("ALTER TABLE `{$table}` ENGINE=InnoDB");
     }
 };

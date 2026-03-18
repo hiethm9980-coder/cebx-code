@@ -25,7 +25,7 @@ class InvitationApiTest extends TestCase
         Event::fake();
         $this->seedPermissions();
 
-        $this->account = Account::factory()->create(['status' => 'active']);
+        $this->account = Account::factory()->organization()->create(['status' => 'active']);
         $this->owner = User::factory()->owner()->create([
             'account_id' => $this->account->id,
         ]);
@@ -36,7 +36,7 @@ class InvitationApiTest extends TestCase
     //  POST /api/v1/invitations — إنشاء دعوة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_invitation_via_api(): void
     {
         $response = $this->withHeaders([
@@ -52,7 +52,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('data.status', 'pending');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function create_invitation_with_role(): void
     {
         $role = Role::factory()->create([
@@ -71,7 +71,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('data.role.id', $role->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function duplicate_pending_invitation_returns_409(): void
     {
         $this->withHeaders([
@@ -90,7 +90,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_INVITATION_ALREADY_EXISTS');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invite_existing_user_returns_409(): void
     {
         User::factory()->create([
@@ -108,7 +108,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_EMAIL_ALREADY_IN_ACCOUNT');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function non_owner_cannot_create_invitation(): void
     {
         $regularUser = User::factory()->create([
@@ -129,7 +129,7 @@ class InvitationApiTest extends TestCase
     //  GET /api/v1/invitations — قائمة الدعوات
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_list_invitations(): void
     {
         // Create some invitations
@@ -147,7 +147,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonCount(3, 'data');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_filter_invitations_by_status(): void
     {
         Invitation::factory()->count(2)->create([
@@ -168,7 +168,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonCount(2, 'data');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_search_invitations_by_email(): void
     {
         Invitation::factory()->create([
@@ -190,7 +190,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonCount(1, 'data');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitations_are_tenant_isolated(): void
     {
         // Other account's invitation
@@ -219,7 +219,7 @@ class InvitationApiTest extends TestCase
     //  PATCH /api/v1/invitations/{id}/cancel — إلغاء دعوة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_cancel_invitation_via_api(): void
     {
         $invitation = Invitation::factory()->create([
@@ -235,7 +235,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('data.status', 'cancelled');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cancel_accepted_invitation_returns_422(): void
     {
         $invitation = Invitation::factory()->accepted()->create([
@@ -255,7 +255,7 @@ class InvitationApiTest extends TestCase
     //  POST /api/v1/invitations/{id}/resend — إعادة إرسال
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_resend_invitation_via_api(): void
     {
         $invitation = Invitation::factory()->create([
@@ -272,7 +272,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('data.send_count', 2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function resend_cancelled_invitation_returns_422(): void
     {
         $invitation = Invitation::factory()->cancelled()->create([
@@ -292,7 +292,7 @@ class InvitationApiTest extends TestCase
     //  Public: GET /api/v1/invitations/preview/{token}
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitee_can_preview_invitation(): void
     {
         $invitation = Invitation::factory()->create([
@@ -311,7 +311,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('data.status', 'pending');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function preview_invalid_token_returns_404(): void
     {
         $response = $this->getJson('/api/v1/invitations/preview/invalid-token');
@@ -324,7 +324,7 @@ class InvitationApiTest extends TestCase
     //  Public: POST /api/v1/invitations/accept/{token}
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitee_can_accept_invitation_via_api(): void
     {
         $invitation = Invitation::factory()->create([
@@ -344,7 +344,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('data.invitation.status', 'accepted');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function accept_expired_invitation_returns_410(): void
     {
         $invitation = Invitation::factory()->stale()->create([
@@ -361,7 +361,7 @@ class InvitationApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_INVITATION_EXPIRED');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function accept_with_missing_password_returns_422(): void
     {
         $invitation = Invitation::factory()->create([
@@ -376,7 +376,7 @@ class InvitationApiTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function accept_assigns_role_to_new_user(): void
     {
         $role = Role::factory()->create([
@@ -404,7 +404,7 @@ class InvitationApiTest extends TestCase
         $this->assertTrue($user->roles()->where('roles.id', $role->id)->exists());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_reuse_accepted_invitation_link(): void
     {
         $invitation = Invitation::factory()->create([

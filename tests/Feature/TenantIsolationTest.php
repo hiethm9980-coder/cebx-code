@@ -21,7 +21,7 @@ class TenantIsolationTest extends TestCase
         $this->service = new AccountService();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function tenant_a_cannot_see_tenant_b_account_data(): void
     {
         // Create two separate accounts
@@ -49,7 +49,7 @@ class TenantIsolationTest extends TestCase
         $this->assertEquals($tenantA['user']->id, $users->first()->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function tenant_a_cannot_access_tenant_b_via_api(): void
     {
         $tenantA = $this->service->createAccount([
@@ -77,7 +77,7 @@ class TenantIsolationTest extends TestCase
         $response->assertJsonMissing(['name' => 'Tenant B']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function audit_logs_are_tenant_scoped(): void
     {
         $tenantA = $this->service->createAccount([
@@ -101,7 +101,7 @@ class TenantIsolationTest extends TestCase
         $this->assertTrue($logs->every(fn ($log) => $log->account_id === $tenantA['account']->id));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function each_account_gets_unique_uuid(): void
     {
         $ids = [];
@@ -119,7 +119,7 @@ class TenantIsolationTest extends TestCase
         $this->assertCount(5, array_unique($ids));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function unauthenticated_user_cannot_access_account_endpoint(): void
     {
         $response = $this->getJson('/api/v1/account');

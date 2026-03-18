@@ -28,10 +28,11 @@ class ReportApiTest extends TestCase
         parent::setUp();
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id, 'slug' => 'owner']);
-        $this->owner = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->owner = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
-    /** @test FR-RPT-001 */
+    // FR-RPT-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_shipment_dashboard(): void
     {
         Shipment::factory()->count(3)->create(['account_id' => $this->account->id]);
@@ -40,7 +41,8 @@ class ReportApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.total_shipments', 3);
     }
 
-    /** @test FR-RPT-001 with filters */
+    // FR-RPT-001 with filters
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_dashboard_with_filters(): void
     {
         $response = $this->actingAs($this->owner)
@@ -48,7 +50,8 @@ class ReportApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-RPT-002 */
+    // FR-RPT-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_profit_report(): void
     {
         Shipment::factory()->count(2)->create(['account_id' => $this->account->id]);
@@ -58,7 +61,8 @@ class ReportApiTest extends TestCase
             ->assertJsonStructure(['data' => ['shipments', 'totals']]);
     }
 
-    /** @test FR-RPT-003: Create export */
+    // FR-RPT-003: Create export
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_export(): void
     {
         $response = $this->actingAs($this->owner)
@@ -69,7 +73,8 @@ class ReportApiTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('data.format', 'csv');
     }
 
-    /** @test FR-RPT-003: List exports */
+    // FR-RPT-003: List exports
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_exports(): void
     {
         ReportExport::factory()->count(2)->create([
@@ -80,35 +85,40 @@ class ReportApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.total', 2);
     }
 
-    /** @test FR-RPT-004 */
+    // FR-RPT-004
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_exception_report(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/exceptions');
         $response->assertOk()->assertJsonStructure(['data' => ['total_exceptions', 'exception_rate']]);
     }
 
-    /** @test FR-RPT-005: Operational */
+    // FR-RPT-005: Operational
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_operational_report(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/operational');
         $response->assertOk()->assertJsonStructure(['data' => ['shipments', 'exceptions']]);
     }
 
-    /** @test FR-RPT-005: Financial */
+    // FR-RPT-005: Financial
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_financial_report(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/financial');
         $response->assertOk()->assertJsonStructure(['data' => ['profit_loss', 'wallet']]);
     }
 
-    /** @test FR-RPT-006 */
+    // FR-RPT-006
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_grouped_data(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/grouped?group_by=month');
         $response->assertOk();
     }
 
-    /** @test FR-RPT-007: Carrier performance */
+    // FR-RPT-007: Carrier performance
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_carrier_performance(): void
     {
         Shipment::factory()->count(3)->create(['account_id' => $this->account->id]);
@@ -117,21 +127,24 @@ class ReportApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-RPT-007: Store performance */
+    // FR-RPT-007: Store performance
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_store_performance(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/store-performance');
         $response->assertOk();
     }
 
-    /** @test FR-RPT-007: Revenue */
+    // FR-RPT-007: Revenue
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_revenue_chart(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/revenue?group_by=month');
         $response->assertOk();
     }
 
-    /** @test FR-RPT-008: Create schedule */
+    // FR-RPT-008: Create schedule
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_schedule(): void
     {
         $response = $this->actingAs($this->owner)
@@ -144,7 +157,8 @@ class ReportApiTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test FR-RPT-008: List schedules */
+    // FR-RPT-008: List schedules
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_schedules(): void
     {
         ScheduledReport::factory()->create([
@@ -155,7 +169,8 @@ class ReportApiTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data');
     }
 
-    /** @test FR-RPT-008: Cancel schedule */
+    // FR-RPT-008: Cancel schedule
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_cancel_schedule(): void
     {
         $schedule = ScheduledReport::factory()->create([
@@ -166,21 +181,24 @@ class ReportApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-RPT-009 */
+    // FR-RPT-009
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_wallet_report(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/wallet');
         $response->assertOk()->assertJsonStructure(['data' => ['total_deposits', 'total_charges']]);
     }
 
-    /** @test FR-RPT-010 */
+    // FR-RPT-010
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_generic_report(): void
     {
         $response = $this->actingAs($this->owner)->getJson('/api/v1/reports/api/shipment_summary');
         $response->assertOk();
     }
 
-    /** @test Saved reports */
+    // Saved reports
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_save_and_list_reports(): void
     {
         $this->actingAs($this->owner)->postJson('/api/v1/reports/saved', [

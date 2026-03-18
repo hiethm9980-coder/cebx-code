@@ -322,7 +322,7 @@ class StoreService
 
     private function assertCanManageStores(User $user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('store:manage')) {
+        if (!$user->hasPermission('stores.manage')) {
             $this->auditService->warning(
                 $user->account_id, $user->id,
                 'store.access_denied', AuditLog::CATEGORY_ACCOUNT,

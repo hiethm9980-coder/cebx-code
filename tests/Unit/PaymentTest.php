@@ -59,7 +59,7 @@ class PaymentTest extends TestCase
     // FR-PAY-001: Prepaid Payment (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_charge_shipping_deducts_wallet(): void
     {
         $this->seedWallet(500);
@@ -73,7 +73,7 @@ class PaymentTest extends TestCase
         $this->assertLessThan(500, $this->service->getWalletBalance($this->account));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_charge_fails_with_insufficient_balance(): void
     {
         $this->seedWallet(10);
@@ -84,7 +84,7 @@ class PaymentTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_topup_credits_balance(): void
     {
         $gateway = PaymentGateway::factory()->create();
@@ -97,7 +97,7 @@ class PaymentTest extends TestCase
         $this->assertEquals(200.00, $this->service->getWalletBalance($this->account));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_balance_calculation(): void
     {
         $this->seedWallet(1000);
@@ -111,7 +111,7 @@ class PaymentTest extends TestCase
         $this->assertEquals(700.00, $balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_summary(): void
     {
         $this->seedWallet(500);
@@ -126,7 +126,7 @@ class PaymentTest extends TestCase
     // FR-PAY-002: Idempotent Payment (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_idempotent_charge_returns_same(): void
     {
         $this->seedWallet(500);
@@ -137,7 +137,7 @@ class PaymentTest extends TestCase
         $this->assertEquals($tx1->id, $tx2->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_different_keys_create_different_transactions(): void
     {
         $this->seedWallet(1000);
@@ -148,7 +148,7 @@ class PaymentTest extends TestCase
         $this->assertNotEquals($tx1->id, $tx2->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_idempotency_key_unique_constraint(): void
     {
         $this->seedWallet(500);
@@ -164,7 +164,7 @@ class PaymentTest extends TestCase
     // FR-PAY-003: Subscription Management (6 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_subscribe_creates_active_subscription(): void
     {
         $plan = SubscriptionPlan::factory()->create(['monthly_price' => 99]);
@@ -176,7 +176,7 @@ class PaymentTest extends TestCase
         $this->assertTrue($sub->isActive());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cannot_subscribe_twice(): void
     {
         $plan = SubscriptionPlan::factory()->create();
@@ -188,7 +188,7 @@ class PaymentTest extends TestCase
         $this->service->subscribe($this->account, $this->owner, $plan->id, 'monthly', 'idem_sub_2b');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_subscription(): void
     {
         $plan = SubscriptionPlan::factory()->create();
@@ -200,7 +200,7 @@ class PaymentTest extends TestCase
         $this->assertNotNull($sub->cancelled_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_subscription_days_remaining(): void
     {
         $sub = Subscription::factory()->create([
@@ -211,14 +211,14 @@ class PaymentTest extends TestCase
         $this->assertGreaterThanOrEqual(14, $sub->daysRemaining());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_expired_subscription(): void
     {
         $sub = Subscription::factory()->expired()->create(['account_id' => $this->account->id]);
         $this->assertTrue($sub->isExpired());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_plans(): void
     {
         SubscriptionPlan::factory()->count(3)->create();
@@ -230,7 +230,7 @@ class PaymentTest extends TestCase
     // FR-PAY-004: Payment Gateway (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_gateway_fee_calculation(): void
     {
         $gw = PaymentGateway::factory()->create(['transaction_fee_pct' => 2.5, 'transaction_fee_fixed' => 1.00]);
@@ -238,7 +238,7 @@ class PaymentTest extends TestCase
         $this->assertEquals(3.50, $fee);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_gateway_currency_support(): void
     {
         $gw = PaymentGateway::factory()->create(['supported_currencies' => ['SAR', 'USD']]);
@@ -246,7 +246,7 @@ class PaymentTest extends TestCase
         $this->assertFalse($gw->supportsCurrency('JPY'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_active_gateways(): void
     {
         PaymentGateway::factory()->count(2)->create();
@@ -260,7 +260,7 @@ class PaymentTest extends TestCase
     // FR-PAY-005: Invoice Generation (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_invoice_generated_on_charge(): void
     {
         $this->seedWallet(500);
@@ -269,7 +269,7 @@ class PaymentTest extends TestCase
         $this->assertDatabaseHas('invoices', ['account_id' => $this->account->id]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_invoice_number_unique(): void
     {
         $num1 = Invoice::generateNumber();
@@ -279,7 +279,7 @@ class PaymentTest extends TestCase
         $this->assertNotEquals($num1, $num2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_invoices(): void
     {
         Invoice::factory()->count(3)->create(['account_id' => $this->account->id]);
@@ -291,21 +291,21 @@ class PaymentTest extends TestCase
     // FR-PAY-006: Tax Calculation (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_vat_15_percent(): void
     {
         $tax = $this->service->calculateTax(100);
         $this->assertEquals(15.00, $tax);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_tax_rounding(): void
     {
         $tax = $this->service->calculateTax(33.33);
         $this->assertEquals(5.00, $tax); // 33.33 * 0.15 = 4.9995 → 5.00
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_shipping_charge_includes_tax(): void
     {
         $this->seedWallet(500);
@@ -319,7 +319,7 @@ class PaymentTest extends TestCase
     // FR-PAY-007: Promo Codes (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_valid_promo_code(): void
     {
         $promo = PromoCode::factory()->create(['code' => 'SAVE10']);
@@ -328,7 +328,7 @@ class PaymentTest extends TestCase
         $this->assertGreaterThan(0, $result['discount']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_expired_promo_code(): void
     {
         PromoCode::factory()->expired()->create(['code' => 'OLDCODE']);
@@ -337,7 +337,7 @@ class PaymentTest extends TestCase
         $this->assertEquals('ERR_PROMO_EXPIRED', $result['error']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_promo_percentage_discount(): void
     {
         $promo = PromoCode::factory()->create(['discount_type' => 'percentage', 'discount_value' => 20]);
@@ -345,7 +345,7 @@ class PaymentTest extends TestCase
         $this->assertEquals(40.00, $discount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_promo_fixed_discount(): void
     {
         $promo = PromoCode::factory()->fixed()->create(['discount_value' => 25]);
@@ -353,7 +353,7 @@ class PaymentTest extends TestCase
         $this->assertEquals(25.00, $discount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_promo_max_discount_cap(): void
     {
         $promo = PromoCode::factory()->create([
@@ -367,7 +367,7 @@ class PaymentTest extends TestCase
     // FR-PAY-008: Transaction Log (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_transaction_log_paginated(): void
     {
         PaymentTransaction::factory()->count(5)->create(['account_id' => $this->account->id]);
@@ -376,7 +376,7 @@ class PaymentTest extends TestCase
         $this->assertCount(3, $txs->items());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_transaction_log_filtered(): void
     {
         PaymentTransaction::factory()->count(2)->create(['account_id' => $this->account->id, 'type' => 'wallet_topup']);
@@ -386,7 +386,7 @@ class PaymentTest extends TestCase
         $this->assertEquals(2, $txs->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_transaction_status_checks(): void
     {
         $tx = PaymentTransaction::factory()->make(['status' => PaymentTransaction::STATUS_CAPTURED, 'direction' => 'debit']);
@@ -398,7 +398,7 @@ class PaymentTest extends TestCase
     // FR-PAY-009: Subscription Status for Pricing (2 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_active_subscription_status(): void
     {
         Subscription::factory()->create([
@@ -411,7 +411,7 @@ class PaymentTest extends TestCase
         $this->assertLessThanOrEqual(1.0, $status['markup_multiplier']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_expired_subscription_higher_markup(): void
     {
         Subscription::factory()->expired()->create([
@@ -428,7 +428,7 @@ class PaymentTest extends TestCase
     // FR-PAY-010: Refunds (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_full_refund(): void
     {
         $this->seedWallet(500);
@@ -440,7 +440,7 @@ class PaymentTest extends TestCase
         $this->assertEquals('credit', $refund->direction);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_partial_refund(): void
     {
         $this->seedWallet(500);
@@ -451,7 +451,7 @@ class PaymentTest extends TestCase
         $this->assertEquals(PaymentTransaction::STATUS_PARTIALLY_REFUNDED, $charge->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refund_exceeds_throws(): void
     {
         $this->seedWallet(500);
@@ -461,7 +461,7 @@ class PaymentTest extends TestCase
         $this->service->refund($charge->id, $this->owner, 99999.00, 'Too much', 'idem_exc_ref');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refund_idempotent(): void
     {
         $this->seedWallet(500);
@@ -477,7 +477,7 @@ class PaymentTest extends TestCase
     // FR-PAY-011: Balance Alerts (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_set_balance_alert(): void
     {
         $alert = $this->service->setBalanceAlert($this->account, $this->owner, 50.00);
@@ -485,7 +485,7 @@ class PaymentTest extends TestCase
         $this->assertTrue($alert->is_active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_alert_trigger_check(): void
     {
         $alert = BalanceAlert::create([
@@ -500,7 +500,7 @@ class PaymentTest extends TestCase
         $this->assertFalse($alert->shouldTrigger(150));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_balance_alerts(): void
     {
         $this->service->setBalanceAlert($this->account, $this->owner, 20);

@@ -1,5 +1,7 @@
 <?php
 namespace App\Models;
+
+use App\Models\Traits\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 

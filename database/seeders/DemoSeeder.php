@@ -43,31 +43,32 @@ class DemoSeeder extends Seeder
         // ═══════════════════════════════════════
         $account = Account::firstOrCreate(
             ['slug' => 'techco'],
-            ['name' => 'شركة التقنية المتقدمة', 'type' => 'business', 'status' => 'active']
+            ['name' => 'شركة التقنية المتقدمة', 'type' => 'organization', 'status' => 'active']
         );
 
         $admin = User::firstOrCreate(
             ['account_id' => $account->id, 'email' => 'sultan@techco.sa'],
-            ['name' => 'سلطان القحطاني', 'password' => Hash::make('password'), 'role_name' => 'مدير', 'role' => 'manager', 'is_active' => true, 'last_login_at' => now()]
+            ['name' => 'سلطان القحطاني', 'password' => Hash::make('password'), 'status' => 'active', 'is_owner' => true, 'is_active' => true, 'last_login_at' => now()]
         );
 
         $users = collect([
-            ['name'=>'هند العتيبي','email'=>'hind@techco.sa','role_name'=>'مشرف','role'=>'supervisor'],
-            ['name'=>'ماجد السبيعي','email'=>'majed@techco.sa','role_name'=>'مشغّل','role'=>'operator'],
-            ['name'=>'لمى الحربي','email'=>'lama@techco.sa','role_name'=>'مُطلع','role'=>'viewer','is_active'=>false],
+            ['name'=>'هند العتيبي','email'=>'hind@techco.sa'],
+            ['name'=>'ماجد السبيعي','email'=>'majed@techco.sa'],
+            ['name'=>'لمى الحربي','email'=>'lama@techco.sa','is_active'=>false],
         ])->map(fn($u) => User::firstOrCreate(
             ['account_id' => $account->id, 'email' => $u['email']],
-            array_merge($u, ['password' => Hash::make('password'), 'is_active' => $u['is_active'] ?? true, 'last_login_at' => now()->subHours(rand(1, 168))])
+            array_merge($u, [
+                'password' => Hash::make('password'),
+                'status' => ($u['is_active'] ?? true) ? 'active' : 'inactive',
+                'is_active' => $u['is_active'] ?? true,
+                'last_login_at' => now()->subHours(rand(1, 168)),
+            ])
         ));
 
-        // Super admin account (نوع الحساب admin — الصلاحيات من is_super_admin)
-        $sysAccount = Account::firstOrCreate(
-            ['slug' => 'system-admin'],
-            ['name'=>'مدير النظام','type'=>'admin','status'=>'active']
-        );
+        // Platform admin (internal actor; no account.type admin usage)
         User::firstOrCreate(
-            ['account_id'=>$sysAccount->id,'email'=>'admin@system.sa'],
-            ['name'=>'مدير النظام','password'=>Hash::make('admin'),'role_name'=>'مدير النظام','role'=>'admin','is_super_admin'=>true,'is_active'=>true,'last_login_at'=>now()]
+            ['email' => 'admin@system.sa'],
+            ['account_id' => null, 'name' => 'مدير النظام', 'password' => Hash::make('admin'), 'status' => 'active', 'is_active' => true, 'user_type' => 'internal', 'last_login_at' => now()]
         );
 
         // B2C Individual account
@@ -75,13 +76,12 @@ class DemoSeeder extends Seeder
             ['slug' => 'mohammed-individual'],
             ['name' => 'محمد العمري', 'type' => 'individual', 'status' => 'active']
         );
-        User::firstOrCreate(
+        $b2cUser = User::firstOrCreate(
             ['account_id'=>$b2cAccount->id,'email'=>'mohammed@example.sa'],
             [
                 'name' => 'محمد العمري',
                 'password' => Hash::make('password'),
-                'role_name' => 'مستخدم',
-                'role' => 'operator',
+                'status' => 'active',
                 'is_active' => true,
                 'last_login_at' => now(),
             ]
@@ -191,7 +191,7 @@ class DemoSeeder extends Seeder
         for ($i = 0; $i < 5; $i++) {
             $carrier = $carriers[array_rand($carriers)];
             Shipment::create([
-                'account_id' => $b2cAccount->id, 'user_id' => $b2cAccount->users()->first()->id ?? 1,
+                'account_id' => $b2cAccount->id, 'user_id' => $b2cUser->id,
                 'reference_number' => 'SHP-B2C-' . str_pad($i + 1, 3, '0', STR_PAD_LEFT),
                 'type' => 'domestic', 'sender_name' => 'محمد العمري', 'sender_phone' => '+966551234567',
                 'sender_city' => 'الرياض', 'recipient_name' => $names[array_rand($names)],
@@ -253,9 +253,9 @@ class DemoSeeder extends Seeder
         // ═══════════════════════════════════════
         // 9. INVITATIONS
         // ═══════════════════════════════════════
-        Invitation::create(['account_id'=>$account->id,'email'=>'new@techco.sa','role_name'=>'مشغّل','token'=>'inv_'.bin2hex(random_bytes(16)),'status'=>'pending','expires_at'=>now()->addDays(7)]);
-        Invitation::create(['account_id'=>$account->id,'email'=>'designer@techco.sa','role_name'=>'مُطلع','token'=>'inv_'.bin2hex(random_bytes(16)),'status'=>'accepted','expires_at'=>now()->addDays(7),'created_at'=>now()->subDays(5)]);
-        Invitation::create(['account_id'=>$account->id,'email'=>'old@techco.sa','role_name'=>'مشرف','token'=>'inv_'.bin2hex(random_bytes(16)),'status'=>'expired','expires_at'=>now()->subDays(20),'created_at'=>now()->subDays(40)]);
+        Invitation::create(['account_id'=>$account->id,'email'=>'new@techco.sa','token'=>'inv_'.bin2hex(random_bytes(16)),'status'=>'pending','expires_at'=>now()->addDays(7)]);
+        Invitation::create(['account_id'=>$account->id,'email'=>'designer@techco.sa','token'=>'inv_'.bin2hex(random_bytes(16)),'status'=>'accepted','expires_at'=>now()->addDays(7),'created_at'=>now()->subDays(5)]);
+        Invitation::create(['account_id'=>$account->id,'email'=>'old@techco.sa','token'=>'inv_'.bin2hex(random_bytes(16)),'status'=>'expired','expires_at'=>now()->subDays(20),'created_at'=>now()->subDays(40)]);
 
         // ═══════════════════════════════════════
         // 10. COMPANIES (carriers)
@@ -320,3 +320,4 @@ class DemoSeeder extends Seeder
         $this->command->info("   Admin Login: admin@system.sa / admin");
     }
 }
+

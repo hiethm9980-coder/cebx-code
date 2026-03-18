@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Account;
+use App\Models\ApiKey;
+use App\Models\SupportTicket;
 use App\Services\AdminService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -105,29 +108,42 @@ class AdminController extends Controller
 
     public function createTicket(Request $request): JsonResponse
     {
+        $this->authorize('create', SupportTicket::class);
+
         $data = $request->validate([
             'subject' => 'required|string|max:300', 'description' => 'required|string',
             'category' => 'nullable|in:shipping,billing,technical,account,carrier,general',
             'priority' => 'nullable|in:low,medium,high,urgent',
             'entity_type' => 'nullable|string', 'entity_id' => 'nullable|string',
         ]);
-        $ticket = $this->service->createTicket($request->user()->account, $request->user(), $data);
+        $ticket = $this->service->createTicket($this->resolveCurrentAccount(), $request->user(), $data);
         return response()->json(['status' => 'success', 'data' => $ticket], 201);
     }
 
     public function listTickets(Request $request): JsonResponse
     {
-        $data = $this->service->listTickets($request->only('account_id', 'status', 'priority', 'assigned_to', 'category'));
+        $this->authorize('viewAny', SupportTicket::class);
+
+        $filters = $request->only('status', 'priority', 'assigned_to', 'category');
+        $filters['account_id'] = $this->currentAccountId();
+
+        $data = $this->service->listTickets($filters);
         return response()->json(['status' => 'success', 'data' => $data]);
     }
 
-    public function getTicket(string $ticketId): JsonResponse
+    public function getTicket(Request $request, string $ticketId): JsonResponse
     {
+        $ticket = $this->findTicketForCurrentTenant($ticketId);
+        $this->authorize('view', $ticket);
+
         return response()->json(['status' => 'success', 'data' => $this->service->getTicket($ticketId)]);
     }
 
     public function replyToTicket(Request $request, string $ticketId): JsonResponse
     {
+        $ticket = $this->findTicketForCurrentTenant($ticketId);
+        $this->authorize('reply', $ticket);
+
         $data = $request->validate(['body' => 'required|string', 'is_internal_note' => 'nullable|boolean']);
         $reply = $this->service->replyToTicket($ticketId, $request->user(), $data['body'], $data['is_internal_note'] ?? false);
         return response()->json(['status' => 'success', 'data' => $reply], 201);
@@ -135,12 +151,18 @@ class AdminController extends Controller
 
     public function assignTicket(Request $request, string $ticketId): JsonResponse
     {
+        $ticket = $this->findTicketForCurrentTenant($ticketId);
+        $this->authorize('assign', $ticket);
+
         $data = $request->validate(['user_id' => 'required|uuid', 'team' => 'nullable|string']);
         return response()->json(['status' => 'success', 'data' => $this->service->assignTicket($ticketId, $data['user_id'], $data['team'] ?? null)]);
     }
 
     public function resolveTicket(Request $request, string $ticketId): JsonResponse
     {
+        $ticket = $this->findTicketForCurrentTenant($ticketId);
+        $this->authorize('close', $ticket);
+
         $data = $request->validate(['notes' => 'required|string']);
         return response()->json(['status' => 'success', 'data' => $this->service->resolveTicket($ticketId, $data['notes'])]);
     }
@@ -149,8 +171,10 @@ class AdminController extends Controller
 
     public function createApiKey(Request $request): JsonResponse
     {
+        $this->authorize('create', ApiKey::class);
+
         $data = $request->validate(['name' => 'required|string', 'scopes' => 'nullable|array']);
-        $result = $this->service->createApiKey($request->user()->account, $request->user(), $data['name'], $data['scopes'] ?? []);
+        $result = $this->service->createApiKey($this->resolveCurrentAccount(), $request->user(), $data['name'], $data['scopes'] ?? []);
         return response()->json(['status' => 'success', 'data' => [
             'api_key' => $result['api_key'], 'raw_key' => $result['raw_key'],
             'warning' => 'Store this key securely. It will not be shown again.',
@@ -159,17 +183,25 @@ class AdminController extends Controller
 
     public function listApiKeys(Request $request): JsonResponse
     {
-        return response()->json(['status' => 'success', 'data' => $this->service->listApiKeys($request->user()->account)]);
+        $this->authorize('viewAny', ApiKey::class);
+
+        return response()->json(['status' => 'success', 'data' => $this->service->listApiKeys($this->resolveCurrentAccount())]);
     }
 
-    public function revokeApiKey(string $keyId): JsonResponse
+    public function revokeApiKey(Request $request, string $keyId): JsonResponse
     {
+        $apiKey = $this->findApiKeyForCurrentTenant($keyId);
+        $this->authorize('revoke', $apiKey);
+
         $this->service->revokeApiKey($keyId);
         return response()->json(['status' => 'success']);
     }
 
     public function rotateApiKey(Request $request, string $keyId): JsonResponse
     {
+        $apiKey = $this->findApiKeyForCurrentTenant($keyId);
+        $this->authorize('rotate', $apiKey);
+
         $result = $this->service->rotateApiKey($keyId, $request->user());
         return response()->json(['status' => 'success', 'data' => [
             'api_key' => $result['api_key'], 'raw_key' => $result['raw_key'],
@@ -205,5 +237,33 @@ class AdminController extends Controller
             'status'  => 'success',
             'data'    => ['key' => $key, 'enabled' => $this->service->isFeatureEnabled($key, $request->user()->account_id)],
         ]);
+    }
+
+    private function currentAccountId(): string
+    {
+        return trim((string) app('current_account_id'));
+    }
+
+    private function resolveCurrentAccount(): Account
+    {
+        return Account::withoutGlobalScopes()
+            ->where('id', $this->currentAccountId())
+            ->firstOrFail();
+    }
+
+    private function findApiKeyForCurrentTenant(string $id): ApiKey
+    {
+        return ApiKey::withoutGlobalScopes()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    private function findTicketForCurrentTenant(string $id): SupportTicket
+    {
+        return SupportTicket::withoutGlobalScopes()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail();
     }
 }

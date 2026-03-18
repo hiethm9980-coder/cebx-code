@@ -3,59 +3,64 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Company;
-use App\Models\Branch;
 use App\Services\AuditService;
-use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Str;
+use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Schema;
 
-/**
- * CBEX GROUP — Company Management Controller
- *
- * Manages companies within a tenant account.
- * One account can have multiple companies (holding structure).
- */
 class CompanyController extends Controller
 {
     public function __construct(protected AuditService $audit) {}
 
-    /**
-     * List companies in account
-     */
     public function index(Request $request): JsonResponse
     {
-        $query = Company::where('account_id', $request->user()->account_id);
+        $this->authorize('viewAny', Company::class);
 
-        if ($request->filled('status')) $query->where('status', $request->status);
-        if ($request->filled('country')) $query->where('country', $request->country);
+        $query = $this->scopedCompanyQuery();
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('country')) {
+            $query->where('country', $request->country);
+        }
+
         if ($request->filled('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('name', 'ilike', "%{$request->search}%")
-                  ->orWhere('legal_name', 'ilike', "%{$request->search}%");
+            $query->where(function (Builder $builder) use ($request): void {
+                $builder
+                    ->where('name', 'like', '%' . $request->search . '%')
+                    ->orWhere('legal_name', 'like', '%' . $request->search . '%');
             });
         }
 
-        $companies = $query->withCount('branches')
+        if ($this->companySupportsBranchRelation()) {
+            $query->withCount('branches');
+        }
+
+        $companies = $query
             ->orderBy($request->get('sort', 'name'))
             ->paginate($request->get('per_page', 20));
 
         return response()->json(['data' => $companies]);
     }
 
-    /**
-     * Create a new company
-     */
     public function store(Request $request): JsonResponse
     {
+        $this->authorize('create', Company::class);
+
         $data = $request->validate([
             'name' => 'required|string|max:200',
             'legal_name' => 'nullable|string|max:300',
             'registration_number' => 'nullable|string|max:100',
             'tax_id' => 'nullable|string|max:100',
             'country' => 'required|string|size:2',
-            'base_currency' => 'string|size:3',
-            'timezone' => 'string|max:50',
+            'base_currency' => 'nullable|string|size:3',
+            'timezone' => 'nullable|string|max:50',
             'industry' => 'nullable|string|max:100',
             'website' => 'nullable|url|max:300',
             'phone' => 'nullable|string|max:30',
@@ -63,82 +68,96 @@ class CompanyController extends Controller
             'address' => 'nullable|string',
         ]);
 
-        $data['id'] = Str::uuid()->toString();
-        $data['account_id'] = $request->user()->account_id;
-        $data['status'] = 'active';
+        if (Schema::hasColumn('companies', 'account_id')) {
+            $data['account_id'] = $this->currentAccountId();
+        }
+        $data['status'] = $data['status'] ?? 'active';
 
         $company = Company::create($data);
+        $this->auditInfo('company.created', $company, ['name' => $company->name]);
 
-        $this->audit->log('company.created', $company, ['name' => $company->name]);
-
-        return response()->json(['data' => $company, 'message' => 'تم إنشاء الشركة بنجاح'], 201);
+        return response()->json([
+            'data' => $company,
+            'message' => 'تم إنشاء الشركة بنجاح',
+        ], 201);
     }
 
-    /**
-     * Show company details with branches
-     */
-    public function show(Request $request, string $id): JsonResponse
+    public function show(string $id): JsonResponse
     {
-        $company = Company::where('account_id', $request->user()->account_id)
-            ->with(['branches' => fn($q) => $q->where('status', 'active')])
-            ->withCount(['branches'])
-            ->findOrFail($id);
+        $with = [];
+        if ($this->companySupportsBranchRelation()) {
+            $with['branches'] = fn ($query) => $this->scopeBranchQuery($query)
+                ->where('status', 'active');
+        }
+
+        $company = $this->findCompanyForCurrentAccount($id, $with);
+        if ($this->companySupportsBranchRelation()) {
+            $company->loadCount('branches');
+        }
+        $this->authorize('view', $company);
 
         return response()->json(['data' => $company]);
     }
 
-    /**
-     * Update company
-     */
     public function update(Request $request, string $id): JsonResponse
     {
-        $company = Company::where('account_id', $request->user()->account_id)->findOrFail($id);
+        $company = $this->findCompanyForCurrentAccount($id);
+        $this->authorize('update', $company);
 
         $data = $request->validate([
-            'name' => 'string|max:200',
+            'name' => 'sometimes|string|max:200',
             'legal_name' => 'nullable|string|max:300',
             'registration_number' => 'nullable|string|max:100',
             'tax_id' => 'nullable|string|max:100',
-            'country' => 'string|size:2',
-            'base_currency' => 'string|size:3',
-            'timezone' => 'string|max:50',
+            'country' => 'sometimes|string|size:2',
+            'base_currency' => 'sometimes|string|size:3',
+            'timezone' => 'sometimes|string|max:50',
             'industry' => 'nullable|string|max:100',
             'website' => 'nullable|url|max:300',
             'phone' => 'nullable|string|max:30',
             'email' => 'nullable|email|max:255',
             'address' => 'nullable|string',
-            'status' => 'in:active,suspended,inactive',
+            'status' => 'sometimes|in:active,suspended,inactive',
         ]);
 
         $company->update($data);
-        $this->audit->log('company.updated', $company);
+        $this->auditInfo('company.updated', $company, $data);
 
-        return response()->json(['data' => $company->fresh(), 'message' => 'تم تحديث الشركة']);
+        return response()->json([
+            'data' => $company->fresh(),
+            'message' => 'تم تحديث الشركة',
+        ]);
     }
 
-    /**
-     * Delete (soft delete) company
-     */
-    public function destroy(Request $request, string $id): JsonResponse
+    public function destroy(string $id): JsonResponse
     {
-        $company = Company::where('account_id', $request->user()->account_id)->findOrFail($id);
+        $company = $this->findCompanyForCurrentAccount($id);
+        $this->authorize('delete', $company);
 
         if ($company->branches()->where('status', 'active')->exists()) {
             return response()->json(['message' => 'لا يمكن حذف شركة لديها فروع نشطة'], 422);
         }
 
         $company->delete();
-        $this->audit->log('company.deleted', $company);
+        $this->auditInfo('company.deleted', $company);
 
         return response()->json(['message' => 'تم حذف الشركة']);
     }
 
-    /**
-     * Get company stats
-     */
-    public function stats(Request $request, string $id): JsonResponse
+    public function stats(string $id): JsonResponse
     {
-        $company = Company::where('account_id', $request->user()->account_id)->findOrFail($id);
+        $company = $this->findCompanyForCurrentAccount($id);
+        $this->authorize('view', $company);
+
+        if (!$this->companySupportsBranchRelation()) {
+            return response()->json(['data' => [
+                'total_branches' => 0,
+                'active_branches' => 0,
+                'total_staff' => 0,
+                'countries' => [],
+                'branch_types' => [],
+            ]]);
+        }
 
         return response()->json(['data' => [
             'total_branches' => $company->branches()->count(),
@@ -147,24 +166,93 @@ class CompanyController extends Controller
             'countries' => $company->branches()->distinct('country')->pluck('country'),
             'branch_types' => $company->branches()
                 ->selectRaw('branch_type, count(*) as count')
-                ->groupBy('branch_type')->pluck('count', 'branch_type'),
+                ->groupBy('branch_type')
+                ->pluck('count', 'branch_type'),
         ]]);
     }
 
-    /**
-     * List branches for a company
-     */
     public function branches(Request $request, string $id): JsonResponse
     {
-        $company = Company::where('account_id', $request->user()->account_id)->findOrFail($id);
+        $company = $this->findCompanyForCurrentAccount($id);
+        $this->authorize('view', $company);
+
+        if (!$this->companySupportsBranchRelation()) {
+            return response()->json(['data' => new LengthAwarePaginator([], 0, $request->integer('per_page', 20))]);
+        }
 
         $branches = $company->branches()
+            ->when(Schema::hasColumn('branches', 'account_id'), fn (Builder $query): Builder => $query->where('account_id', $this->currentAccountId()))
             ->withCount('staff')
-            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
-            ->when($request->filled('type'), fn($q) => $q->where('branch_type', $request->type))
+            ->when($request->filled('status'), fn (Builder $query): Builder => $query->where('status', $request->status))
+            ->when($request->filled('type'), fn (Builder $query): Builder => $query->where('branch_type', $request->type))
             ->orderBy('name')
             ->paginate($request->get('per_page', 20));
 
         return response()->json(['data' => $branches]);
+    }
+
+    private function scopedCompanyQuery(): Builder
+    {
+        $query = Company::query();
+
+        if (Schema::hasColumn('companies', 'account_id')) {
+            return $query->where('account_id', $this->currentAccountId());
+        }
+
+        if (Schema::hasTable('branches')
+            && Schema::hasColumn('branches', 'company_id')
+            && Schema::hasColumn('branches', 'account_id')) {
+            return $query->whereHas('branches', fn (Builder $builder): Builder => $this->scopeBranchQuery($builder));
+        }
+
+        return $query;
+    }
+
+    private function findCompanyForCurrentAccount(string $id, array $with = []): Company
+    {
+        return $this->scopedCompanyQuery()
+            ->with($with)
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    private function currentAccountId(): string
+    {
+        return trim((string) app('current_account_id'));
+    }
+
+    private function scopeBranchQuery($query)
+    {
+        if (Schema::hasColumn('branches', 'account_id')) {
+            $query->where('account_id', $this->currentAccountId());
+        }
+
+        return $query;
+    }
+
+    private function companySupportsBranchRelation(): bool
+    {
+        return Schema::hasTable('branches') && Schema::hasColumn('branches', 'company_id');
+    }
+
+    private function auditInfo(string $action, Company $company, ?array $newValues = null): void
+    {
+        $accountId = $this->currentAccountId();
+        if ($accountId === '') {
+            return;
+        }
+
+        $userId = auth()->check() ? (string) auth()->id() : null;
+
+        $this->audit->info(
+            $accountId,
+            $userId,
+            $action,
+            AuditLog::CATEGORY_ACCOUNT,
+            Company::class,
+            (string) $company->id,
+            null,
+            $newValues
+        );
     }
 }

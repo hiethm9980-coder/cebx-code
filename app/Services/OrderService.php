@@ -667,7 +667,7 @@ class OrderService
 
     private function assertCanManageOrders(User $user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('orders:manage')) {
+        if (!$user->hasPermission('orders.manage')) {
             $this->auditService->warning(
                 $user->account_id, $user->id,
                 'order.access_denied', AuditLog::CATEGORY_ACCOUNT

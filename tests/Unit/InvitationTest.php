@@ -42,7 +42,7 @@ class InvitationTest extends TestCase
     //  AC: نجاح — إنشاء دعوة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_invitation(): void
     {
         Event::fake();
@@ -63,7 +63,7 @@ class InvitationTest extends TestCase
         $this->assertEquals(1, $invitation->send_count);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitation_fires_created_event(): void
     {
         Event::fake([InvitationCreated::class]);
@@ -78,7 +78,7 @@ class InvitationTest extends TestCase
         });
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitation_creates_audit_log(): void
     {
         Event::fake();
@@ -97,7 +97,7 @@ class InvitationTest extends TestCase
         $this->assertEquals($this->account->id, $log->account_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitation_can_include_role_assignment(): void
     {
         Event::fake();
@@ -115,7 +115,7 @@ class InvitationTest extends TestCase
         $this->assertEquals($role->id, $invitation->role_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitation_uses_custom_ttl(): void
     {
         Event::fake();
@@ -136,7 +136,7 @@ class InvitationTest extends TestCase
     //  AC: فشل شائع — منع الدعوات المكررة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_create_duplicate_pending_invitation(): void
     {
         Event::fake();
@@ -153,7 +153,7 @@ class InvitationTest extends TestCase
         ], $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_invite_existing_account_user(): void
     {
         Event::fake();
@@ -170,7 +170,7 @@ class InvitationTest extends TestCase
         ], $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_invite_with_role_from_another_account(): void
     {
         Event::fake();
@@ -188,7 +188,7 @@ class InvitationTest extends TestCase
         ], $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function non_owner_without_invite_permission_cannot_create_invitation(): void
     {
         Event::fake();
@@ -208,7 +208,7 @@ class InvitationTest extends TestCase
     //  AC: نجاح — قبول الدعوة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invitee_can_accept_valid_invitation(): void
     {
         Event::fake();
@@ -240,7 +240,7 @@ class InvitationTest extends TestCase
         $this->assertEquals($user->id, $updatedInvitation->accepted_by);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function accepting_invitation_assigns_role(): void
     {
         Event::fake();
@@ -265,7 +265,7 @@ class InvitationTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function accepting_invitation_fires_event(): void
     {
         Event::fake();
@@ -282,7 +282,7 @@ class InvitationTest extends TestCase
         Event::assertDispatched(InvitationAccepted::class);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function accepting_invitation_creates_audit_log(): void
     {
         Event::fake();
@@ -308,7 +308,7 @@ class InvitationTest extends TestCase
     //  AC: فشل شائع — انتهاء صلاحية الدعوة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_accept_expired_invitation(): void
     {
         Event::fake();
@@ -336,7 +336,7 @@ class InvitationTest extends TestCase
         $this->assertEquals(Invitation::STATUS_EXPIRED, $invitation->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_accept_cancelled_invitation(): void
     {
         Event::fake();
@@ -355,7 +355,7 @@ class InvitationTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_accept_already_accepted_invitation(): void
     {
         Event::fake();
@@ -374,7 +374,7 @@ class InvitationTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_accept_with_invalid_token(): void
     {
         $this->expectException(BusinessException::class);
@@ -389,7 +389,7 @@ class InvitationTest extends TestCase
     //  إلغاء الدعوة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_cancel_pending_invitation(): void
     {
         Event::fake();
@@ -406,7 +406,7 @@ class InvitationTest extends TestCase
         Event::assertDispatched(InvitationCancelled::class);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_cancel_accepted_invitation(): void
     {
         Event::fake();
@@ -421,7 +421,7 @@ class InvitationTest extends TestCase
         $this->service->cancelInvitation($invitation->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_cancel_invitation_from_another_account(): void
     {
         Event::fake();
@@ -444,7 +444,7 @@ class InvitationTest extends TestCase
     //  إعادة إرسال الدعوة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_resend_pending_invitation(): void
     {
         Event::fake();
@@ -464,7 +464,7 @@ class InvitationTest extends TestCase
         Event::assertDispatched(InvitationResent::class);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_resend_cancelled_invitation(): void
     {
         Event::fake();
@@ -479,7 +479,7 @@ class InvitationTest extends TestCase
         $this->service->resendInvitation($invitation->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_exceed_max_resend_count(): void
     {
         Event::fake();
@@ -502,7 +502,7 @@ class InvitationTest extends TestCase
     //  انتهاء الصلاحية التلقائي
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function stale_invitations_are_auto_expired(): void
     {
         Event::fake();
@@ -540,7 +540,7 @@ class InvitationTest extends TestCase
     //  حالة حدية — إعادة الدعوة بعد إلغاء السابقة
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_create_new_invitation_after_cancelling_previous(): void
     {
         Event::fake();
@@ -560,7 +560,7 @@ class InvitationTest extends TestCase
         $this->assertEquals(Invitation::STATUS_PENDING, $second->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_create_new_invitation_after_previous_expired(): void
     {
         Event::fake();
@@ -584,7 +584,7 @@ class InvitationTest extends TestCase
     //  عرض تفاصيل الدعوة بالرمز (عام)
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_preview_invitation_by_token(): void
     {
         Event::fake();
@@ -600,7 +600,7 @@ class InvitationTest extends TestCase
         $this->assertEquals('Preview User', $preview->name);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function preview_with_invalid_token_throws_not_found(): void
     {
         $this->expectException(BusinessException::class);
@@ -608,7 +608,7 @@ class InvitationTest extends TestCase
         $this->service->getInvitationByToken('nonexistent-token');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function preview_auto_expires_stale_invitation(): void
     {
         Event::fake();

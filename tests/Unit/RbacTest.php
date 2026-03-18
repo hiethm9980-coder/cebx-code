@@ -35,7 +35,7 @@ class RbacTest extends TestCase
 
     // ─── AC: نجاح — إنشاء دور مخصص ─────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_custom_role(): void
     {
         $role = $this->service->createRole([
@@ -52,7 +52,7 @@ class RbacTest extends TestCase
         $this->assertCount(3, $role->permissions);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function new_role_starts_with_zero_permissions_by_default(): void
     {
         $role = $this->service->createRole([
@@ -63,7 +63,7 @@ class RbacTest extends TestCase
         $this->assertCount(0, $role->permissions);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_create_role_from_template(): void
     {
         $role = $this->service->createFromTemplate('accountant', $this->owner);
@@ -75,7 +75,7 @@ class RbacTest extends TestCase
         $this->assertCount(count($template['permissions']), $role->permissions);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function template_permissions_can_be_modified_before_save(): void
     {
         $role = $this->service->createFromTemplate('warehouse', $this->owner, 'custom-warehouse');
@@ -90,7 +90,7 @@ class RbacTest extends TestCase
 
     // ─── AC: فشل شائع — صلاحية غير موجودة في الكتالوج ────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_assign_permission_outside_catalog(): void
     {
         $this->expectException(BusinessException::class);
@@ -102,7 +102,7 @@ class RbacTest extends TestCase
         ], $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function unknown_permission_returns_correct_error_code(): void
     {
         try {
@@ -117,7 +117,7 @@ class RbacTest extends TestCase
         }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function duplicate_role_name_in_same_account_rejected(): void
     {
         $this->service->createRole([
@@ -131,7 +131,7 @@ class RbacTest extends TestCase
         ], $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function same_role_name_in_different_accounts_allowed(): void
     {
         $this->service->createRole([
@@ -152,7 +152,7 @@ class RbacTest extends TestCase
 
     // ─── AC: حالة حدية — عدد كبير من الصلاحيات ───────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function max_permissions_per_role_is_enforced(): void
     {
         // Generate 101 fake permission keys (over limit)
@@ -169,7 +169,7 @@ class RbacTest extends TestCase
 
     // ─── Escalation Prevention ───────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function non_owner_cannot_grant_permissions_they_dont_have(): void
     {
         // Create a user with limited permissions
@@ -199,7 +199,7 @@ class RbacTest extends TestCase
 
     // ─── Role Assignment ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_assign_role_to_user(): void
     {
         $role = $this->service->createRole([
@@ -214,7 +214,7 @@ class RbacTest extends TestCase
         $this->assertTrue($result->roles->contains('id', $role->id));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_assign_same_role_twice(): void
     {
         $role = $this->service->createRole([
@@ -228,7 +228,7 @@ class RbacTest extends TestCase
         $this->service->assignRoleToUser($user->id, $role->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_revoke_role_from_user(): void
     {
         $role = $this->service->createRole([
@@ -244,7 +244,7 @@ class RbacTest extends TestCase
 
     // ─── Permission Checking ─────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_has_all_permissions(): void
     {
         $this->assertTrue($this->owner->hasPermission('shipments:create'));
@@ -252,7 +252,7 @@ class RbacTest extends TestCase
         $this->assertTrue($this->owner->hasPermission('any:thing'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function user_without_role_has_no_permissions(): void
     {
         $user = User::factory()->create([
@@ -264,7 +264,7 @@ class RbacTest extends TestCase
         $this->assertEmpty($user->allPermissions());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function user_gets_permissions_from_assigned_role(): void
     {
         $role = $this->service->createRole([
@@ -283,7 +283,7 @@ class RbacTest extends TestCase
         $this->assertFalse($user->hasPermission('financial:view'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function user_with_multiple_roles_gets_union_of_permissions(): void
     {
         $role1 = $this->service->createRole([
@@ -310,7 +310,7 @@ class RbacTest extends TestCase
 
     // ─── System Roles Protection ─────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_delete_system_role(): void
     {
         $systemRole = Role::withoutGlobalScopes()->create([
@@ -324,7 +324,7 @@ class RbacTest extends TestCase
         $this->service->deleteRole($systemRole->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_delete_role_with_assigned_users(): void
     {
         $role = $this->service->createRole([
@@ -340,7 +340,7 @@ class RbacTest extends TestCase
 
     // ─── Audit Logging ───────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function role_creation_is_logged(): void
     {
         $role = $this->service->createRole([
@@ -355,7 +355,7 @@ class RbacTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function role_assignment_is_logged(): void
     {
         $role = $this->service->createRole([

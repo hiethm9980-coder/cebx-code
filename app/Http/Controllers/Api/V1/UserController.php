@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AddUserRequest;
-use App\Http\Requests\UpdateUserRequest;
 use App\Http\Requests\ListUsersRequest;
+use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Http\Resources\AuditLogResource;
+use App\Models\User;
 use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,8 +27,11 @@ class UserController extends Controller
      */
     public function index(ListUsersRequest $request): JsonResponse
     {
+        $this->authorize('viewAny', User::class);
+
+        $accountId = $this->currentAccountId($request);
         $users = $this->userService->listUsers(
-            $request->user()->account_id,
+            $accountId,
             $request->validated()
         );
 
@@ -50,10 +54,8 @@ class UserController extends Controller
      */
     public function show(Request $request, string $id): JsonResponse
     {
-        $user = \App\Models\User::withoutGlobalScopes()
-            ->where('account_id', $request->user()->account_id)
-            ->where('id', $id)
-            ->firstOrFail();
+        $user = $this->findUserForCurrentTenant($request, $id);
+        $this->authorize('view', $user);
 
         return response()->json([
             'success' => true,
@@ -68,6 +70,8 @@ class UserController extends Controller
      */
     public function store(AddUserRequest $request): JsonResponse
     {
+        $this->authorize('create', User::class);
+
         $user = $this->userService->addUser(
             $request->validated(),
             $request->user()
@@ -87,6 +91,9 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, string $id): JsonResponse
     {
+        $targetUser = $this->findUserForCurrentTenant($request, $id);
+        $this->authorize('update', $targetUser);
+
         $user = $this->userService->updateUser(
             $id,
             $request->validated(),
@@ -107,6 +114,9 @@ class UserController extends Controller
      */
     public function disable(Request $request, string $id): JsonResponse
     {
+        $targetUser = $this->findUserForCurrentTenant($request, $id);
+        $this->authorize('disable', $targetUser);
+
         $user = $this->userService->disableUser($id, $request->user());
 
         return response()->json([
@@ -123,6 +133,9 @@ class UserController extends Controller
      */
     public function enable(Request $request, string $id): JsonResponse
     {
+        $targetUser = $this->findUserForCurrentTenant($request, $id);
+        $this->authorize('enable', $targetUser);
+
         $user = $this->userService->enableUser($id, $request->user());
 
         return response()->json([
@@ -139,6 +152,9 @@ class UserController extends Controller
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
+        $targetUser = $this->findUserForCurrentTenant($request, $id);
+        $this->authorize('delete', $targetUser);
+
         $forceTransfer = $request->boolean('force_transfer', false);
 
         $this->userService->deleteUser($id, $request->user(), $forceTransfer);
@@ -156,10 +172,12 @@ class UserController extends Controller
      */
     public function changelog(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', User::class);
+
         $userId = $request->query('user_id');
 
         $logs = $this->userService->getUserChangeLog(
-            $request->user()->account_id,
+            $this->currentAccountId($request),
             $userId
         );
 
@@ -172,5 +190,26 @@ class UserController extends Controller
                 'total'        => $logs->total(),
             ],
         ]);
+    }
+
+    private function currentAccountId(Request $request): string
+    {
+        $currentAccountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($currentAccountId !== '') {
+            return $currentAccountId;
+        }
+
+        return trim((string) $request->user()->account_id);
+    }
+
+    private function findUserForCurrentTenant(Request $request, string $id): User
+    {
+        return User::withoutGlobalScopes()
+            ->where('account_id', $this->currentAccountId($request))
+            ->where('id', $id)
+            ->firstOrFail();
     }
 }

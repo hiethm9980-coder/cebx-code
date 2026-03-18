@@ -2,13 +2,14 @@
 
 namespace App\Services;
 
+use App\Exceptions\BusinessException;
 use App\Models\ContentDeclaration;
 use App\Models\DgAuditLog;
 use App\Models\DgMetadata;
+use App\Models\Shipment;
 use App\Models\WaiverVersion;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * DgComplianceService — FR-DG-001→009
@@ -48,6 +49,7 @@ class DgComplianceService
                 'account_id'                => $accountId,
                 'shipment_id'               => $shipmentId,
                 'contains_dangerous_goods'  => false, // Will be set explicitly
+                'dg_flag_declared'          => false,
                 'status'                    => ContentDeclaration::STATUS_PENDING,
                 'declared_by'               => $declaredBy,
                 'ip_address'                => $ipAddress,
@@ -70,6 +72,28 @@ class DgComplianceService
 
             return $declaration;
         });
+    }
+
+    public function beginShipmentDeclarationGate(
+        string $accountId,
+        string $shipmentId,
+        string $declaredBy,
+        string $locale = 'en',
+        ?string $ipAddress = null,
+        ?string $userAgent = null,
+    ): ContentDeclaration {
+        $declaration = $this->createDeclaration(
+            accountId: $accountId,
+            shipmentId: $shipmentId,
+            declaredBy: $declaredBy,
+            locale: $locale,
+            ipAddress: $ipAddress,
+            userAgent: $userAgent,
+        );
+
+        $this->syncShipmentWorkflowFromDeclaration($declaration);
+
+        return $declaration;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -118,6 +142,8 @@ class DgComplianceService
                 );
             }
 
+            $this->syncShipmentWorkflowFromDeclaration($declaration);
+
             return $declaration;
         });
     }
@@ -138,14 +164,33 @@ class DgComplianceService
         $declaration = ContentDeclaration::findOrFail($declarationId);
 
         if ($declaration->contains_dangerous_goods) {
-            throw new \RuntimeException('Cannot accept waiver for DG=Yes shipments. Shipment is blocked.');
+            throw new BusinessException(
+                'The declaration is on hold because the shipment contains dangerous goods.',
+                'ERR_DG_HOLD_REQUIRED',
+                422,
+                [
+                    'shipment_id' => (string) $declaration->shipment_id,
+                    'declaration_id' => (string) $declaration->id,
+                    'next_action' => 'Contact support for manual dangerous goods handling.',
+                ]
+            );
         }
 
         $locale = $locale ?? $declaration->locale;
         $waiverVersion = WaiverVersion::getActive($locale);
 
-        if (!$waiverVersion) {
-            throw new \RuntimeException("No active waiver version found for locale: {$locale}");
+        if (! $waiverVersion) {
+            throw new BusinessException(
+                sprintf('No active waiver version is available for locale %s.', $locale),
+                'ERR_DG_WAIVER_UNAVAILABLE',
+                503,
+                [
+                    'shipment_id' => (string) $declaration->shipment_id,
+                    'declaration_id' => (string) $declaration->id,
+                    'locale' => $locale,
+                    'next_action' => 'Ask an administrator to publish an active legal disclaimer before continuing.',
+                ]
+            );
         }
 
         return DB::transaction(function () use ($declaration, $waiverVersion, $actorId, $ipAddress) {
@@ -178,6 +223,8 @@ class DgComplianceService
                 );
             }
 
+            $this->syncShipmentWorkflowFromDeclaration($declaration);
+
             return $declaration;
         });
     }
@@ -190,29 +237,97 @@ class DgComplianceService
      * Check if a shipment has a valid, completed declaration.
      * Must be called before any carrier API call or payment/debit.
      *
-     * @throws \RuntimeException with unified error codes
+     * @throws BusinessException with unified error codes
      */
     public function validateForIssuance(string $shipmentId, string $accountId): ContentDeclaration
     {
+        $shipment = Shipment::query()
+            ->where('account_id', $accountId)
+            ->where('id', $shipmentId)
+            ->first();
+
         $declaration = ContentDeclaration::forShipment($shipmentId)
             ->where('account_id', $accountId)
             ->latest()
             ->first();
 
-        if (!$declaration) {
-            throw new \RuntimeException('DG_DECLARATION_REQUIRED: No content declaration found for this shipment.');
+        if (! $declaration) {
+            throw new BusinessException(
+                'A dangerous goods declaration is required before the workflow can continue.',
+                'ERR_DG_DECLARATION_REQUIRED',
+                422,
+                [
+                    'shipment_id' => $shipmentId,
+                    'shipment_status' => (string) ($shipment?->status ?? ''),
+                    'next_action' => 'Complete the dangerous goods declaration step for this shipment.',
+                ]
+            );
         }
 
         if ($declaration->status === ContentDeclaration::STATUS_HOLD_DG) {
-            throw new \RuntimeException('DG_NOT_SUPPORTED: Shipment contains dangerous goods. Label issuance is blocked in MVP.');
+            throw new BusinessException(
+                'This shipment is on hold because dangerous goods were declared.',
+                'ERR_DG_HOLD_REQUIRED',
+                422,
+                [
+                    'shipment_id' => $shipmentId,
+                    'declaration_id' => (string) $declaration->id,
+                    'hold_reason' => (string) ($declaration->hold_reason ?? ''),
+                    'next_action' => 'Contact support for manual dangerous goods handling.',
+                ]
+            );
         }
 
         if ($declaration->status === ContentDeclaration::STATUS_REQUIRES_ACTION) {
-            throw new \RuntimeException('DG_REQUIRES_ACTION: Declaration requires additional information.');
+            throw new BusinessException(
+                'The dangerous goods declaration still requires additional action.',
+                'ERR_DG_REQUIRES_ACTION',
+                422,
+                [
+                    'shipment_id' => $shipmentId,
+                    'declaration_id' => (string) $declaration->id,
+                    'next_action' => 'Review the declaration and supply the required information before continuing.',
+                ]
+            );
         }
 
-        if (!$declaration->isReadyForIssuance()) {
-            throw new \RuntimeException('DG_DECLARATION_INCOMPLETE: Content declaration is not yet completed.');
+        if (! $declaration->dg_flag_declared) {
+            throw new BusinessException(
+                'You must declare whether the shipment contains dangerous goods before the workflow can continue.',
+                'ERR_DG_DECLARATION_INCOMPLETE',
+                422,
+                [
+                    'shipment_id' => $shipmentId,
+                    'declaration_id' => (string) $declaration->id,
+                    'next_action' => 'Answer the dangerous goods declaration question for this shipment.',
+                ]
+            );
+        }
+
+        if (! $declaration->contains_dangerous_goods && ! $declaration->waiver_accepted) {
+            throw new BusinessException(
+                'You must accept the legal disclaimer before the workflow can continue.',
+                'ERR_DG_DISCLAIMER_REQUIRED',
+                422,
+                [
+                    'shipment_id' => $shipmentId,
+                    'declaration_id' => (string) $declaration->id,
+                    'next_action' => 'Accept the legal disclaimer for a non-dangerous-goods shipment.',
+                ]
+            );
+        }
+
+        if (! $declaration->isReadyForIssuance()) {
+            throw new BusinessException(
+                'The dangerous goods declaration is not complete yet.',
+                'ERR_DG_DECLARATION_INCOMPLETE',
+                422,
+                [
+                    'shipment_id' => $shipmentId,
+                    'declaration_id' => (string) $declaration->id,
+                    'next_action' => 'Complete the dangerous goods declaration before continuing.',
+                ]
+            );
         }
 
         return $declaration;
@@ -330,7 +445,8 @@ class DgComplianceService
      */
     public function getDeclarationForShipment(string $shipmentId, string $accountId): ?ContentDeclaration
     {
-        return ContentDeclaration::forShipment($shipmentId)
+        return ContentDeclaration::withoutGlobalScopes()
+            ->forShipment($shipmentId)
             ->where('account_id', $accountId)
             ->latest()
             ->first();
@@ -395,5 +511,34 @@ class DgComplianceService
             ->blocked()
             ->get()
             ->toArray();
+    }
+
+    private function syncShipmentWorkflowFromDeclaration(ContentDeclaration $declaration): void
+    {
+        $shipment = Shipment::query()
+            ->where('account_id', (string) $declaration->account_id)
+            ->where('id', (string) $declaration->shipment_id)
+            ->first();
+
+        if (! $shipment) {
+            return;
+        }
+
+        $updates = [
+            'has_dangerous_goods' => (bool) $declaration->contains_dangerous_goods,
+        ];
+
+        if ($declaration->status === ContentDeclaration::STATUS_HOLD_DG || $declaration->status === ContentDeclaration::STATUS_REQUIRES_ACTION) {
+            $updates['status'] = Shipment::STATUS_REQUIRES_ACTION;
+            $updates['status_reason'] = (string) ($declaration->hold_reason ?: 'Dangerous goods declaration requires manual handling.');
+        } elseif ($declaration->status === ContentDeclaration::STATUS_COMPLETED && $declaration->waiver_accepted) {
+            $updates['status'] = Shipment::STATUS_DECLARATION_COMPLETE;
+            $updates['status_reason'] = null;
+        } else {
+            $updates['status'] = Shipment::STATUS_DECLARATION_REQUIRED;
+            $updates['status_reason'] = 'Dangerous goods declaration and legal disclaimer must be completed before payment or issuance.';
+        }
+
+        $shipment->update($updates);
     }
 }

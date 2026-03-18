@@ -22,13 +22,14 @@ class ContentDeclaration extends Model
 
     protected $fillable = [
         'account_id', 'shipment_id',
-        'contains_dangerous_goods', 'status', 'hold_reason',
+        'contains_dangerous_goods', 'dg_flag_declared', 'status', 'hold_reason',
         'waiver_accepted', 'waiver_version_id', 'waiver_hash_snapshot', 'waiver_text_snapshot', 'waiver_accepted_at',
         'declared_by', 'ip_address', 'user_agent', 'locale', 'declared_at',
     ];
 
     protected $casts = [
         'contains_dangerous_goods' => 'boolean',
+        'dg_flag_declared'        => 'boolean',
         'waiver_accepted'         => 'boolean',
         'declared_at'             => 'datetime',
         'waiver_accepted_at'      => 'datetime',
@@ -53,6 +54,11 @@ class ContentDeclaration extends Model
         return $this->hasOne(DgMetadata::class, 'declaration_id');
     }
 
+    public function shipment(): BelongsTo
+    {
+        return $this->belongsTo(Shipment::class, 'shipment_id');
+    }
+
     public function auditLogs(): HasMany
     {
         return $this->hasMany(DgAuditLog::class, 'declaration_id');
@@ -63,6 +69,7 @@ class ContentDeclaration extends Model
     public function setDgFlag(bool $containsDg): void
     {
         $this->contains_dangerous_goods = $containsDg;
+        $this->dg_flag_declared = true;
 
         if ($containsDg) {
             // FR-DG-003: Block in MVP
@@ -131,6 +138,7 @@ class ContentDeclaration extends Model
             'id'                        => $this->id,
             'shipment_id'               => $this->shipment_id,
             'contains_dangerous_goods'  => $this->contains_dangerous_goods,
+            'dg_flag_declared'          => $this->dg_flag_declared,
             'status'                    => $this->status,
             'waiver_accepted'           => $this->waiver_accepted,
             'declared_at'               => $this->declared_at?->toISOString(),

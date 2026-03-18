@@ -31,7 +31,7 @@ class OrganizationApiTest extends TestCase
         parent::setUp();
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id, 'slug' => 'owner']);
-        $this->owner = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->owner = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
     private function createOrg(): Organization
@@ -42,7 +42,8 @@ class OrganizationApiTest extends TestCase
         return Organization::find($response->json('data.id'));
     }
 
-    /** @test FR-ORG-001 */
+    // FR-ORG-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_organization(): void
     {
         $response = $this->actingAs($this->owner)->postJson('/api/v1/organizations', [
@@ -51,7 +52,8 @@ class OrganizationApiTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('data.legal_name', 'شركة اختبار');
     }
 
-    /** @test FR-ORG-001 */
+    // FR-ORG-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_organizations(): void
     {
         $this->createOrg();
@@ -59,7 +61,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data');
     }
 
-    /** @test FR-ORG-002 */
+    // FR-ORG-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_organization(): void
     {
         $org = $this->createOrg();
@@ -67,7 +70,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.id', $org->id);
     }
 
-    /** @test FR-ORG-002 */
+    // FR-ORG-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_update_profile(): void
     {
         $org = $this->createOrg();
@@ -77,7 +81,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.legal_name', 'Updated LLC');
     }
 
-    /** @test FR-ORG-003 */
+    // FR-ORG-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_invite_member(): void
     {
         $org = $this->createOrg();
@@ -87,7 +92,8 @@ class OrganizationApiTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('data.status', 'pending');
     }
 
-    /** @test FR-ORG-003 */
+    // FR-ORG-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_invites(): void
     {
         $org = $this->createOrg();
@@ -97,18 +103,21 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data');
     }
 
-    /** @test FR-ORG-003 */
+    // FR-ORG-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_accept_invite(): void
     {
         $org = $this->createOrg();
         $invite = OrganizationInvite::factory()->create(['organization_id' => $org->id, 'invited_by' => $this->owner->id]);
 
-        $newUser = User::factory()->create(['account_id' => $this->account->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $newUserRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $newUser = $this->createUserWithRole((string) $this->account->id, (string) $newUserRole->id);
         $response = $this->actingAs($newUser)->postJson('/api/v1/organizations/invites/accept', ['token' => $invite->token]);
         $response->assertOk()->assertJsonPath('data.status', 'active');
     }
 
-    /** @test FR-ORG-003 */
+    // FR-ORG-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_cancel_invite(): void
     {
         $org = $this->createOrg();
@@ -118,7 +127,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-ORG-004 */
+    // FR-ORG-004
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_permission_catalog(): void
     {
         PermissionCatalog::create(['key' => 'test.perm', 'name' => 'Test', 'module' => 'SH', 'category' => 'operational']);
@@ -126,7 +136,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-ORG-005 */
+    // FR-ORG-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_set_financial_access(): void
     {
         $org = $this->createOrg();
@@ -138,7 +149,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.can_view_financial', true);
     }
 
-    /** @test FR-ORG-006 */
+    // FR-ORG-006
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_check_permission(): void
     {
         $org = $this->createOrg();
@@ -148,7 +160,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.allowed', true);
     }
 
-    /** @test FR-ORG-007 */
+    // FR-ORG-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_members(): void
     {
         $org = $this->createOrg();
@@ -156,11 +169,13 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data');
     }
 
-    /** @test FR-ORG-007 */
+    // FR-ORG-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_transfer_ownership(): void
     {
         $org = $this->createOrg();
-        $newOwner = User::factory()->create(['account_id' => $this->account->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $newOwnerRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $newOwner = $this->createUserWithRole((string) $this->account->id, (string) $newOwnerRole->id);
         OrganizationMember::factory()->create(['organization_id' => $org->id, 'user_id' => $newOwner->id]);
 
         $response = $this->actingAs($this->owner)->postJson("/api/v1/organizations/{$org->id}/transfer-ownership", [
@@ -169,7 +184,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-ORG-007 */
+    // FR-ORG-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_suspend_member(): void
     {
         $org = $this->createOrg();
@@ -181,7 +197,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.status', 'suspended');
     }
 
-    /** @test FR-ORG-007 */
+    // FR-ORG-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_remove_member(): void
     {
         $org = $this->createOrg();
@@ -191,7 +208,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-ORG-008 */
+    // FR-ORG-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_submit_verification(): void
     {
         $org = $this->createOrg();
@@ -199,7 +217,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.verification_status', 'pending_review');
     }
 
-    /** @test FR-ORG-009 */
+    // FR-ORG-009
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_wallet_summary(): void
     {
         $org = $this->createOrg();
@@ -207,7 +226,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonStructure(['data' => ['balance', 'available_balance', 'currency']]);
     }
 
-    /** @test FR-ORG-009 */
+    // FR-ORG-009
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_topup_wallet(): void
     {
         $org = $this->createOrg();
@@ -215,7 +235,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.balance', '500.00');
     }
 
-    /** @test FR-ORG-010 */
+    // FR-ORG-010
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_update_wallet_settings(): void
     {
         $org = $this->createOrg();
@@ -225,7 +246,8 @@ class OrganizationApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.auto_topup_enabled', true);
     }
 
-    /** @test FR-ORG-007 */
+    // FR-ORG-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_update_member_role(): void
     {
         $org = $this->createOrg();

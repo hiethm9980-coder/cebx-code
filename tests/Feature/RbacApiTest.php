@@ -39,7 +39,7 @@ class RbacApiTest extends TestCase
 
     // ─── POST /api/v1/roles — إنشاء دور ─────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_role_via_api(): void
     {
         $this->actAsOwner();
@@ -57,7 +57,7 @@ class RbacApiTest extends TestCase
                  ->assertJsonCount(3, 'data.permissions');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function new_role_without_permissions_starts_empty(): void
     {
         $this->actAsOwner();
@@ -71,7 +71,7 @@ class RbacApiTest extends TestCase
                  ->assertJsonCount(0, 'data.permissions');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function creating_role_with_unknown_permission_returns_error(): void
     {
         $this->actAsOwner();
@@ -86,7 +86,7 @@ class RbacApiTest extends TestCase
                  ->assertJsonPath('error_code', 'PERMISSION_UNKNOWN');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function creating_duplicate_role_name_returns_error(): void
     {
         $this->actAsOwner();
@@ -105,7 +105,7 @@ class RbacApiTest extends TestCase
 
     // ─── POST /api/v1/roles/from-template ────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_create_role_from_template_via_api(): void
     {
         $this->actAsOwner();
@@ -124,7 +124,7 @@ class RbacApiTest extends TestCase
 
     // ─── GET /api/v1/roles — قائمة الأدوار ───────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_list_roles(): void
     {
         $this->actAsOwner();
@@ -144,7 +144,7 @@ class RbacApiTest extends TestCase
 
     // ─── PUT /api/v1/roles/{id} — تحديث الدور ────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_role_permissions(): void
     {
         $this->actAsOwner();
@@ -166,7 +166,7 @@ class RbacApiTest extends TestCase
 
     // ─── Role Assignment ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_assign_role_to_user_via_api(): void
     {
         $this->actAsOwner();
@@ -185,7 +185,7 @@ class RbacApiTest extends TestCase
                  ->assertJsonPath('data.user_id', $user->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_revoke_role_via_api(): void
     {
         $this->actAsOwner();
@@ -205,7 +205,7 @@ class RbacApiTest extends TestCase
 
     // ─── GET /api/v1/permissions — كتالوج الصلاحيات ──────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_get_permissions_catalog(): void
     {
         $this->actAsOwner();
@@ -216,7 +216,7 @@ class RbacApiTest extends TestCase
                  ->assertJsonStructure(['data' => ['users', 'roles', 'shipments', 'financial']]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_get_role_templates(): void
     {
         $this->actAsOwner();
@@ -229,7 +229,7 @@ class RbacApiTest extends TestCase
 
     // ─── GET /api/v1/users/{id}/permissions — صلاحيات المستخدم ───
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_get_user_effective_permissions(): void
     {
         $this->actAsOwner();
@@ -255,7 +255,7 @@ class RbacApiTest extends TestCase
 
     // ─── 403 Enforcement — الميزة الأهم في RBAC ─────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function user_without_permission_gets_403(): void
     {
         $user = User::factory()->create([
@@ -275,7 +275,7 @@ class RbacApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_PERMISSION');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function user_with_correct_permission_can_access(): void
     {
         // Create a user with roles:manage permission
@@ -298,7 +298,7 @@ class RbacApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function non_owner_cannot_escalate_permissions(): void
     {
         // Create user with limited permissions
@@ -328,7 +328,7 @@ class RbacApiTest extends TestCase
 
     // ─── DELETE /api/v1/roles/{id} — حذف الدور ───────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_delete_custom_role(): void
     {
         $this->actAsOwner();
@@ -345,7 +345,7 @@ class RbacApiTest extends TestCase
                  ->assertJsonPath('success', true);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_delete_role_with_users_assigned(): void
     {
         $this->actAsOwner();
@@ -366,7 +366,7 @@ class RbacApiTest extends TestCase
 
     // ─── Tenant Isolation ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function roles_are_tenant_isolated(): void
     {
         $this->actAsOwner();

@@ -27,17 +27,19 @@ class BillingWalletApiTest extends TestCase
         parent::setUp();
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
-    /** @test FR-BW-001 */
+    // FR-BW-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_wallet(): void
     {
         $r = $this->actingAs($this->user)->postJson('/api/v1/billing/wallets', ['currency' => 'SAR']);
         $r->assertStatus(201)->assertJsonPath('data.currency', 'SAR');
     }
 
-    /** @test FR-BW-001 */
+    // FR-BW-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_wallet(): void
     {
         $w = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -45,7 +47,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.id', $w->id);
     }
 
-    /** @test FR-BW-001 */
+    // FR-BW-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_my_wallet(): void
     {
         BillingWallet::factory()->funded(500)->create(['account_id' => $this->account->id]);
@@ -53,7 +56,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-001 */
+    // FR-BW-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_balance(): void
     {
         $w = BillingWallet::factory()->funded(999)->create(['account_id' => $this->account->id]);
@@ -61,7 +65,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk()->assertJsonStructure(['data' => ['available_balance']]);
     }
 
-    /** @test FR-BW-002 */
+    // FR-BW-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_initiate_topup(): void
     {
         $w = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -69,7 +74,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertStatus(201)->assertJsonPath('data.status', 'pending');
     }
 
-    /** @test FR-BW-002 */
+    // FR-BW-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_confirm_topup(): void
     {
         $w = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -80,7 +86,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.status', 'success');
     }
 
-    /** @test FR-BW-002 */
+    // FR-BW-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_fail_topup(): void
     {
         $w = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -91,7 +98,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.status', 'failed');
     }
 
-    /** @test FR-BW-003 */
+    // FR-BW-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_charge(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -101,7 +109,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-004 */
+    // FR-BW-004
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_reversal(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -114,7 +123,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-005 */
+    // FR-BW-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_statement(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -125,7 +135,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-006 */
+    // FR-BW-006
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_refund(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -138,7 +149,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-007 */
+    // FR-BW-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_hold(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -148,7 +160,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertStatus(201)->assertJsonPath('data.status', 'active');
     }
 
-    /** @test FR-BW-007 */
+    // FR-BW-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_capture_hold(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -159,7 +172,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.status', 'captured');
     }
 
-    /** @test FR-BW-007 */
+    // FR-BW-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_release_hold(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -170,7 +184,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.status', 'released');
     }
 
-    /** @test FR-BW-008 */
+    // FR-BW-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_set_threshold(): void
     {
         $w = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -178,7 +193,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-008 */
+    // FR-BW-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_configure_auto_topup(): void
     {
         $w = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -188,7 +204,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-001 */
+    // FR-BW-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_wallet_summary(): void
     {
         $w = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -196,7 +213,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk()->assertJsonStructure(['data' => ['available_balance']]);
     }
 
-    /** @test FR-BW-010 */
+    // FR-BW-010
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_reconciliation(): void
     {
         $r = $this->actingAs($this->user)->postJson('/api/v1/billing/reconciliation', [
@@ -205,14 +223,16 @@ class BillingWalletApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test FR-BW-010 */
+    // FR-BW-010
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_reconciliation_reports(): void
     {
         $r = $this->actingAs($this->user)->getJson('/api/v1/billing/reconciliation');
         $r->assertOk();
     }
 
-    /** @test FR-BW-003 */
+    // FR-BW-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_charge_insufficient(): void
     {
         $w = BillingWallet::factory()->funded(10)->create(['account_id' => $this->account->id]);
@@ -222,7 +242,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertStatus(500); // RuntimeException
     }
 
-    /** @test FR-BW-007 */
+    // FR-BW-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_hold_insufficient(): void
     {
         $w = BillingWallet::factory()->funded(50)->create(['account_id' => $this->account->id]);
@@ -232,7 +253,8 @@ class BillingWalletApiTest extends TestCase
         $r->assertStatus(500);
     }
 
-    /** @test FR-BW-002 */
+    // FR-BW-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_topup_validation(): void
     {
         $w = BillingWallet::factory()->create(['account_id' => $this->account->id]);

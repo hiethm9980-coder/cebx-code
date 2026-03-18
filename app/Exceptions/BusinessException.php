@@ -98,6 +98,24 @@ class BusinessException extends Exception
         return new self('لا تملك صلاحية كافية.', 'ERR_PERMISSION', 403);
     }
 
+    public static function accountUpgradeRequired(): self
+    {
+        return new self(
+            'الحسابات الفردية تدعم مستخدمًا خارجيًا واحدًا فقط. اطلب الترقية إلى حساب منظمة لإدارة فريق.',
+            'ERR_ACCOUNT_UPGRADE_REQUIRED',
+            409
+        );
+    }
+
+    public static function individualSingleUserOnly(): self
+    {
+        return new self(
+            'الحساب الفردي يدعم مستخدمًا خارجيًا واحدًا فقط.',
+            'ERR_INDIVIDUAL_SINGLE_USER_ONLY',
+            409
+        );
+    }
+
     public static function cannotModifySelf(string $action): self
     {
         return new self("لا يمكنك {$action} حسابك الخاص.", 'ERR_SELF_MODIFICATION', 422);

@@ -51,7 +51,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-001: Top-up ══════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_topup_wallet(): void
     {
         $gateway = PaymentGateway::factory()->create();
@@ -69,7 +69,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-001/002: Charge Shipping ═════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_charge_shipping(): void
     {
         $this->seedWallet(1000);
@@ -84,7 +84,7 @@ class PaymentApiTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('data.type', 'shipping_charge');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_charge_insufficient_balance(): void
     {
         $response = $this->actingAs($this->owner)
@@ -99,7 +99,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-008: Wallet & Transactions ═══════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_wallet_summary(): void
     {
         $this->seedWallet(300);
@@ -111,7 +111,7 @@ class PaymentApiTest extends TestCase
             ->assertJsonStructure(['data' => ['balance', 'currency', 'total_credits']]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_transactions(): void
     {
         PaymentTransaction::factory()->count(3)->create(['account_id' => $this->account->id]);
@@ -124,7 +124,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-010: Refund ══════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_refund(): void
     {
         $this->seedWallet(500);
@@ -147,7 +147,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-003: Subscriptions ═══════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_subscribe(): void
     {
         $plan = SubscriptionPlan::factory()->create(['monthly_price' => 99]);
@@ -163,7 +163,7 @@ class PaymentApiTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('data.status', 'active');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_cancel_subscription(): void
     {
         $plan = SubscriptionPlan::factory()->create();
@@ -175,7 +175,7 @@ class PaymentApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.status', 'cancelled');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_subscription_status(): void
     {
         $response = $this->actingAs($this->owner)
@@ -184,7 +184,7 @@ class PaymentApiTest extends TestCase
         $response->assertOk()->assertJsonStructure(['data' => ['status']]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_plans(): void
     {
         SubscriptionPlan::factory()->count(2)->create();
@@ -197,7 +197,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-005: Invoices ════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_invoices(): void
     {
         Invoice::factory()->count(2)->create(['account_id' => $this->account->id]);
@@ -208,7 +208,7 @@ class PaymentApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.total', 2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_invoice(): void
     {
         $inv = Invoice::factory()->create(['account_id' => $this->account->id]);
@@ -221,7 +221,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-007: Promo Codes ═════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_validate_promo(): void
     {
         PromoCode::factory()->create(['code' => 'API10']);
@@ -235,7 +235,7 @@ class PaymentApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.valid', true);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_promo(): void
     {
         $response = $this->actingAs($this->owner)
@@ -251,7 +251,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-004: Gateways ════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_gateways(): void
     {
         PaymentGateway::factory()->count(2)->create();
@@ -264,7 +264,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-011: Balance Alerts ══════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_set_balance_alert(): void
     {
         $response = $this->actingAs($this->owner)
@@ -278,7 +278,7 @@ class PaymentApiTest extends TestCase
 
     // ═══════════════ FR-PAY-006: Tax Calculator ══════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_tax_calculator(): void
     {
         $response = $this->actingAs($this->owner)

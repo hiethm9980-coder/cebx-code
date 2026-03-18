@@ -2,6 +2,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\CargoManifest;
+use App\Models\ImmutableAuditLog;
+use App\Models\RetentionPolicy;
+use App\Models\TransportDocument;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +19,9 @@ class ComplianceController extends Controller
     // ── Transport Documents (AWB / BOL / CMR) ────────────────
     public function documents(Request $request): JsonResponse
     {
-        $query = DB::table('transport_documents')->where('account_id', $request->user()->account_id);
+        $this->authorize('viewAny', TransportDocument::class);
+
+        $query = DB::table('transport_documents')->where('account_id', $this->resolveCurrentAccountId($request));
         if ($request->filled('type')) $query->where('document_type', $request->type);
         if ($request->filled('shipment_id')) $query->where('shipment_id', $request->shipment_id);
         if ($request->filled('status')) $query->where('status', $request->status);
@@ -24,6 +30,8 @@ class ComplianceController extends Controller
 
     public function createDocument(Request $request): JsonResponse
     {
+        $this->authorize('create', TransportDocument::class);
+
         $data = $request->validate([
             'shipment_id' => 'required|uuid',
             'document_type' => 'required|in:AWB,MAWB,HAWB,BOL,CMR,CIM',
@@ -50,7 +58,7 @@ class ComplianceController extends Controller
         }
 
         $record = array_merge($data, [
-            'id' => Str::uuid(), 'account_id' => $request->user()->account_id,
+            'id' => Str::uuid(), 'account_id' => $this->resolveCurrentAccountId($request),
             'is_validated' => empty($errors), 'validation_errors' => empty($errors) ? null : json_encode($errors),
             'status' => empty($errors) ? 'validated' : 'draft',
             'created_at' => now(), 'updated_at' => now(),
@@ -62,8 +70,14 @@ class ComplianceController extends Controller
 
     public function validateDocument(Request $request, string $id): JsonResponse
     {
-        $doc = DB::table('transport_documents')->where('account_id', $request->user()->account_id)->where('id', $id)->first();
+        $doc = DB::table('transport_documents')
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('id', $id)
+            ->first();
+
         if (!$doc) return response()->json(['message' => 'Not found'], 404);
+
+        $this->authorize('update', $doc);
 
         $errors = [];
         // AWB validation rules
@@ -91,13 +105,17 @@ class ComplianceController extends Controller
     // ── Cargo Manifests ──────────────────────────────────────
     public function manifests(Request $request): JsonResponse
     {
-        $query = DB::table('cargo_manifests')->where('account_id', $request->user()->account_id);
+        $this->authorize('viewAny', CargoManifest::class);
+
+        $query = DB::table('cargo_manifests')->where('account_id', $this->resolveCurrentAccountId($request));
         if ($request->filled('type')) $query->where('manifest_type', $request->type);
         return response()->json($query->orderByDesc('created_at')->paginate($request->per_page ?? 25));
     }
 
     public function createManifest(Request $request): JsonResponse
     {
+        $this->authorize('create', CargoManifest::class);
+
         $data = $request->validate([
             'manifest_type' => 'required|in:air,sea,land', 'carrier_code' => 'required|string|max:20',
             'flight_voyage' => 'nullable|string|max:50', 'origin_code' => 'required|string|max:10',
@@ -112,7 +130,7 @@ class ComplianceController extends Controller
         unset($data['items']);
 
         $manifest = array_merge($data, [
-            'id' => $manifestId, 'account_id' => $request->user()->account_id,
+            'id' => $manifestId, 'account_id' => $this->resolveCurrentAccountId($request),
             'manifest_number' => 'MFT-' . strtoupper(Str::random(8)),
             'total_pieces' => collect($items)->sum('pieces'),
             'total_weight_kg' => collect($items)->sum('weight_kg'),
@@ -137,12 +155,16 @@ class ComplianceController extends Controller
     // ── Retention Policies ───────────────────────────────────
     public function retentionPolicies(Request $request): JsonResponse
     {
-        $policies = DB::table('retention_policies')->where('account_id', $request->user()->account_id)->get();
+        $this->authorize('viewAny', RetentionPolicy::class);
+
+        $policies = DB::table('retention_policies')->where('account_id', $this->resolveCurrentAccountId($request))->get();
         return response()->json(['data' => $policies]);
     }
 
     public function setRetentionPolicy(Request $request): JsonResponse
     {
+        $this->authorize('update', RetentionPolicy::class);
+
         $data = $request->validate([
             'data_category' => 'required|in:shipments,invoices,customs,audit,payments,claims',
             'retention_years' => 'required|integer|min:1|max:15',
@@ -150,8 +172,8 @@ class ComplianceController extends Controller
             'tamper_proof' => 'nullable|boolean', 'auto_archive' => 'nullable|boolean',
         ]);
         DB::table('retention_policies')->updateOrInsert(
-            ['account_id' => $request->user()->account_id, 'data_category' => $data['data_category']],
-            array_merge($data, ['id' => Str::uuid(), 'account_id' => $request->user()->account_id,
+            ['account_id' => $this->resolveCurrentAccountId($request), 'data_category' => $data['data_category']],
+            array_merge($data, ['id' => Str::uuid(), 'account_id' => $this->resolveCurrentAccountId($request),
                 'created_at' => now(), 'updated_at' => now()])
         );
         return response()->json(['data' => $data]);
@@ -160,7 +182,9 @@ class ComplianceController extends Controller
     // ── Immutable Audit Log ──────────────────────────────────
     public function auditLog(Request $request): JsonResponse
     {
-        $query = DB::table('immutable_audit_log')->where('account_id', $request->user()->account_id);
+        $this->authorize('audit', ImmutableAuditLog::class);
+
+        $query = DB::table('immutable_audit_log')->where('account_id', $this->resolveCurrentAccountId($request));
         if ($request->filled('entity_type')) $query->where('entity_type', $request->entity_type);
         if ($request->filled('event_type')) $query->where('event_type', $request->event_type);
         if ($request->filled('from')) $query->where('occurred_at', '>=', $request->from);
@@ -170,17 +194,21 @@ class ComplianceController extends Controller
 
     public function exportAudit(Request $request): JsonResponse
     {
+        $this->authorize('exportAudit', ImmutableAuditLog::class);
+
         // Trigger export job
         return response()->json(['data' => [
             'status' => 'queued', 'message' => 'Audit export queued for processing',
             'estimated_records' => DB::table('immutable_audit_log')
-                ->where('account_id', $request->user()->account_id)->count(),
+                ->where('account_id', $this->resolveCurrentAccountId($request))->count(),
         ]]);
     }
 
     public function complianceStats(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', TransportDocument::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
         $docs = DB::table('transport_documents')->where('account_id', $accountId);
         return response()->json(['data' => [
             'documents' => [
@@ -193,5 +221,18 @@ class ComplianceController extends Controller
             'audit_records' => DB::table('immutable_audit_log')->where('account_id', $accountId)->count(),
             'retention_policies' => DB::table('retention_policies')->where('account_id', $accountId)->count(),
         ]]);
+    }
+
+    private function resolveCurrentAccountId(Request $request): string
+    {
+        $currentAccountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($currentAccountId !== '') {
+            return $currentAccountId;
+        }
+
+        return trim((string) ($request->user()->account_id ?? ''));
     }
 }

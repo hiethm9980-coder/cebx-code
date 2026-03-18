@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\Account;
 use App\Models\User;
 use App\Exceptions\BusinessException;
 use App\Events\UserInvited;
@@ -10,6 +11,7 @@ use App\Events\UserDisabled;
 use App\Events\UserDeleted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class UserService
@@ -236,6 +238,8 @@ class UserService
      */
     public function listUsers(string $accountId, array $filters = []): \Illuminate\Pagination\LengthAwarePaginator
     {
+        $this->assertAccountAllowsTeamManagement($accountId);
+
         $query = User::withoutGlobalScopes()
             ->where('account_id', $accountId);
 
@@ -246,8 +250,8 @@ class UserService
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'ILIKE', "%{$search}%")
-                  ->orWhere('email', 'ILIKE', "%{$search}%");
+                $q->where('name', 'LIKE', "%{$search}%")
+                  ->orWhere('email', 'LIKE', "%{$search}%");
             });
         }
 
@@ -265,13 +269,28 @@ class UserService
      */
     public function getUserChangeLog(string $accountId, ?string $userId = null): \Illuminate\Pagination\LengthAwarePaginator
     {
-        $query = AuditLog::withoutGlobalScopes()
-            ->where('account_id', $accountId)
-            ->where('entity_type', 'User')
-            ->orderBy('created_at', 'desc');
+        $query = AuditLog::withoutGlobalScopes()->orderBy('created_at', 'desc');
+
+        if (Schema::hasColumn('audit_logs', 'entity_type')) {
+            $query->where('entity_type', 'User');
+        } elseif (Schema::hasColumn('audit_logs', 'auditable_type')) {
+            $query->where('auditable_type', 'User');
+        }
+
+        if (Schema::hasColumn('audit_logs', 'account_id')) {
+            $query->where('account_id', $accountId);
+        } elseif (Schema::hasColumn('audit_logs', 'user_id')) {
+            $query->join('users as audit_users', 'audit_users.id', '=', 'audit_logs.user_id')
+                ->where('audit_users.account_id', $accountId)
+                ->select('audit_logs.*');
+        }
 
         if ($userId) {
-            $query->where('entity_id', $userId);
+            if (Schema::hasColumn('audit_logs', 'entity_id')) {
+                $query->where('entity_id', $userId);
+            } elseif (Schema::hasColumn('audit_logs', 'auditable_id') && ctype_digit($userId)) {
+                $query->where('auditable_id', (int) $userId);
+            }
         }
 
         return $query->paginate(20);
@@ -280,20 +299,22 @@ class UserService
     // ─── Private Helpers ──────────────────────────────────────────
 
     /**
-     * Assert the performer has permission to manage users (must be owner or admin).
+     * Assert the performer has permission to manage users.
      *
      * @throws BusinessException
      */
     private function assertCanManageUsers(User $performer): void
     {
-        // For now: only owner can manage. Will be extended with RBAC in FR-IAM-003.
-        if (!$performer->is_owner) {
+        // is_owner is domain metadata only and must not grant authorization.
+        if (!$performer->hasPermission('users.manage')) {
             throw new BusinessException(
                 'لا تملك صلاحية كافية لإدارة المستخدمين.',
                 'ERR_PERMISSION',
                 403
             );
         }
+
+        $this->assertAccountAllowsTeamManagement((string) $performer->account_id);
     }
 
     /**
@@ -317,6 +338,19 @@ class UserService
         }
 
         return $user;
+    }
+
+    /**
+     * @throws BusinessException
+     */
+    private function assertAccountAllowsTeamManagement(string $accountId): void
+    {
+        /** @var Account|null $account */
+        $account = Account::withoutGlobalScopes()->find($accountId);
+
+        if ($account instanceof Account && !$account->allowsTeamManagement()) {
+            throw BusinessException::accountUpgradeRequired();
+        }
     }
 
     /**
@@ -346,16 +380,50 @@ class UserService
         ?array $oldValues,
         ?array $newValues
     ): void {
-        AuditLog::withoutGlobalScopes()->create([
-            'account_id'  => $accountId,
-            'user_id'     => $userId,
-            'action'      => $action,
-            'entity_type' => $entityType,
-            'entity_id'   => $entityId,
-            'old_values'  => $oldValues,
-            'new_values'  => $newValues,
-            'ip_address'  => request()->ip(),
-            'user_agent'  => request()->userAgent(),
-        ]);
+        $payload = [];
+
+        if (Schema::hasColumn('audit_logs', 'account_id')) {
+            $payload['account_id'] = $accountId;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'user_id')) {
+            $payload['user_id'] = $userId;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'action')) {
+            $payload['action'] = $action;
+        } elseif (Schema::hasColumn('audit_logs', 'event')) {
+            $payload['event'] = $action;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'entity_type')) {
+            $payload['entity_type'] = $entityType;
+        } elseif (Schema::hasColumn('audit_logs', 'auditable_type')) {
+            $payload['auditable_type'] = $entityType;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'entity_id')) {
+            $payload['entity_id'] = $entityId;
+        } elseif (Schema::hasColumn('audit_logs', 'auditable_id') && ctype_digit($entityId)) {
+            $payload['auditable_id'] = (int) $entityId;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'old_values')) {
+            $payload['old_values'] = $oldValues;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'new_values')) {
+            $payload['new_values'] = $newValues;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'ip_address')) {
+            $payload['ip_address'] = request()->ip();
+        }
+
+        if (Schema::hasColumn('audit_logs', 'user_agent')) {
+            $payload['user_agent'] = request()->userAgent();
+        }
+
+        AuditLog::withoutGlobalScopes()->create($payload);
     }
 }

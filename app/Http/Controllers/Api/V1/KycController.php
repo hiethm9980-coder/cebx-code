@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Account;
+use App\Models\KycDocument;
+use App\Models\KycVerification;
 use App\Services\KycService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,7 +32,10 @@ class KycController extends Controller
      */
     public function status(Request $request): JsonResponse
     {
-        $status = $this->kycService->getKycStatus($request->user()->account_id);
+        $this->authorize('viewAny', KycVerification::class);
+
+        $currentAccountId = $this->resolveCurrentAccountId($request);
+        $status = $this->kycService->getKycStatus($currentAccountId);
 
         return response()->json([
             'success' => true,
@@ -43,14 +49,25 @@ class KycController extends Controller
      */
     public function approve(Request $request): JsonResponse
     {
+        $this->authorize('update', KycVerification::class);
+
         $request->validate([
             'account_id' => ['required', 'uuid'],
             'notes'      => ['nullable', 'string', 'max:1000'],
             'level'      => ['nullable', 'string', 'in:basic,enhanced,full'],
         ]);
 
+        $currentAccountId = $this->resolveCurrentAccountId($request);
+        if (trim((string) $request->account_id) !== $currentAccountId) {
+            abort(404);
+        }
+
+        Account::withoutGlobalScopes()
+            ->where('id', $currentAccountId)
+            ->firstOrFail();
+
         $kyc = $this->kycService->approveKyc(
-            $request->account_id,
+            $currentAccountId,
             $request->user(),
             $request->notes,
             $request->level
@@ -73,14 +90,25 @@ class KycController extends Controller
      */
     public function reject(Request $request): JsonResponse
     {
+        $this->authorize('update', KycVerification::class);
+
         $request->validate([
             'account_id' => ['required', 'uuid'],
             'reason'     => ['required', 'string', 'max:1000'],
             'notes'      => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $currentAccountId = $this->resolveCurrentAccountId($request);
+        if (trim((string) $request->account_id) !== $currentAccountId) {
+            abort(404);
+        }
+
+        Account::withoutGlobalScopes()
+            ->where('id', $currentAccountId)
+            ->firstOrFail();
+
         $kyc = $this->kycService->rejectKyc(
-            $request->account_id,
+            $currentAccountId,
             $request->user(),
             $request->reason,
             $request->notes
@@ -103,13 +131,17 @@ class KycController extends Controller
      */
     public function resubmit(Request $request): JsonResponse
     {
+        $this->authorize('update', KycVerification::class);
+
         $request->validate([
             'documents'   => ['required', 'array', 'min:1'],
             'documents.*' => ['string', 'max:500'],
         ]);
 
+        $currentAccountId = $this->resolveCurrentAccountId($request);
+
         $kyc = $this->kycService->resubmitKyc(
-            $request->user()->account_id,
+            $currentAccountId,
             $request->documents,
             $request->user()
         );
@@ -134,8 +166,11 @@ class KycController extends Controller
      */
     public function listDocuments(Request $request): JsonResponse
     {
+        $this->authorize('viewDocuments', KycDocument::class);
+
+        $currentAccountId = $this->resolveCurrentAccountId($request);
         $documents = $this->kycService->listDocuments(
-            $request->user()->account_id,
+            $currentAccountId,
             $request->user()
         );
 
@@ -152,6 +187,8 @@ class KycController extends Controller
      */
     public function uploadDocument(Request $request): JsonResponse
     {
+        $this->authorize('manageDocuments', KycDocument::class);
+
         $request->validate([
             'kyc_verification_id' => ['required', 'uuid'],
             'document_type'       => ['required', 'string', 'max:100'],
@@ -162,8 +199,15 @@ class KycController extends Controller
             'is_sensitive'        => ['nullable', 'boolean'],
         ]);
 
+        $currentAccountId = $this->resolveCurrentAccountId($request);
+
+        KycVerification::withoutGlobalScopes()
+            ->where('account_id', $currentAccountId)
+            ->where('id', $request->kyc_verification_id)
+            ->firstOrFail();
+
         $doc = $this->kycService->uploadDocument(
-            $request->user()->account_id,
+            $currentAccountId,
             $request->kyc_verification_id,
             $request->document_type,
             $request->filename,
@@ -192,8 +236,17 @@ class KycController extends Controller
      */
     public function downloadDocument(Request $request, string $id): JsonResponse
     {
+        $currentAccountId = $this->resolveCurrentAccountId($request);
+
+        $document = KycDocument::withoutGlobalScopes()
+            ->where('account_id', $currentAccountId)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $this->authorize('viewDocuments', $document);
+
         $downloadInfo = $this->kycService->getDocumentDownloadUrl(
-            $request->user()->account_id,
+            $currentAccountId,
             $id,
             $request->user()
         );
@@ -211,8 +264,17 @@ class KycController extends Controller
      */
     public function purgeDocument(Request $request, string $id): JsonResponse
     {
+        $currentAccountId = $this->resolveCurrentAccountId($request);
+
+        $document = KycDocument::withoutGlobalScopes()
+            ->where('account_id', $currentAccountId)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $this->authorize('manageDocuments', $document);
+
         $doc = $this->kycService->purgeDocument(
-            $request->user()->account_id,
+            $currentAccountId,
             $id,
             $request->user()
         );
@@ -226,5 +288,18 @@ class KycController extends Controller
                 'purged_at' => $doc->purged_at?->toISOString(),
             ],
         ]);
+    }
+
+    private function resolveCurrentAccountId(Request $request): string
+    {
+        $currentAccountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($currentAccountId !== '') {
+            return $currentAccountId;
+        }
+
+        return trim((string) ($request->user()->account_id ?? ''));
     }
 }

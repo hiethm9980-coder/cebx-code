@@ -16,13 +16,13 @@ class InvitationResource extends JsonResource
             'status'      => $this->status,
             'is_expired'  => $this->isExpired(),
             'is_usable'   => $this->isUsable(),
-            'role'        => $this->whenLoaded('role', fn () => [
-                'id'           => $this->role->id,
-                'display_name' => $this->role->display_name,
+            'role'        => $this->when($this->resolvedRole(), fn () => [
+                'id'           => $this->resolvedRole()?->id,
+                'display_name' => $this->resolvedRole()?->display_name,
             ]),
-            'invited_by'  => $this->whenLoaded('inviter', fn () => [
-                'id'   => $this->inviter->id,
-                'name' => $this->inviter->name,
+            'invited_by'  => $this->when($this->resolvedInviter(), fn () => [
+                'id'   => $this->resolvedInviter()?->id,
+                'name' => $this->resolvedInviter()?->name,
             ]),
             'accepted_by' => $this->when($this->accepted_by, fn () => [
                 'id' => $this->accepted_by,

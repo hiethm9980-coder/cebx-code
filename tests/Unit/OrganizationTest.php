@@ -33,7 +33,7 @@ class OrganizationTest extends TestCase
         $this->service = $this->app->make(OrganizationService::class);
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id, 'slug' => 'owner']);
-        $this->owner = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->owner = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
     private function createOrg(): Organization
@@ -48,7 +48,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-001: Create Organization (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_organization_auto_creates_owner(): void
     {
         $org = $this->createOrg();
@@ -59,7 +59,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals('owner', $ownerMember->membership_role);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_organization_auto_creates_wallet(): void
     {
         $org = $this->createOrg();
@@ -68,7 +68,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals(0, $org->wallet->balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_organization_default_unverified(): void
     {
         $org = $this->createOrg();
@@ -76,7 +76,7 @@ class OrganizationTest extends TestCase
         $this->assertFalse($org->isVerified());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_owner_has_financial_access(): void
     {
         $org = $this->createOrg();
@@ -88,7 +88,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-002: Manage Profile (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_update_org_profile(): void
     {
         $org = $this->createOrg();
@@ -96,7 +96,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals('New Name LLC', $updated->legal_name);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_organization_with_members(): void
     {
         $org = $this->createOrg();
@@ -104,7 +104,7 @@ class OrganizationTest extends TestCase
         $this->assertCount(1, $loaded->members);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_orgs_for_account(): void
     {
         $this->createOrg();
@@ -116,7 +116,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-003: Invite Members (6 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_invite_member(): void
     {
         $org = $this->createOrg();
@@ -125,7 +125,7 @@ class OrganizationTest extends TestCase
         $this->assertNotNull($invite->token);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_duplicate_invite_throws(): void
     {
         $org = $this->createOrg();
@@ -135,20 +135,23 @@ class OrganizationTest extends TestCase
         $this->service->inviteMember($org->id, $this->owner, ['email' => 'dup@test.com']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_accept_invite(): void
     {
         $org = $this->createOrg();
         $invite = $this->service->inviteMember($org->id, $this->owner, ['email' => 'new@test.com']);
 
-        $newUser = User::factory()->create(['account_id' => $this->account->id, 'email' => 'new@test.com', 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $newUserRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $newUser = $this->createUserWithRole((string) $this->account->id, (string) $newUserRole->id, [
+            'email' => 'new@test.com',
+        ]);
         $member = $this->service->acceptInvite($invite->token, $newUser);
 
         $this->assertEquals('active', $member->status);
         $this->assertEquals(OrganizationInvite::STATUS_ACCEPTED, $invite->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_invite(): void
     {
         $org = $this->createOrg();
@@ -157,7 +160,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals(OrganizationInvite::STATUS_CANCELLED, $invite->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_resend_invite(): void
     {
         $org = $this->createOrg();
@@ -168,7 +171,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals(1, $resent->resend_count);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_expired_invite_rejected(): void
     {
         $org = $this->createOrg();
@@ -176,7 +179,8 @@ class OrganizationTest extends TestCase
             'organization_id' => $org->id, 'invited_by' => $this->owner->id,
         ]);
 
-        $newUser = User::factory()->create(['account_id' => $this->account->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $newUserRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $newUser = $this->createUserWithRole((string) $this->account->id, (string) $newUserRole->id);
 
         $this->expectException(\RuntimeException::class);
         $this->service->acceptInvite($invite->token, $newUser);
@@ -186,7 +190,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-004: Permissions Catalog (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_permission_catalog(): void
     {
         PermissionCatalog::create(['key' => 'shipments.create', 'name' => 'Create Shipments', 'module' => 'SH', 'category' => 'operational']);
@@ -196,7 +200,7 @@ class OrganizationTest extends TestCase
         $this->assertCount(2, $catalog);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_filter_by_module(): void
     {
         PermissionCatalog::create(['key' => 'sh.create', 'name' => 'SH', 'module' => 'SH', 'category' => 'operational']);
@@ -206,7 +210,7 @@ class OrganizationTest extends TestCase
         $this->assertCount(1, $catalog);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_validate_permissions(): void
     {
         PermissionCatalog::create(['key' => 'valid.perm', 'name' => 'Valid', 'module' => 'SH', 'category' => 'operational']);
@@ -220,7 +224,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-005: Financial vs Operational (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_set_financial_access(): void
     {
         $org = $this->createOrg();
@@ -230,7 +234,7 @@ class OrganizationTest extends TestCase
         $this->assertTrue($updated->can_view_financial);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_financial_permissions_list(): void
     {
         PermissionCatalog::create(['key' => 'profit.view', 'name' => 'View Profit', 'module' => 'RPT', 'category' => 'financial']);
@@ -240,7 +244,7 @@ class OrganizationTest extends TestCase
         $this->assertCount(1, $financial);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_operational_permissions_list(): void
     {
         PermissionCatalog::create(['key' => 'ops.perm', 'name' => 'Ops', 'module' => 'SH', 'category' => 'operational']);
@@ -252,28 +256,31 @@ class OrganizationTest extends TestCase
     // FR-ORG-006: Unified Permission Check (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_owner_has_all_permissions(): void
     {
         $org = $this->createOrg();
         $this->assertTrue($this->service->checkPermission($org->id, $this->owner->id, 'any.permission'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_member_without_permission_denied(): void
     {
         $org = $this->createOrg();
-        $member = User::factory()->create(['account_id' => $this->account->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $memberRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $member = $this->createUserWithRole((string) $this->account->id, (string) $memberRole->id);
         OrganizationMember::factory()->create(['organization_id' => $org->id, 'user_id' => $member->id]);
 
         $this->assertFalse($this->service->checkPermission($org->id, $member->id, 'admin.only'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_non_member_denied(): void
     {
         $org = $this->createOrg();
-        $stranger = User::factory()->create(['account_id' => Account::factory()->create()->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $strangerAccount = Account::factory()->create();
+        $strangerRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $stranger = $this->createUserWithRole((string) $strangerAccount->id, (string) $strangerRole->id);
         $this->assertFalse($this->service->checkPermission($org->id, $stranger->id, 'any'));
     }
 
@@ -281,11 +288,12 @@ class OrganizationTest extends TestCase
     // FR-ORG-007: Ownership & Member Management (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_transfer_ownership(): void
     {
         $org = $this->createOrg();
-        $newOwner = User::factory()->create(['account_id' => $this->account->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $newOwnerRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $newOwner = $this->createUserWithRole((string) $this->account->id, (string) $newOwnerRole->id);
         OrganizationMember::factory()->create(['organization_id' => $org->id, 'user_id' => $newOwner->id]);
 
         $this->service->transferOwnership($org->id, $this->owner->id, $newOwner->id);
@@ -297,7 +305,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals('owner', $newMember->membership_role);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_suspend_member(): void
     {
         $org = $this->createOrg();
@@ -307,7 +315,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals('suspended', $suspended->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cannot_suspend_owner(): void
     {
         $org = $this->createOrg();
@@ -317,7 +325,7 @@ class OrganizationTest extends TestCase
         $this->service->suspendMember($ownerMember->id, 'Test');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_remove_member(): void
     {
         $org = $this->createOrg();
@@ -327,7 +335,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals('removed', $member->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cannot_remove_owner(): void
     {
         $org = $this->createOrg();
@@ -341,7 +349,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-008: Verification Status (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_submit_for_verification(): void
     {
         $org = $this->createOrg();
@@ -349,7 +357,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals(Organization::STATUS_PENDING_REVIEW, $submitted->verification_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_verify_organization(): void
     {
         $org = $this->createOrg();
@@ -358,7 +366,7 @@ class OrganizationTest extends TestCase
         $this->assertNotNull($verified->verified_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_reject_organization(): void
     {
         $org = $this->createOrg();
@@ -371,7 +379,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-009: Per-Org Wallet (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_isolated_per_org(): void
     {
         $org = $this->createOrg();
@@ -380,7 +388,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals($org->id, $wallet->organization_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_topup_wallet(): void
     {
         $org = $this->createOrg();
@@ -388,7 +396,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals(500, $wallet->balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_reserve_and_release(): void
     {
         $org = $this->createOrg();
@@ -401,7 +409,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals(1000, $wallet->getAvailableBalance());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_insufficient_funds_throws(): void
     {
         $org = $this->createOrg();
@@ -415,7 +423,7 @@ class OrganizationTest extends TestCase
     // FR-ORG-010: Wallet Settings (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_update_wallet_settings(): void
     {
         $org = $this->createOrg();
@@ -427,7 +435,7 @@ class OrganizationTest extends TestCase
         $this->assertEquals(200, $wallet->low_balance_threshold);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_low_balance_detection(): void
     {
         $org = $this->createOrg();
@@ -435,7 +443,7 @@ class OrganizationTest extends TestCase
         $this->assertTrue($wallet->isLowBalance()); // balance=0, threshold=100
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_summary(): void
     {
         $org = $this->createOrg();

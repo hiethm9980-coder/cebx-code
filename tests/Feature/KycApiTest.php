@@ -11,6 +11,7 @@ use App\Models\KycVerification;
 use App\Models\KycDocument;
 use App\Models\AuditLog;
 use App\Services\AuditService;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-014 + FR-IAM-016: KYC Status & Document Access — Integration Tests (22 tests)
@@ -18,6 +19,7 @@ use App\Services\AuditService;
 class KycApiTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected Account $account;
     protected User $owner;
@@ -39,14 +41,13 @@ class KycApiTest extends TestCase
             'is_owner'   => false,
         ]);
 
-        $kycRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['kyc:manage', 'kyc:documents', 'kyc:view'],
-        ]);
-        $this->kycManager = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $kycRole->id,
+        $kycRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['kyc.manage', 'kyc.documents', 'kyc.read'],
+            'kyc_manager'
+        );
+        $this->kycManager = $this->createUserWithRole((string) $this->account->id, (string) $kycRole->id, [
+            'is_owner' => false,
         ]);
     }
 
@@ -54,7 +55,7 @@ class KycApiTest extends TestCase
     // FR-IAM-014: KYC Status Endpoint
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_kyc_status_unverified()
     {
         $response = $this->actingAs($this->owner)
@@ -72,7 +73,7 @@ class KycApiTest extends TestCase
         $this->assertFalse($response->json('data.capabilities.can_ship_international'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function status_shows_pending_with_capabilities()
     {
         KycVerification::factory()->pending()->create([
@@ -89,7 +90,7 @@ class KycApiTest extends TestCase
             ->assertJsonPath('data.capabilities.can_ship_international', false);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function status_shows_approved_with_full_capabilities()
     {
         KycVerification::factory()->approved()->create([
@@ -108,7 +109,7 @@ class KycApiTest extends TestCase
         $this->assertNull($response->json('data.capabilities.shipping_limit'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function status_shows_rejected_with_reason()
     {
         KycVerification::factory()->rejected()->create([
@@ -125,7 +126,7 @@ class KycApiTest extends TestCase
         $this->assertNotNull($response->json('data.rejection_reason'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function status_includes_document_count()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -149,7 +150,7 @@ class KycApiTest extends TestCase
     // FR-IAM-014: Approve / Reject / Resubmit
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_approve_kyc()
     {
         KycVerification::factory()->pending()->create([
@@ -169,7 +170,7 @@ class KycApiTest extends TestCase
         $this->assertEquals('approved', $this->account->fresh()->kyc_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function kyc_manager_can_approve_kyc()
     {
         KycVerification::factory()->pending()->create([
@@ -185,7 +186,7 @@ class KycApiTest extends TestCase
             ->assertJsonPath('data.status', 'approved');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_cannot_approve()
     {
         KycVerification::factory()->pending()->create([
@@ -200,7 +201,7 @@ class KycApiTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_reject_kyc_with_reason()
     {
         KycVerification::factory()->pending()->create([
@@ -218,7 +219,7 @@ class KycApiTest extends TestCase
             ->assertJsonPath('data.rejection_reason', 'صور غير واضحة');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function reject_requires_reason()
     {
         KycVerification::factory()->pending()->create([
@@ -233,7 +234,7 @@ class KycApiTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_resubmit_after_rejection()
     {
         KycVerification::factory()->rejected()->create([
@@ -249,7 +250,7 @@ class KycApiTest extends TestCase
             ->assertJsonPath('data.status', 'pending');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_resubmit_when_pending()
     {
         KycVerification::factory()->pending()->create([
@@ -268,7 +269,7 @@ class KycApiTest extends TestCase
     // FR-IAM-016: Document Access Control
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_list_kyc_documents()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -291,7 +292,7 @@ class KycApiTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_documents_permission_cannot_list()
     {
         $response = $this->actingAs($this->member)
@@ -300,7 +301,7 @@ class KycApiTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function document_access_denied_is_audit_logged()
     {
         $this->actingAs($this->member)
@@ -313,7 +314,7 @@ class KycApiTest extends TestCase
         $this->assertNotNull($log);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_upload_document()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -334,7 +335,7 @@ class KycApiTest extends TestCase
             ->assertJsonPath('data.document_type', 'national_id');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_download_document()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -356,7 +357,7 @@ class KycApiTest extends TestCase
             ->assertJsonPath('data.ttl_minutes', 15);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function download_is_audit_logged()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -379,7 +380,7 @@ class KycApiTest extends TestCase
         $this->assertEquals($doc->id, $log->entity_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_purge_document()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -400,7 +401,7 @@ class KycApiTest extends TestCase
         $this->assertTrue($doc->fresh()->is_purged);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_manage_cannot_purge()
     {
         $kyc = KycVerification::factory()->pending()->create([

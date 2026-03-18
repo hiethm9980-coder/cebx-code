@@ -100,7 +100,14 @@
                         <td><span class="badge" style="background:<?php echo e($rc); ?>15;color:<?php echo e($rc); ?>"><?php echo e($user->role_name); ?></span></td>
                         <td><span style="color:<?php echo e($user->is_active ? 'var(--ac)' : 'var(--dg)'); ?>">● <?php echo e($user->is_active ? 'نشط' : 'معطّل'); ?></span></td>
                         <td style="font-size:12px;color:var(--tm)"><?php echo e($user->last_login_at?->diffForHumans() ?? 'لم يسجل دخول'); ?></td>
-                        <td><a href="<?php echo e(route('users.edit', $user)); ?>" class="btn btn-s" style="font-size:12px;padding:5px 14px">تعديل</a></td>
+                        <td>
+                            <?php $userId = $user->getRawOriginal($user->getKeyName()); ?>
+                            <?php if($userId !== null && $userId !== '' && $userId !== 0 && $userId !== '0'): ?>
+                                <a href="<?php echo e(route('users.edit', ['user' => $userId])); ?>" class="btn btn-s" style="font-size:12px;padding:5px 14px">تعديل</a>
+                            <?php else: ?>
+                                <span class="btn btn-s" style="font-size:12px;padding:5px 14px;opacity:0.6;cursor:not-allowed" title="معرّف المستخدم غير متوفر">تعديل</span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
                     <tr><td colspan="6" class="empty-state">لا يوجد مستخدمون</td></tr>

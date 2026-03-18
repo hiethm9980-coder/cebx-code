@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Services\CarrierService;
 use App\Models\Shipment;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * CarrierController — FR-CR-001→008
@@ -26,7 +27,7 @@ class CarrierController extends Controller
     public function __construct(private CarrierService $carrierService) {}
 
     /**
-     * FR-CR-001: Create shipment at carrier (DHL).
+     * FR-CR-001: Create shipment at carrier.
      */
     public function createAtCarrier(Request $request, string $shipmentId): JsonResponse
     {
@@ -40,24 +41,32 @@ class CarrierController extends Controller
         $request->validate([
             'label_format' => 'nullable|in:pdf,zpl,png,epl',
             'label_size'   => 'nullable|in:4x6,4x8,A4,A5',
+            'idempotency_key' => 'nullable|string|max:200',
+            'correlation_id' => 'nullable|string|max:200',
         ]);
 
         $carrierShipment = $this->carrierService->createAtCarrier(
             $shipment,
             $user,
             $request->input('label_format'),
-            $request->input('label_size')
+            $request->input('label_size'),
+            $request->input('idempotency_key'),
+            $request->input('correlation_id')
         );
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Shipment created at carrier successfully',
             'data'    => [
-                'carrier_shipment_id' => $carrierShipment->id,
+                'id'                  => $carrierShipment->id,
+                'carrier_shipment_id' => $carrierShipment->carrier_shipment_id,
                 'tracking_number'     => $carrierShipment->tracking_number,
                 'awb_number'          => $carrierShipment->awb_number,
                 'status'              => $carrierShipment->status,
                 'carrier'             => $carrierShipment->carrier_code,
+                'service_code'        => $carrierShipment->service_code,
+                'correlation_id'      => $carrierShipment->correlation_id,
+                'idempotency_key'     => $carrierShipment->idempotency_key,
                 'label_format'        => $carrierShipment->label_format,
                 'documents'           => $this->carrierService->listDocuments($shipment),
             ],
@@ -185,7 +194,7 @@ class CarrierController extends Controller
     /**
      * FR-CR-008: Download a specific document (secure, no financial data).
      */
-    public function downloadDocument(Request $request, string $shipmentId, string $documentId): Response
+    public function downloadDocument(Request $request, string $shipmentId, string $documentId): Response|RedirectResponse
     {
         $user = $request->user();
         $shipment = Shipment::where('id', $shipmentId)
@@ -196,10 +205,14 @@ class CarrierController extends Controller
 
         $docData = $this->carrierService->getDocumentForDownload($documentId, $shipment, $user);
 
-        return response($docData['content'])
+        if (! empty($docData['download_url']) && empty($docData['content'])) {
+            return redirect()->away((string) $docData['download_url']);
+        }
+
+        return response((string) ($docData['content'] ?? ''))
             ->header('Content-Type', $docData['mime_type'])
             ->header('Content-Disposition', "attachment; filename=\"{$docData['filename']}\"")
-            ->header('Content-Length', $docData['file_size'])
+            ->header('Content-Length', (string) ($docData['file_size'] ?? strlen((string) ($docData['content'] ?? ''))))
             ->header('X-Checksum-SHA256', $docData['checksum'] ?? '');
     }
 

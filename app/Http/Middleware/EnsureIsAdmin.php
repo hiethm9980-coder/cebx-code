@@ -15,8 +15,7 @@ class EnsureIsAdmin
             return redirect()->route('login');
         }
 
-        // Allow if super admin or admin role or admin account type
-        if ($user->is_super_admin || $user->role === 'admin' || ($user->account && $user->account->type === 'admin')) {
+        if (($user->user_type ?? null) === 'internal') {
             return $next($request);
         }
 

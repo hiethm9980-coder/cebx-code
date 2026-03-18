@@ -12,19 +12,19 @@ use Illuminate\Support\Facades\Hash;
 /**
  * FIX P2-2: B2BAuthWebController
  *
- * بوابة دخول B2B — تتطلب account_slug لحل مشكلة تكرار البريد.
+ * ط¨ظˆط§ط¨ط© ط¯ط®ظˆظ„ B2B â€” طھطھط·ظ„ط¨ account_slug ظ„ط­ظ„ ظ…ط´ظƒظ„ط© طھظƒط±ط§ط± ط§ظ„ط¨ط±ظٹط¯.
  *
- * المدخلات: account_slug + email + password
- * المنطق:
- *   1. ابحث عن الحساب بالـ slug
- *   2. تأكد أن نوعه organization
- *   3. ابحث عن المستخدم داخل هذا الحساب بالبريد
- *   4. تحقق كلمة المرور وسجّل الدخول
+ * ط§ظ„ظ…ط¯ط®ظ„ط§طھ: account_slug + email + password
+ * ط§ظ„ظ…ظ†ط·ظ‚:
+ *   1. ط§ط¨ط­ط« ط¹ظ† ط§ظ„ط­ط³ط§ط¨ ط¨ط§ظ„ظ€ slug
+ *   2. طھط£ظƒط¯ ط£ظ† ظ†ظˆط¹ظ‡ organization
+ *   3. ط§ط¨ط­ط« ط¹ظ† ط§ظ„ظ…ط³طھط®ط¯ظ… ط¯ط§ط®ظ„ ظ‡ط°ط§ ط§ظ„ط­ط³ط§ط¨ ط¨ط§ظ„ط¨ط±ظٹط¯
+ *   4. طھط­ظ‚ظ‚ ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط± ظˆط³ط¬ظ‘ظ„ ط§ظ„ط¯ط®ظˆظ„
  */
 class B2BAuthWebController extends Controller
 {
     /**
-     * عرض نموذج تسجيل دخول B2B.
+     * ط¹ط±ط¶ ظ†ظ…ظˆط°ط¬ طھط³ط¬ظٹظ„ ط¯ط®ظˆظ„ B2B.
      */
     public function showLogin()
     {
@@ -33,7 +33,7 @@ class B2BAuthWebController extends Controller
             if ($user->account && $user->account->type === 'organization') {
                 return redirect()->route('b2b.dashboard');
             }
-            // مسجل دخول لكن ليس organization — تسجيل خروج وإعادة توجيه
+            // ظ…ط³ط¬ظ„ ط¯ط®ظˆظ„ ظ„ظƒظ† ظ„ظٹط³ organization â€” طھط³ط¬ظٹظ„ ط®ط±ظˆط¬ ظˆط¥ط¹ط§ط¯ط© طھظˆط¬ظٹظ‡
             Auth::logout();
         }
 
@@ -41,7 +41,7 @@ class B2BAuthWebController extends Controller
     }
 
     /**
-     * معالجة تسجيل الدخول لـ B2B.
+     * ظ…ط¹ط§ظ„ط¬ط© طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„ ظ„ظ€ B2B.
      */
     public function login(Request $request)
     {
@@ -51,23 +51,23 @@ class B2BAuthWebController extends Controller
             'password'     => 'required|string',
         ]);
 
-        // 1. البحث عن الحساب بالـ slug
+        // 1. ط§ظ„ط¨ط­ط« ط¹ظ† ط§ظ„ط­ط³ط§ط¨ ط¨ط§ظ„ظ€ slug
         $account = Account::where('slug', $request->account_slug)->first();
 
         if (!$account) {
             return back()
                 ->withInput($request->only('account_slug', 'email'))
-                ->withErrors(['account_slug' => 'لم يتم العثور على الحساب. تأكد من معرّف المنظمة.']);
+                ->withErrors(['account_slug' => 'ظ„ظ… ظٹطھظ… ط§ظ„ط¹ط«ظˆط± ط¹ظ„ظ‰ ط§ظ„ط­ط³ط§ط¨. طھط£ظƒط¯ ظ…ظ† ظ…ط¹ط±ظ‘ظپ ط§ظ„ظ…ظ†ط¸ظ…ط©.']);
         }
 
-        // 2. التأكد أن نوع الحساب organization
+        // 2. ط§ظ„طھط£ظƒط¯ ط£ظ† ظ†ظˆط¹ ط§ظ„ط­ط³ط§ط¨ organization
         if ($account->type !== 'organization') {
             return back()
                 ->withInput($request->only('account_slug', 'email'))
-                ->withErrors(['account_slug' => 'هذا الحساب ليس حساب منظمة. استخدم بوابة B2C.']);
+                ->withErrors(['account_slug' => 'ظ‡ط°ط§ ط§ظ„ط­ط³ط§ط¨ ظ„ظٹط³ ط­ط³ط§ط¨ ظ…ظ†ط¸ظ…ط©. ط§ط³طھط®ط¯ظ… ط¨ظˆط§ط¨ط© B2C.']);
         }
 
-        // 3. البحث عن المستخدم داخل هذا الحساب
+        // 3. ط§ظ„ط¨ط­ط« ط¹ظ† ط§ظ„ظ…ط³طھط®ط¯ظ… ط¯ط§ط®ظ„ ظ‡ط°ط§ ط§ظ„ط­ط³ط§ط¨
         $user = User::where('account_id', $account->id)
             ->where('email', $request->email)
             ->first();
@@ -75,24 +75,24 @@ class B2BAuthWebController extends Controller
         if (!$user) {
             return back()
                 ->withInput($request->only('account_slug', 'email'))
-                ->withErrors(['email' => 'البريد الإلكتروني غير مسجل في هذا الحساب.']);
+                ->withErrors(['email' => 'ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط؛ظٹط± ظ…ط³ط¬ظ„ ظپظٹ ظ‡ط°ط§ ط§ظ„ط­ط³ط§ط¨.']);
         }
 
-        // 4. التحقق من كلمة المرور
+        // 4. ط§ظ„طھط­ظ‚ظ‚ ظ…ظ† ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±
         if (!Hash::check($request->password, $user->password)) {
             return back()
                 ->withInput($request->only('account_slug', 'email'))
-                ->withErrors(['password' => 'كلمة المرور غير صحيحة.']);
+                ->withErrors(['password' => 'ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط± ط؛ظٹط± طµط­ظٹط­ط©.']);
         }
 
-        // 5. التحقق من حالة المستخدم
+        // 5. ط§ظ„طھط­ظ‚ظ‚ ظ…ظ† ط­ط§ظ„ط© ط§ظ„ظ…ط³طھط®ط¯ظ…
         if (isset($user->status) && $user->status === 'suspended') {
             return back()
                 ->withInput($request->only('account_slug', 'email'))
-                ->withErrors(['email' => 'تم تعليق حسابك. تواصل مع الإدارة.']);
+                ->withErrors(['email' => 'طھظ… طھط¹ظ„ظٹظ‚ ط­ط³ط§ط¨ظƒ. طھظˆط§طµظ„ ظ…ط¹ ط§ظ„ط¥ط¯ط§ط±ط©.']);
         }
 
-        // 6. تسجيل الدخول
+        // 6. طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
@@ -100,7 +100,7 @@ class B2BAuthWebController extends Controller
     }
 
     /**
-     * تسجيل الخروج.
+     * طھط³ط¬ظٹظ„ ط§ظ„ط®ط±ظˆط¬.
      */
     public function logout(Request $request)
     {

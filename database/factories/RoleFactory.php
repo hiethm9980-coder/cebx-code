@@ -16,6 +16,7 @@ class RoleFactory extends Factory
         return [
             'account_id'   => Account::factory(),
             'name'         => $name,
+            'slug'         => $name,
             'display_name' => fake()->jobTitle(),
             'description'  => fake()->sentence(),
             'is_system'    => false,

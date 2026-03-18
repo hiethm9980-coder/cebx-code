@@ -3,27 +3,63 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\TariffRule;
+use App\Models\Shipment;
 use App\Models\ShipmentCharge;
-use Illuminate\Http\Request;
+use App\Models\TariffRule;
+use App\Models\TaxRule;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class TariffController extends Controller
 {
-    public function index(Request $r): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $q = TariffRule::where('account_id', $r->user()->account_id);
-        if ($r->origin_country) $q->where(fn($q) => $q->where('origin_country', $r->origin_country)->orWhere('origin_country', '*'));
-        if ($r->destination_country) $q->where(fn($q) => $q->where('destination_country', $r->destination_country)->orWhere('destination_country', '*'));
-        if ($r->shipment_type) $q->where(fn($q) => $q->where('shipment_type', $r->shipment_type)->orWhere('shipment_type', 'any'));
-        if ($r->active_only) $q->active();
-        if ($r->search) $q->where('name', 'like', "%{$r->search}%");
-        return response()->json(['data' => $q->orderBy('priority', 'desc')->paginate($r->per_page ?? 25)]);
+        $this->authorize('viewAny', TariffRule::class);
+
+        $query = TariffRule::query()->where('account_id', $this->currentAccountId());
+
+        if ($request->origin_country) {
+            $query->where(function ($builder) use ($request): void {
+                $builder
+                    ->where('origin_country', $request->origin_country)
+                    ->orWhere('origin_country', '*');
+            });
+        }
+
+        if ($request->destination_country) {
+            $query->where(function ($builder) use ($request): void {
+                $builder
+                    ->where('destination_country', $request->destination_country)
+                    ->orWhere('destination_country', '*');
+            });
+        }
+
+        if ($request->shipment_type) {
+            $query->where(function ($builder) use ($request): void {
+                $builder
+                    ->where('shipment_type', $request->shipment_type)
+                    ->orWhere('shipment_type', 'any');
+            });
+        }
+
+        if ($request->active_only) {
+            $query->active();
+        }
+
+        if ($request->search) {
+            $query->where('name', 'like', '%' . $request->search . '%');
+        }
+
+        return response()->json([
+            'data' => $query->orderBy('priority', 'desc')->paginate($request->per_page ?? 25),
+        ]);
     }
 
-    public function store(Request $r): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        $v = $r->validate([
+        $this->authorize('create', TariffRule::class);
+
+        $validated = $request->validate([
             'name' => 'required|string|max:200',
             'origin_country' => 'required|string|max:3',
             'destination_country' => 'required|string|max:3',
@@ -51,34 +87,51 @@ class TariffController extends Controller
             'priority' => 'nullable|integer',
             'conditions' => 'nullable|array',
         ]);
-        $v['account_id'] = $r->user()->account_id;
-        return response()->json(['data' => TariffRule::create($v), 'message' => 'تم إنشاء قاعدة التعرفة'], 201);
+
+        $validated['account_id'] = $this->currentAccountId();
+
+        return response()->json([
+            'data' => TariffRule::create($validated),
+            'message' => 'طھظ… ط¥ظ†ط´ط§ط، ظ‚ط§ط¹ط¯ط© ط§ظ„طھط¹ط±ظپط©',
+        ], 201);
     }
 
     public function show(string $id): JsonResponse
     {
-        return response()->json(['data' => TariffRule::findOrFail($id)]);
+        $tariff = $this->findTariffForCurrentAccount($id);
+        $this->authorize('view', $tariff);
+
+        return response()->json(['data' => $tariff]);
     }
 
-    public function update(Request $r, string $id): JsonResponse
+    public function update(Request $request, string $id): JsonResponse
     {
-        $t = TariffRule::findOrFail($id);
-        $t->update($r->except(['account_id']));
-        return response()->json(['data' => $t, 'message' => 'تم تحديث التعرفة']);
+        $tariff = $this->findTariffForCurrentAccount($id);
+        $this->authorize('update', $tariff);
+
+        $tariff->update($request->except(['account_id']));
+
+        return response()->json([
+            'data' => $tariff,
+            'message' => 'طھظ… طھط­ط¯ظٹط« ط§ظ„طھط¹ط±ظپط©',
+        ]);
     }
 
     public function destroy(string $id): JsonResponse
     {
-        TariffRule::findOrFail($id)->delete();
-        return response()->json(['message' => 'تم حذف التعرفة']);
+        $tariff = $this->findTariffForCurrentAccount($id);
+        $this->authorize('delete', $tariff);
+
+        $tariff->delete();
+
+        return response()->json(['message' => 'طھظ… ط­ط°ظپ ط§ظ„طھط¹ط±ظپط©']);
     }
 
-    /**
-     * Calculate tariff for given parameters — محرك حساب التعرفة
-     */
-    public function calculate(Request $r): JsonResponse
+    public function calculate(Request $request): JsonResponse
     {
-        $r->validate([
+        $this->authorize('calculate', TariffRule::class);
+
+        $request->validate([
             'origin_country' => 'required|string|max:3',
             'destination_country' => 'required|string|max:3',
             'weight' => 'required|numeric|min:0.001',
@@ -89,23 +142,25 @@ class TariffController extends Controller
             'incoterm_code' => 'nullable|string|size:3',
         ]);
 
-        $rules = TariffRule::where('account_id', $r->user()->account_id)
+        $rules = TariffRule::query()
+            ->where('account_id', $this->currentAccountId())
             ->active()
-            ->forRoute($r->origin_country, $r->destination_country)
-            ->when($r->shipment_type, fn($q) => $q->where(fn($q2) => $q2->where('shipment_type', $r->shipment_type)->orWhere('shipment_type', 'any')))
-            ->when($r->carrier_code, fn($q) => $q->where(fn($q2) => $q2->where('carrier_code', $r->carrier_code)->orWhereNull('carrier_code')))
-            ->where('min_weight', '<=', $r->weight)
-            ->where('max_weight', '>=', $r->weight)
+            ->forRoute($request->origin_country, $request->destination_country)
+            ->when($request->shipment_type, fn ($query) => $query->where(fn ($inner) => $inner->where('shipment_type', $request->shipment_type)->orWhere('shipment_type', 'any')))
+            ->when($request->carrier_code, fn ($query) => $query->where(fn ($inner) => $inner->where('carrier_code', $request->carrier_code)->orWhereNull('carrier_code')))
+            ->where('min_weight', '<=', $request->weight)
+            ->where('max_weight', '>=', $request->weight)
             ->orderBy('priority', 'desc')
             ->get();
 
         if ($rules->isEmpty()) {
-            return response()->json(['data' => [], 'message' => 'لا توجد تعرفات مطابقة — أضف قواعد تعرفة أولاً']);
+            return response()->json(['data' => [], 'message' => 'ظ„ط§ طھظˆط¬ط¯ طھط¹ط±ظپط§طھ ظ…ط·ط§ط¨ظ‚ط© â€” ط£ط¶ظپ ظ‚ظˆط§ط¹ط¯ طھط¹ط±ظپط© ط£ظˆظ„ط§ظ‹']);
         }
 
-        $results = $rules->map(function ($rule) use ($r) {
-            $calc = $rule->calculate($r->weight, $r->volume, $r->declared_value ?? 0);
-            return array_merge($calc, [
+        $results = $rules->map(function (TariffRule $rule) use ($request): array {
+            $calculation = $rule->calculate((float) $request->weight, $request->volume, (float) ($request->declared_value ?? 0));
+
+            return array_merge($calculation, [
                 'tariff_id' => $rule->id,
                 'tariff_name' => $rule->name,
                 'carrier_code' => $rule->carrier_code,
@@ -114,15 +169,21 @@ class TariffController extends Controller
             ]);
         });
 
-        return response()->json(['data' => $results->sortBy('total')->values()]);
+        return response()->json([
+            'data' => $results->sortBy('total')->values(),
+        ]);
     }
 
-    /**
-     * Get charges breakdown for a shipment
-     */
     public function shipmentCharges(string $shipmentId): JsonResponse
     {
-        $charges = ShipmentCharge::where('shipment_id', $shipmentId)->orderBy('charge_type')->get();
+        $shipment = $this->findShipmentForCurrentAccount($shipmentId);
+        $this->authorize('viewAny', TariffRule::class);
+
+        $charges = ShipmentCharge::query()
+            ->where('shipment_id', $shipment->id)
+            ->orderBy('charge_type')
+            ->get();
+
         return response()->json(['data' => [
             'charges' => $charges,
             'total_billable' => $charges->where('is_billable', true)->sum('amount'),
@@ -131,9 +192,12 @@ class TariffController extends Controller
         ]]);
     }
 
-    public function addCharge(Request $r, string $shipmentId): JsonResponse
+    public function addCharge(Request $request, string $shipmentId): JsonResponse
     {
-        $v = $r->validate([
+        $shipment = $this->findShipmentForCurrentAccount($shipmentId);
+        $this->authorize('create', TariffRule::class);
+
+        $validated = $request->validate([
             'charge_type' => 'required|string',
             'description' => 'nullable|string|max:300',
             'amount' => 'required|numeric',
@@ -141,14 +205,80 @@ class TariffController extends Controller
             'is_billable' => 'nullable|boolean',
             'is_taxable' => 'nullable|boolean',
         ]);
-        $v['shipment_id'] = $shipmentId;
-        $v['created_by'] = $r->user()->id;
-        return response()->json(['data' => ShipmentCharge::create($v), 'message' => 'تم إضافة الرسم'], 201);
+
+        $validated['shipment_id'] = $shipment->id;
+        $validated['created_by'] = $request->user()->id;
+
+        return response()->json([
+            'data' => ShipmentCharge::create($validated),
+            'message' => 'طھظ… ط¥ط¶ط§ظپط© ط§ظ„ط±ط³ظ…',
+        ], 201);
     }
 
     public function removeCharge(string $shipmentId, string $chargeId): JsonResponse
     {
-        ShipmentCharge::where('shipment_id', $shipmentId)->findOrFail($chargeId)->delete();
-        return response()->json(['message' => 'تم حذف الرسم']);
+        $shipment = $this->findShipmentForCurrentAccount($shipmentId);
+
+        $charge = ShipmentCharge::query()
+            ->where('shipment_id', $shipment->id)
+            ->where('id', $chargeId)
+            ->with('shipment')
+            ->firstOrFail();
+        $this->authorize('create', TariffRule::class);
+
+        $charge->delete();
+
+        return response()->json(['message' => 'طھظ… ط­ط°ظپ ط§ظ„ط±ط³ظ…']);
+    }
+
+    public function taxRules(Request $request): JsonResponse
+    {
+        $this->authorize('viewTaxRules', TariffRule::class);
+
+        return response()->json([
+            'data' => TaxRule::query()->orderBy('country_code')->paginate($request->per_page ?? 25),
+        ]);
+    }
+
+    public function createTaxRule(Request $request): JsonResponse
+    {
+        $this->authorize('createTaxRule', TariffRule::class);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:200',
+            'country_code' => 'required|string|max:3',
+            'region' => 'nullable|string|max:100',
+            'rate' => 'required|numeric|min:0',
+            'applies_to' => 'nullable|string|max:50',
+            'is_active' => 'nullable|boolean',
+            'effective_from' => 'nullable|date',
+            'effective_to' => 'nullable|date|after:effective_from',
+        ]);
+
+        return response()->json([
+            'data' => TaxRule::create($validated),
+            'message' => 'طھظ… ط¥ظ†ط´ط§ط، ظ‚ط§ط¹ط¯ط© ط§ظ„ط¶ط±ظٹط¨ط©',
+        ], 201);
+    }
+
+    private function findTariffForCurrentAccount(string $id): TariffRule
+    {
+        return TariffRule::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    private function findShipmentForCurrentAccount(string $id): Shipment
+    {
+        return Shipment::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    private function currentAccountId(): string
+    {
+        return trim((string) app('current_account_id'));
     }
 }

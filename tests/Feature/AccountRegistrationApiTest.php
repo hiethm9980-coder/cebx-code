@@ -13,7 +13,7 @@ class AccountRegistrationApiTest extends TestCase
 
     // ─── AC: نجاح — تسجيل حساب جديد عبر API ─────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_registers_a_new_account_via_api(): void
     {
         $response = $this->postJson('/api/v1/register', [
@@ -42,7 +42,7 @@ class AccountRegistrationApiTest extends TestCase
 
     // ─── AC: فشل شائع — بريد إلكتروني مكرر ─────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_rejects_duplicate_email(): void
     {
         // First registration
@@ -69,7 +69,7 @@ class AccountRegistrationApiTest extends TestCase
 
     // ─── AC: حالة حدية — اسم حساب طويل جداً ────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_rejects_account_name_exceeding_max_length(): void
     {
         $response = $this->postJson('/api/v1/register', [
@@ -84,7 +84,7 @@ class AccountRegistrationApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_INVALID_INPUT');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_validates_required_fields(): void
     {
         $response = $this->postJson('/api/v1/register', []);
@@ -93,7 +93,7 @@ class AccountRegistrationApiTest extends TestCase
                  ->assertJsonValidationErrors(['account_name', 'name', 'email', 'password']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_validates_password_strength(): void
     {
         $response = $this->postJson('/api/v1/register', [

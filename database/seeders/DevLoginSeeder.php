@@ -22,7 +22,7 @@ class DevLoginSeeder extends Seeder
             ['slug' => 'demo-company'],
             [
                 'name' => 'شركة الشحن السريع',
-                'type' => 'business', // جدول accounts: enum('individual','business','admin') فقط
+                'type' => 'organization',
                 'status' => 'active',
             ]
         );

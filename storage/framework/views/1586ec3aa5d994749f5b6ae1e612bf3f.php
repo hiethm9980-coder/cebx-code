@@ -3,7 +3,7 @@
 <?php $__env->startSection('content'); ?>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
     <h1 style="font-size:24px;font-weight:700;color:var(--tx);margin:0">⛴️ السفن</h1>
-    <button class="btn btn-pr" data-modal-open="add-vessel">+ سفينة جديدة</button>
+    <button type="button" class="btn btn-pr" data-modal-open="add-vessel">+ سفينة جديدة</button>
 </div>
 
 <div class="stats-grid" style="margin-bottom:24px">
@@ -107,18 +107,18 @@
             <tbody>
                 <?php $__empty_1 = true; $__currentLoopData = $vessels ?? []; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $vessel): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                     <?php
-                        $stMap = ['at_sea' => ['🌊 في البحر', 'badge-in'], 'docked' => ['⚓ في الميناء', 'badge-ac'], 'maintenance' => ['🔧 صيانة', 'badge-wn'], 'idle' => ['⏸️ متوقفة', 'badge-td']];
-                        $st = $stMap[$vessel->status] ?? ['—', 'badge-td'];
+                        $stMap = ['at_sea' => ['🌊 في البحر', 'badge-in'], 'in_port' => ['⚓ في الميناء', 'badge-ac'], 'docked' => ['⚓ في الميناء', 'badge-ac'], 'maintenance' => ['🔧 صيانة', 'badge-wn'], 'idle' => ['⏸️ متوقفة', 'badge-td'], 'active' => ['✓ نشطة', 'badge-in']];
+                        $st = $stMap[$vessel->status ?? ''] ?? ['—', 'badge-td'];
                     ?>
                     <tr>
-                        <td style="font-weight:600"><?php echo e($vessel->name); ?></td>
-                        <td class="td-mono"><?php echo e($vessel->imo_number); ?></td>
-                        <td><?php echo e($vessel->type); ?></td>
+                        <td style="font-weight:600"><?php echo e($vessel->vessel_name ?? $vessel->name ?? '—'); ?></td>
+                        <td class="td-mono"><?php echo e($vessel->imo_number ?? '—'); ?></td>
+                        <td><?php echo e($vessel->vessel_type ?? $vessel->type ?? '—'); ?></td>
                         <td><?php echo e(number_format($vessel->capacity_teu ?? 0)); ?> TEU</td>
                         <td><?php echo e($vessel->flag ?? '—'); ?></td>
                         <td><?php echo e($vessel->current_location ?? '—'); ?></td>
                         <td><span class="badge <?php echo e($st[1]); ?>"><?php echo e($st[0]); ?></span></td>
-                        <td><button class="btn btn-s" style="font-size:12px">تفاصيل</button></td>
+                        <td><a href="<?php echo e(route('vessels.show', $vessel)); ?>" class="btn btn-s" style="font-size:12px;text-decoration:none">تفاصيل</a></td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
                     <tr><td colspan="8" class="empty-state">لا توجد سفن</td></tr>
@@ -150,15 +150,15 @@
 <?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
 <?php endif; ?>
 <?php $component->withAttributes(['id' => 'add-vessel','title' => 'إضافة سفينة','wide' => true]); ?>
-    <form method="POST" action="<?php echo e(route('vessels.index')); ?>">
+    <form method="POST" action="<?php echo e(route('vessels.store')); ?>">
         <?php echo csrf_field(); ?>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-            <div><label class="form-label">اسم السفينة</label><input type="text" name="name" class="form-input" required></div>
-            <div><label class="form-label">رقم IMO</label><input type="text" name="imo_number" class="form-input" required></div>
-            <div><label class="form-label">النوع</label><select name="type" class="form-input"><option>Container Ship</option><option>Bulk Carrier</option><option>Tanker</option><option>RoRo</option></select></div>
-            <div><label class="form-label">السعة (TEU)</label><input type="number" name="capacity_teu" class="form-input"></div>
-            <div><label class="form-label">العلم</label><input type="text" name="flag" class="form-input" placeholder="مثال: SA"></div>
-            <div><label class="form-label">الشركة المالكة</label><input type="text" name="owner_company" class="form-input"></div>
+            <div><label class="form-label">اسم السفينة</label><input type="text" name="vessel_name" class="form-input" required></div>
+            <div><label class="form-label">رقم IMO</label><input type="text" name="imo_number" class="form-input" placeholder="اختياري"></div>
+            <div><label class="form-label">النوع</label><select name="vessel_type" class="form-input"><option value="container">Container Ship</option><option value="bulk">Bulk Carrier</option><option value="tanker">Tanker</option><option value="roro">RoRo</option><option value="general">General</option></select></div>
+            <div><label class="form-label">السعة (TEU)</label><input type="number" name="capacity_teu" class="form-input" min="0" placeholder="اختياري"></div>
+            <div><label class="form-label">العلم</label><input type="text" name="flag" class="form-input" placeholder="مثال: SA" maxlength="3"></div>
+            <div><label class="form-label">الشركة المالكة / المشغّل</label><input type="text" name="operator" class="form-input" placeholder="اختياري"></div>
         </div>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
             <button type="button" class="btn btn-s" data-modal-close>إلغاء</button>

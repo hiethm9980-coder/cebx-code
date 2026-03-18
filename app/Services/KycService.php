@@ -447,7 +447,7 @@ class KycService
 
     private function assertCanManageKyc(User $user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('kyc:manage')) {
+        if (!$user->hasPermission('kyc.manage')) {
             $this->auditService->warning(
                 $user->account_id, $user->id,
                 'kyc.access_denied', AuditLog::CATEGORY_KYC,
@@ -460,7 +460,7 @@ class KycService
 
     private function assertCanViewKycDocuments(User $user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('kyc:documents')) {
+        if (!$user->hasPermission('kyc.documents')) {
             $this->auditService->warning(
                 $user->account_id, $user->id,
                 'kyc.document_access_denied', AuditLog::CATEGORY_KYC,

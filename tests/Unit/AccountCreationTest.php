@@ -22,7 +22,7 @@ class AccountCreationTest extends TestCase
 
     // ─── AC: نجاح — إنشاء حساب بمعلومات صحيحة ────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_creates_account_with_valid_data(): void
     {
         $result = $this->service->createAccount([
@@ -40,7 +40,7 @@ class AccountCreationTest extends TestCase
         $this->assertEquals('active', $result['account']->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_generates_unique_account_id(): void
     {
         $result1 = $this->service->createAccount([
@@ -61,7 +61,7 @@ class AccountCreationTest extends TestCase
         $this->assertTrue(\Ramsey\Uuid\Uuid::isValid($result1['account']->id));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_creates_owner_user_linked_to_account(): void
     {
         $result = $this->service->createAccount([
@@ -75,7 +75,7 @@ class AccountCreationTest extends TestCase
         $this->assertEquals($result['account']->id, $result['user']->account_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_defaults_to_individual_account_type(): void
     {
         $result = $this->service->createAccount([
@@ -88,7 +88,7 @@ class AccountCreationTest extends TestCase
         $this->assertEquals('individual', $result['account']->type);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_creates_audit_log_on_account_creation(): void
     {
         $result = $this->service->createAccount([
@@ -106,7 +106,7 @@ class AccountCreationTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_generates_default_settings(): void
     {
         $result = $this->service->createAccount([
@@ -124,7 +124,7 @@ class AccountCreationTest extends TestCase
 
     // ─── AC: حالة حدية — اسم حساب طويل جداً ────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function slug_generation_handles_duplicates(): void
     {
         Account::factory()->create(['slug' => 'test-company']);
@@ -133,7 +133,7 @@ class AccountCreationTest extends TestCase
         $this->assertEquals('test-company-1', $slug);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function account_has_uuid_primary_key(): void
     {
         $account = Account::factory()->create();

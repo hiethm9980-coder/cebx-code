@@ -60,7 +60,7 @@ class CarrierApiTest extends TestCase
     // POST /shipments/{id}/carrier/create — FR-CR-001
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_at_carrier_success(): void
     {
         $shipment = $this->createReadyShipment();
@@ -82,7 +82,7 @@ class CarrierApiTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_at_carrier_validates_format(): void
     {
         $shipment = $this->createReadyShipment();
@@ -95,7 +95,7 @@ class CarrierApiTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_at_carrier_returns_documents(): void
     {
         $shipment = $this->createReadyShipment();
@@ -111,7 +111,7 @@ class CarrierApiTest extends TestCase
             ->assertJsonPath('data.tracking_number', '1234567890');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_at_carrier_handles_failure(): void
     {
         $shipment = $this->createReadyShipment();
@@ -130,7 +130,7 @@ class CarrierApiTest extends TestCase
     // POST /shipments/{id}/carrier/refetch — FR-CR-005
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_refetch_label(): void
     {
         $shipment = Shipment::factory()->create([
@@ -158,7 +158,7 @@ class CarrierApiTest extends TestCase
             ->assertJsonPath('data.type', 'label');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_refetch_with_zpl_format(): void
     {
         $shipment = Shipment::factory()->create([
@@ -192,7 +192,7 @@ class CarrierApiTest extends TestCase
     // POST /shipments/{id}/carrier/cancel — FR-CR-006
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_cancel_at_carrier(): void
     {
         $shipment = Shipment::factory()->create([
@@ -218,7 +218,7 @@ class CarrierApiTest extends TestCase
             ->assertJsonPath('data.carrier_status', 'cancelled');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_cancel_rejects_non_cancellable(): void
     {
         $shipment = Shipment::factory()->create([
@@ -240,7 +240,7 @@ class CarrierApiTest extends TestCase
     // POST /shipments/{id}/carrier/retry — FR-CR-003
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_retry_failed_creation(): void
     {
         $shipment = $this->createReadyShipment();
@@ -265,7 +265,7 @@ class CarrierApiTest extends TestCase
     // GET /shipments/{id}/carrier/status
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_carrier_status(): void
     {
         $shipment = Shipment::factory()->create([
@@ -286,7 +286,7 @@ class CarrierApiTest extends TestCase
             ->assertJsonPath('data.status', 'label_ready');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_carrier_status_null_when_no_record(): void
     {
         $shipment = Shipment::factory()->create([
@@ -304,7 +304,7 @@ class CarrierApiTest extends TestCase
     // GET /shipments/{id}/documents — FR-CR-008
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_documents(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -329,7 +329,7 @@ class CarrierApiTest extends TestCase
     // GET /shipments/{id}/documents/{docId} — FR-CR-008
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_download_document(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -350,7 +350,7 @@ class CarrierApiTest extends TestCase
             ->assertHeader('Content-Type', 'application/pdf');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_download_returns_no_financial_data(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -374,7 +374,7 @@ class CarrierApiTest extends TestCase
         $this->assertStringNotContainsString('retail_rate', $content);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_download_unavailable_doc_returns_error(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -398,7 +398,7 @@ class CarrierApiTest extends TestCase
     // GET /shipments/{id}/carrier/errors — FR-CR-004
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_carrier_errors(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -414,7 +414,7 @@ class CarrierApiTest extends TestCase
             ->assertJsonCount(2, 'data');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_errors_include_retriable_flag(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);

@@ -36,7 +36,7 @@ class UserManagementTest extends TestCase
 
     // ─── AC: نجاح — إضافة مستخدم جديد ──────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_add_user_to_account(): void
     {
         Event::fake([UserInvited::class]);
@@ -54,7 +54,7 @@ class UserManagementTest extends TestCase
         Event::assertDispatched(UserInvited::class);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function added_user_gets_invitation_event(): void
     {
         Event::fake([UserInvited::class]);
@@ -70,7 +70,7 @@ class UserManagementTest extends TestCase
         });
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function adding_user_creates_audit_log(): void
     {
         Event::fake();
@@ -88,7 +88,7 @@ class UserManagementTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_add_duplicate_email_in_same_account(): void
     {
         Event::fake();
@@ -109,7 +109,7 @@ class UserManagementTest extends TestCase
 
     // ─── تعطيل المستخدم ──────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_disable_user(): void
     {
         Event::fake([UserDisabled::class]);
@@ -125,7 +125,7 @@ class UserManagementTest extends TestCase
         Event::assertDispatched(UserDisabled::class);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function disabling_user_revokes_all_tokens(): void
     {
         Event::fake();
@@ -143,7 +143,7 @@ class UserManagementTest extends TestCase
         $this->assertEquals(0, $user->tokens()->count());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_disable_self(): void
     {
         $this->expectException(BusinessException::class);
@@ -152,7 +152,7 @@ class UserManagementTest extends TestCase
         $this->service->disableUser($this->owner->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_disable_account_owner(): void
     {
         // Create admin (non-owner but trying to disable owner)
@@ -171,7 +171,7 @@ class UserManagementTest extends TestCase
 
     // ─── تفعيل المستخدم ──────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_enable_disabled_user(): void
     {
         Event::fake();
@@ -185,7 +185,7 @@ class UserManagementTest extends TestCase
         $this->assertEquals('active', $enabled->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_enable_already_active_user(): void
     {
         $user = User::factory()->create([
@@ -201,7 +201,7 @@ class UserManagementTest extends TestCase
 
     // ─── حذف المستخدم ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_delete_user_without_responsibilities(): void
     {
         Event::fake([UserDeleted::class]);
@@ -217,7 +217,7 @@ class UserManagementTest extends TestCase
         Event::assertDispatched(UserDeleted::class);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_delete_self(): void
     {
         $this->expectException(BusinessException::class);
@@ -226,7 +226,7 @@ class UserManagementTest extends TestCase
         $this->service->deleteUser($this->owner->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_delete_account_owner(): void
     {
         $anotherOwner = User::factory()->owner()->create([
@@ -239,7 +239,7 @@ class UserManagementTest extends TestCase
         $this->service->deleteUser($anotherOwner->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function deleting_user_with_responsibilities_requires_transfer(): void
     {
         Event::fake();
@@ -257,7 +257,7 @@ class UserManagementTest extends TestCase
         $this->service->deleteUser($user->id, $this->owner, false);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function deleting_user_with_force_transfer_bypasses_check(): void
     {
         Event::fake([UserDeleted::class]);
@@ -276,7 +276,7 @@ class UserManagementTest extends TestCase
 
     // ─── AC: فشل شائع — مستخدم غير موجود ────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function disable_nonexistent_user_throws_not_found(): void
     {
         $this->expectException(BusinessException::class);
@@ -286,7 +286,7 @@ class UserManagementTest extends TestCase
 
     // ─── صلاحيات — غير المالك لا يستطيع الإدارة ──────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function non_owner_cannot_manage_users(): void
     {
         $regularUser = User::factory()->create([
@@ -305,7 +305,7 @@ class UserManagementTest extends TestCase
 
     // ─── تحديث المستخدم ──────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_user_info(): void
     {
         $user = User::factory()->create([
@@ -322,7 +322,7 @@ class UserManagementTest extends TestCase
         $this->assertEquals('+966500000000', $updated->phone);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function update_creates_audit_log_with_old_and_new_values(): void
     {
         $user = User::factory()->create([

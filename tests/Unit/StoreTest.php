@@ -12,6 +12,7 @@ use App\Models\AuditLog;
 use App\Services\StoreService;
 use App\Services\AuditService;
 use App\Exceptions\BusinessException;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-009: Multi-Store Management — Unit Tests (22 tests)
@@ -19,6 +20,7 @@ use App\Exceptions\BusinessException;
 class StoreTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected StoreService $service;
     protected Account $account;
@@ -39,14 +41,13 @@ class StoreTest extends TestCase
             'is_owner'   => true,
         ]);
 
-        $mgrRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['store:manage', 'store:view'],
-        ]);
-        $this->storeManager = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $mgrRole->id,
+        $mgrRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['stores.manage', 'stores.read'],
+            'store_manager'
+        );
+        $this->storeManager = $this->createUserWithRole((string) $this->account->id, (string) $mgrRole->id, [
+            'is_owner' => false,
         ]);
 
         $this->member = User::factory()->create([
@@ -59,7 +60,7 @@ class StoreTest extends TestCase
     // Create Store
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_store()
     {
         $store = $this->service->createStore(
@@ -74,7 +75,7 @@ class StoreTest extends TestCase
         $this->assertTrue($store->is_default); // First store is default
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function first_store_is_always_default()
     {
         $store = $this->service->createStore(
@@ -86,7 +87,7 @@ class StoreTest extends TestCase
         $this->assertTrue($store->is_default);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function second_store_is_not_default()
     {
         $this->service->createStore($this->account->id, ['name' => 'Store 1'], $this->owner);
@@ -95,7 +96,7 @@ class StoreTest extends TestCase
         $this->assertFalse($store2->is_default);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function store_manager_can_create_store()
     {
         $store = $this->service->createStore(
@@ -107,7 +108,7 @@ class StoreTest extends TestCase
         $this->assertNotNull($store->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_cannot_create()
     {
         $this->expectException(BusinessException::class);
@@ -118,7 +119,7 @@ class StoreTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function create_generates_slug()
     {
         $store = $this->service->createStore(
@@ -131,7 +132,7 @@ class StoreTest extends TestCase
         $this->assertStringContainsString('my-test-store', $store->slug);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function create_logs_audit()
     {
         $this->service->createStore(
@@ -150,7 +151,7 @@ class StoreTest extends TestCase
 
     // ─── Duplicate Name ──────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function duplicate_name_within_account_is_rejected()
     {
         $this->service->createStore($this->account->id, ['name' => 'Same Name'], $this->owner);
@@ -159,7 +160,7 @@ class StoreTest extends TestCase
         $this->service->createStore($this->account->id, ['name' => 'Same Name'], $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function same_name_in_different_accounts_is_allowed()
     {
         $otherAccount = Account::factory()->create();
@@ -173,7 +174,7 @@ class StoreTest extends TestCase
 
     // ─── Max Limit ───────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function max_stores_limit_is_enforced()
     {
         // Create max stores
@@ -193,7 +194,7 @@ class StoreTest extends TestCase
     // List & Get Store
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_lists_all_stores_for_account()
     {
         Store::factory()->count(3)->create([
@@ -205,7 +206,7 @@ class StoreTest extends TestCase
         $this->assertCount(3, $stores);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_filters_by_status()
     {
         Store::factory()->create(['account_id' => $this->account->id, 'status' => 'active', 'name' => 'A']);
@@ -215,7 +216,7 @@ class StoreTest extends TestCase
         $this->assertCount(1, $active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_filters_by_platform()
     {
         Store::factory()->create(['account_id' => $this->account->id, 'platform' => 'shopify', 'name' => 'S1']);
@@ -229,7 +230,7 @@ class StoreTest extends TestCase
     // Update Store
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_store()
     {
         $store = Store::factory()->create(['account_id' => $this->account->id, 'name' => 'Old Name']);
@@ -244,7 +245,7 @@ class StoreTest extends TestCase
         $this->assertEquals('الرياض', $result->city);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function update_rejects_duplicate_name()
     {
         Store::factory()->create(['account_id' => $this->account->id, 'name' => 'Existing']);
@@ -262,7 +263,7 @@ class StoreTest extends TestCase
     // Set Default
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_set_default_store()
     {
         $store1 = Store::factory()->default()->create(['account_id' => $this->account->id, 'name' => 'S1']);
@@ -278,7 +279,7 @@ class StoreTest extends TestCase
     // Delete Store
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_delete_non_default_store()
     {
         Store::factory()->default()->create(['account_id' => $this->account->id, 'name' => 'Default']);
@@ -289,7 +290,7 @@ class StoreTest extends TestCase
         $this->assertSoftDeleted('stores', ['id' => $store2->id]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_delete_default_store_when_others_exist()
     {
         $default = Store::factory()->default()->create(['account_id' => $this->account->id, 'name' => 'Default']);
@@ -299,7 +300,7 @@ class StoreTest extends TestCase
         $this->service->deleteStore($this->account->id, $default->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_delete_default_store_if_only_one()
     {
         $store = Store::factory()->default()->create(['account_id' => $this->account->id, 'name' => 'Only One']);
@@ -313,7 +314,7 @@ class StoreTest extends TestCase
     // Toggle Status & Stats
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function toggle_status_activates_inactive_store()
     {
         $store = Store::factory()->inactive()->create(['account_id' => $this->account->id]);
@@ -323,7 +324,7 @@ class StoreTest extends TestCase
         $this->assertEquals('active', $result->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_store_stats()
     {
         Store::factory()->count(2)->create(['account_id' => $this->account->id, 'status' => 'active']);

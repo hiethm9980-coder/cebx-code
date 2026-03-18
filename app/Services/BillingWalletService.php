@@ -10,6 +10,7 @@ use App\Models\WalletRefund;
 use App\Models\WalletTopup;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -160,16 +161,23 @@ class BillingWalletService
             ->orderByDesc('sequence')->value('running_balance') ?? 0;
         $runningBalance = (float) $lastBalance + $change;
 
-        $entry = new WalletLedgerEntry(array_merge($data, [
+        $createdAt = now();
+        $payload = array_merge($data, [
+            'id'              => (string) Str::uuid(),
             'wallet_id'       => $wallet->id,
             'sequence'        => $lastSeq + 1,
             'correlation_id'  => $data['correlation_id'] ?? 'BW-' . Str::uuid(),
             'running_balance' => $runningBalance,
-            'created_at'      => now(),
-        ]));
+            'created_at'      => $createdAt->format('Y-m-d H:i:s'),
+        ]);
 
-        // Direct insert to bypass immutability guard for new entries
-        DB::table('wallet_ledger_entries')->insert(array_merge($entry->toArray(), ['id' => Str::uuid()]));
+        if (array_key_exists('metadata', $payload) && is_array($payload['metadata'])) {
+            $payload['metadata'] = json_encode($payload['metadata'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        // Direct insert to bypass immutability guard for new entries without
+        // serializing timestamps to ISO-8601, which MySQL rejects for this table.
+        DB::table('wallet_ledger_entries')->insert($payload);
 
         return WalletLedgerEntry::where('wallet_id', $wallet->id)->where('sequence', $lastSeq + 1)->first();
     }
@@ -301,10 +309,20 @@ class BillingWalletService
     // FR-BW-007: Hold / Reservation
     // ═══════════════════════════════════════════════════════════
 
-    public function createHold(string $walletId, string $shipmentId, float $amount, ?string $idempotencyKey = null): WalletHold
+    public function createHold(
+        string $walletId,
+        string $shipmentId,
+        float $amount,
+        ?string $idempotencyKey = null,
+        array $attributes = []
+    ): WalletHold
     {
-        return DB::transaction(function () use ($walletId, $shipmentId, $amount, $idempotencyKey) {
+        return DB::transaction(function () use ($walletId, $shipmentId, $amount, $idempotencyKey, $attributes) {
             $wallet = BillingWallet::lockForUpdate()->findOrFail($walletId);
+
+            if (! $wallet->isActive()) {
+                throw new \RuntimeException('ERR_WALLET_FROZEN');
+            }
 
             // Idempotency
             $key = $idempotencyKey ?? "hold-{$shipmentId}";
@@ -323,14 +341,32 @@ class BillingWalletService
             // Reserve
             $wallet->increment('reserved_balance', $amount);
 
-            $hold = WalletHold::create([
+            $payload = [
                 'wallet_id'       => $walletId,
                 'amount'          => $amount,
                 'shipment_id'     => $shipmentId,
                 'status'          => WalletHold::STATUS_ACTIVE,
                 'idempotency_key' => $key,
                 'expires_at'      => now()->addHours(24),
-            ]);
+            ];
+
+            if (Schema::hasColumn('wallet_holds', 'account_id')) {
+                $payload['account_id'] = $attributes['account_id'] ?? (string) $wallet->account_id;
+            }
+            if (Schema::hasColumn('wallet_holds', 'currency')) {
+                $payload['currency'] = $attributes['currency'] ?? (string) $wallet->currency;
+            }
+            if (Schema::hasColumn('wallet_holds', 'source')) {
+                $payload['source'] = $attributes['source'] ?? null;
+            }
+            if (Schema::hasColumn('wallet_holds', 'correlation_id')) {
+                $payload['correlation_id'] = $attributes['correlation_id'] ?? null;
+            }
+            if (Schema::hasColumn('wallet_holds', 'actor_id')) {
+                $payload['actor_id'] = $attributes['actor_id'] ?? null;
+            }
+
+            $hold = WalletHold::create($payload);
 
             $this->createLedgerEntry($wallet, [
                 'transaction_type' => 'hold',

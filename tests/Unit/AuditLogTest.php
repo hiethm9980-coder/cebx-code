@@ -39,7 +39,7 @@ class AuditLogTest extends TestCase
 
     // ─── Core Logging ────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_creates_audit_log_entry()
     {
         $log = $this->auditService->log(
@@ -64,7 +64,7 @@ class AuditLogTest extends TestCase
         $this->assertNotNull($log->request_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_records_old_and_new_values()
     {
         $old = ['name' => 'Old Name'];
@@ -81,7 +81,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals($new, $log->new_values);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_records_metadata()
     {
         $metadata = ['source' => 'api', 'batch_size' => 15];
@@ -95,7 +95,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals($metadata, $log->metadata);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_records_ip_and_user_agent()
     {
         $log = $this->auditService->info(
@@ -108,7 +108,7 @@ class AuditLogTest extends TestCase
         $this->assertArrayHasKey('user_agent', $log->getAttributes());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_supports_system_actions_without_user()
     {
         $log = $this->auditService->info(
@@ -122,7 +122,7 @@ class AuditLogTest extends TestCase
 
     // ─── Severity Levels ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_logs_info_severity()
     {
         $log = $this->auditService->info(
@@ -133,7 +133,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals(AuditLog::SEVERITY_INFO, $log->severity);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_logs_warning_severity()
     {
         $log = $this->auditService->warning(
@@ -144,7 +144,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals(AuditLog::SEVERITY_WARNING, $log->severity);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_logs_critical_severity()
     {
         $log = $this->auditService->critical(
@@ -157,7 +157,7 @@ class AuditLogTest extends TestCase
 
     // ─── Append-Only / Immutability ──────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_blocks_update_on_audit_log()
     {
         $log = $this->auditService->info(
@@ -169,7 +169,7 @@ class AuditLogTest extends TestCase
         $log->update(['action' => 'tampered']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_blocks_delete_on_audit_log()
     {
         $log = $this->auditService->info(
@@ -181,7 +181,7 @@ class AuditLogTest extends TestCase
         $log->delete();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_blocks_force_delete_on_audit_log()
     {
         $log = $this->auditService->info(
@@ -193,7 +193,7 @@ class AuditLogTest extends TestCase
         $log->forceDelete();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function update_attempt_is_logged_as_tamper()
     {
         $log = $this->auditService->info(
@@ -211,7 +211,7 @@ class AuditLogTest extends TestCase
 
     // ─── Request Correlation ─────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_generates_consistent_request_id()
     {
         AuditService::resetRequestId();
@@ -229,7 +229,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals($log1->request_id, $log2->request_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_accepts_custom_request_id()
     {
         AuditService::setRequestId('custom-trace-123');
@@ -242,7 +242,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals('custom-trace-123', $log->request_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_resets_request_id_between_requests()
     {
         $log1 = $this->auditService->info(
@@ -262,7 +262,7 @@ class AuditLogTest extends TestCase
 
     // ─── Search & Filtering ──────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_searches_by_category()
     {
         // Create logs in different categories
@@ -275,7 +275,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals('user.added', $results->first()->action);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_searches_by_severity()
     {
         $this->auditService->info($this->account->id, $this->owner->id, 'user.added', AuditLog::CATEGORY_USERS);
@@ -286,7 +286,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals(1, $results->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_searches_by_actor()
     {
         $other = User::factory()->create(['account_id' => $this->account->id]);
@@ -298,7 +298,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals(1, $results->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_searches_by_date_range()
     {
         // Insert manually to control timestamps
@@ -319,7 +319,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals(1, $results->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_searches_by_entity()
     {
         $entityId = \Illuminate\Support\Str::uuid()->toString();
@@ -342,7 +342,7 @@ class AuditLogTest extends TestCase
         $this->assertEquals(1, $results->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_searches_by_action_prefix()
     {
         $this->auditService->info($this->account->id, $this->owner->id, 'user.added', AuditLog::CATEGORY_USERS);
@@ -355,7 +355,7 @@ class AuditLogTest extends TestCase
 
     // ─── Entity Trail ────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_entity_trail()
     {
         $entityId = \Illuminate\Support\Str::uuid()->toString();
@@ -373,7 +373,7 @@ class AuditLogTest extends TestCase
 
     // ─── Request Trace ───────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_request_trace()
     {
         AuditService::resetRequestId();
@@ -391,7 +391,7 @@ class AuditLogTest extends TestCase
 
     // ─── Statistics ──────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_statistics()
     {
         $this->auditService->info($this->account->id, $this->owner->id, 'user.added', AuditLog::CATEGORY_USERS);
@@ -409,7 +409,7 @@ class AuditLogTest extends TestCase
 
     // ─── Tenant Isolation ────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_isolates_audit_logs_by_tenant()
     {
         $otherAccount = Account::factory()->create();
@@ -423,7 +423,7 @@ class AuditLogTest extends TestCase
 
     // ─── Export ──────────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_exports_audit_logs()
     {
         $this->auditService->info($this->account->id, $this->owner->id, 'user.added', AuditLog::CATEGORY_USERS);
@@ -437,7 +437,7 @@ class AuditLogTest extends TestCase
         $this->assertArrayHasKey('timestamp', $rows[0]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_logs_the_export_action_itself()
     {
         $this->auditService->info($this->account->id, $this->owner->id, 'user.added', AuditLog::CATEGORY_USERS);
@@ -454,7 +454,7 @@ class AuditLogTest extends TestCase
 
     // ─── Action Registry ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function action_registry_is_available()
     {
         $registry = AuditService::actionRegistry();
@@ -467,7 +467,7 @@ class AuditLogTest extends TestCase
 
     // ─── Model Constants ─────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_provides_valid_categories_and_severities()
     {
         $categories = AuditLog::categories();

@@ -21,15 +21,12 @@ class DetectPortal
         $portalType = 'b2b'; // default
 
         if ($user && $user->account) {
-            $portalType = match ($user->account->type) {
-                'individual' => 'b2c',
-                'admin'      => 'admin',
-                default      => 'b2b',
-            };
+            $portalType = $user->account->type === 'individual'
+                ? 'b2c'
+                : 'b2b';
         }
 
-        // Role-based admin override
-        if ($user && ($user->is_super_admin || $user->role === 'admin')) {
+        if ($user && ($user->user_type ?? null) === 'internal') {
             $portalType = 'admin';
         }
 

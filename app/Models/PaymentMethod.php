@@ -94,7 +94,10 @@ class PaymentMethod extends Model
             return true;
         }
 
-        $account = $this->account ?? Account::find($this->account_id);
+        $account = $this->relationLoaded('account')
+            ? $this->getRelation('account')
+            : Account::query()->find($this->account_id);
+
         if ($account && in_array($account->status, ['suspended', 'closed'])) {
             return true;
         }

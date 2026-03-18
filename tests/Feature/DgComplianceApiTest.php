@@ -28,27 +28,27 @@ class DgComplianceApiTest extends TestCase
         parent::setUp();
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
         $this->waiver = WaiverVersion::factory()->create();
     }
 
     // ── FR-DG-001: Create Declaration ────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_declaration(): void
     {
         $r = $this->actingAs($this->user)->postJson('/api/v1/dg/declarations', ['shipment_id' => 'SH-API-001']);
         $r->assertStatus(201)->assertJsonPath('data.shipment_id', 'SH-API-001');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_declaration_validation(): void
     {
         $r = $this->actingAs($this->user)->postJson('/api/v1/dg/declarations', []);
         $r->assertStatus(422);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_declarations(): void
     {
         $service = app(DgComplianceService::class);
@@ -58,7 +58,7 @@ class DgComplianceApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_declaration(): void
     {
         $service = app(DgComplianceService::class);
@@ -68,7 +68,7 @@ class DgComplianceApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_shipment_declaration(): void
     {
         $service = app(DgComplianceService::class);
@@ -80,7 +80,7 @@ class DgComplianceApiTest extends TestCase
 
     // ── FR-DG-002: Set DG Flag ──────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_set_dg_flag_no(): void
     {
         $service = app(DgComplianceService::class);
@@ -92,7 +92,7 @@ class DgComplianceApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.contains_dangerous_goods', false);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_set_dg_flag_yes(): void
     {
         $service = app(DgComplianceService::class);
@@ -106,7 +106,7 @@ class DgComplianceApiTest extends TestCase
 
     // ── FR-DG-003: Hold Info ────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_hold_info(): void
     {
         $service = app(DgComplianceService::class);
@@ -117,7 +117,7 @@ class DgComplianceApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.is_blocked', true);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_blocked(): void
     {
         $service = app(DgComplianceService::class);
@@ -130,7 +130,7 @@ class DgComplianceApiTest extends TestCase
 
     // ── FR-DG-004: Accept Waiver ────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_accept_waiver(): void
     {
         $service = app(DgComplianceService::class);
@@ -143,7 +143,7 @@ class DgComplianceApiTest extends TestCase
 
     // ── FR-DG-007: Validate for Issuance ────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_validate_issuance_success(): void
     {
         $service = app(DgComplianceService::class);
@@ -155,14 +155,14 @@ class DgComplianceApiTest extends TestCase
         $r->assertOk()->assertJsonPath('data.valid', true);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_validate_issuance_no_declaration(): void
     {
         $r = $this->actingAs($this->user)->postJson('/api/v1/dg/validate-issuance', ['shipment_id' => 'SH-NONE']);
         $r->assertStatus(422)->assertJsonPath('valid', false);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_validate_issuance_dg_hold(): void
     {
         $service = app(DgComplianceService::class);
@@ -175,7 +175,7 @@ class DgComplianceApiTest extends TestCase
 
     // ── FR-DG-009: DG Metadata ──────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_save_dg_metadata(): void
     {
         $service = app(DgComplianceService::class);
@@ -189,7 +189,7 @@ class DgComplianceApiTest extends TestCase
 
     // ── FR-DG-006: Waiver Version Management ────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_publish_waiver(): void
     {
         $r = $this->actingAs($this->user)->postJson('/api/v1/dg/waivers', [
@@ -198,14 +198,14 @@ class DgComplianceApiTest extends TestCase
         $r->assertStatus(201)->assertJsonPath('data.version', '2.0');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_active_waiver(): void
     {
         $r = $this->actingAs($this->user)->getJson('/api/v1/dg/waivers/active?locale=ar');
         $r->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_waivers(): void
     {
         $r = $this->actingAs($this->user)->getJson('/api/v1/dg/waivers?locale=ar');
@@ -214,7 +214,7 @@ class DgComplianceApiTest extends TestCase
 
     // ── FR-DG-005: Audit Log ────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_audit_log(): void
     {
         $service = app(DgComplianceService::class);
@@ -224,7 +224,7 @@ class DgComplianceApiTest extends TestCase
         $r->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_export_audit_log(): void
     {
         $service = app(DgComplianceService::class);

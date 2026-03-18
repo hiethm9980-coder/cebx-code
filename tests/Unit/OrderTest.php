@@ -18,6 +18,7 @@ use App\Services\Platforms\ShopifyAdapter;
 use App\Services\Platforms\WooCommerceAdapter;
 use App\Services\Platforms\PlatformAdapterFactory;
 use App\Exceptions\BusinessException;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * ST Module Unit Tests — FR-ST-001 through FR-ST-010 (28 tests)
@@ -25,6 +26,7 @@ use App\Exceptions\BusinessException;
 class OrderTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected OrderService $service;
     protected Account $account;
@@ -45,14 +47,13 @@ class OrderTest extends TestCase
             'is_owner'   => true,
         ]);
 
-        $managerRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['orders:manage', 'store:manage'],
-        ]);
-        $this->manager = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $managerRole->id,
+        $managerRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['orders.manage', 'stores.manage'],
+            'orders_manager'
+        );
+        $this->manager = $this->createUserWithRole((string) $this->account->id, (string) $managerRole->id, [
+            'is_owner' => false,
         ]);
 
         $this->member = User::factory()->create([
@@ -71,7 +72,7 @@ class OrderTest extends TestCase
     // FR-ST-007: Manual Order Creation
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_manual_order()
     {
         $order = $this->service->createManualOrder(
@@ -85,7 +86,7 @@ class OrderTest extends TestCase
         $this->assertEquals($this->account->id, $order->account_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function manager_can_create_manual_order()
     {
         $order = $this->service->createManualOrder(
@@ -97,7 +98,7 @@ class OrderTest extends TestCase
         $this->assertNotNull($order->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_cannot_create_order()
     {
         $this->expectException(BusinessException::class);
@@ -108,7 +109,7 @@ class OrderTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function manual_order_creates_items()
     {
         $data = $this->validOrderData();
@@ -125,7 +126,7 @@ class OrderTest extends TestCase
         $this->assertEquals(3, $order->items_count);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function manual_order_calculates_totals()
     {
         $data = $this->validOrderData();
@@ -143,7 +144,7 @@ class OrderTest extends TestCase
         $this->assertEquals(1.5, (float) $order->total_weight);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function manual_order_is_audit_logged()
     {
         $this->service->createManualOrder(
@@ -160,7 +161,7 @@ class OrderTest extends TestCase
     // FR-ST-005: Deduplication
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function duplicate_external_order_id_rejected()
     {
         $data = $this->validOrderData();
@@ -176,7 +177,7 @@ class OrderTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function same_external_id_allowed_in_different_stores()
     {
         $store2 = Store::factory()->create([
@@ -201,7 +202,7 @@ class OrderTest extends TestCase
     // FR-ST-008: Smart Rules Evaluation
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function complete_order_goes_to_ready()
     {
         $order = $this->service->createManualOrder(
@@ -214,7 +215,7 @@ class OrderTest extends TestCase
         $this->assertTrue($order->auto_ship_eligible);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function missing_address_puts_order_on_hold()
     {
         $data = $this->validOrderData();
@@ -231,7 +232,7 @@ class OrderTest extends TestCase
         $this->assertStringContains('عنوان شحن غير مكتمل', $order->hold_reason);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function high_value_order_goes_on_hold()
     {
         $data = $this->validOrderData();
@@ -245,7 +246,7 @@ class OrderTest extends TestCase
         $this->assertStringContains('قيمة عالية', $order->hold_reason);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function rules_evaluation_log_is_saved()
     {
         $order = $this->service->createManualOrder(
@@ -262,7 +263,7 @@ class OrderTest extends TestCase
     // Order List & Filter
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function list_orders_returns_account_orders()
     {
         Order::factory()->count(3)->create([
@@ -275,7 +276,7 @@ class OrderTest extends TestCase
         $this->assertEquals(3, $result['total']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function list_orders_filters_by_status()
     {
         Order::factory()->ready()->count(2)->create([
@@ -292,7 +293,7 @@ class OrderTest extends TestCase
         $this->assertEquals(2, $result['total']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function list_orders_filters_by_store()
     {
         $store2 = Store::factory()->create(['account_id' => $this->account->id]);
@@ -308,7 +309,7 @@ class OrderTest extends TestCase
     // Status Management
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_transition_pending_to_ready()
     {
         $order = Order::factory()->create([
@@ -324,7 +325,7 @@ class OrderTest extends TestCase
         $this->assertEquals('ready', $updated->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_transition_shipped_to_pending()
     {
         $order = Order::factory()->shipped()->create([
@@ -338,7 +339,7 @@ class OrderTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_cancel_pending_order()
     {
         $order = Order::factory()->create([
@@ -353,7 +354,7 @@ class OrderTest extends TestCase
         $this->assertEquals(Order::STATUS_CANCELLED, $cancelled->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_cancel_shipped_order()
     {
         $order = Order::factory()->shipped()->create([
@@ -369,7 +370,7 @@ class OrderTest extends TestCase
     // FR-ST-001: Store Connection
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function manual_store_connection_always_succeeds()
     {
         $result = $this->service->testStoreConnection($this->store, $this->owner);
@@ -378,7 +379,7 @@ class OrderTest extends TestCase
         $this->assertEquals('connected', $this->store->fresh()->connection_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function shopify_connection_fails_without_credentials()
     {
         $shopifyStore = Store::factory()->create([
@@ -393,7 +394,7 @@ class OrderTest extends TestCase
         $this->assertEquals('error', $shopifyStore->fresh()->connection_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function shopify_connection_succeeds_with_credentials()
     {
         $shopifyStore = Store::factory()->create([
@@ -412,7 +413,7 @@ class OrderTest extends TestCase
     // FR-ST-004: Platform Adapters
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function shopify_adapter_transforms_order()
     {
         $adapter = new ShopifyAdapter();
@@ -427,7 +428,7 @@ class OrderTest extends TestCase
         $this->assertCount(1, $result['items']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function woocommerce_adapter_transforms_order()
     {
         $adapter = new WooCommerceAdapter();
@@ -441,7 +442,7 @@ class OrderTest extends TestCase
         $this->assertNotEmpty($result['customer_name']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function platform_factory_resolves_correct_adapter()
     {
         $shopifyStore = Store::factory()->make(['platform' => 'shopify']);
@@ -451,7 +452,7 @@ class OrderTest extends TestCase
         $this->assertInstanceOf(WooCommerceAdapter::class, PlatformAdapterFactory::make($wooStore));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function platform_factory_throws_for_unsupported()
     {
         $manualStore = Store::factory()->make(['platform' => 'manual']);
@@ -464,7 +465,7 @@ class OrderTest extends TestCase
     // Order Stats
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function order_stats_returns_counts()
     {
         Order::factory()->count(2)->create(['account_id' => $this->account->id, 'store_id' => $this->store->id, 'status' => 'pending']);

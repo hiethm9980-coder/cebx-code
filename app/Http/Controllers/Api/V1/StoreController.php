@@ -40,9 +40,9 @@ class StoreController extends Controller
     /**
      * GET /api/v1/stores/{id}
      */
-    public function show(Request $request, string $id): JsonResponse
+    public function show(Request $request, string $storeId): JsonResponse
     {
-        $store = $this->service->getStore($request->user()->account_id, $id);
+        $store = $this->service->getStore($request->user()->account_id, $storeId);
 
         return response()->json([
             'success' => true,
@@ -71,11 +71,11 @@ class StoreController extends Controller
     /**
      * PUT /api/v1/stores/{id}
      */
-    public function update(StoreRequest $request, string $id): JsonResponse
+    public function update(StoreRequest $request, string $storeId): JsonResponse
     {
         $store = $this->service->updateStore(
             $request->user()->account_id,
-            $id,
+            $storeId,
             $request->validated(),
             $request->user()
         );
@@ -90,11 +90,11 @@ class StoreController extends Controller
     /**
      * DELETE /api/v1/stores/{id}
      */
-    public function destroy(Request $request, string $id): JsonResponse
+    public function destroy(Request $request, string $storeId): JsonResponse
     {
         $this->service->deleteStore(
             $request->user()->account_id,
-            $id,
+            $storeId,
             $request->user()
         );
 
@@ -107,11 +107,11 @@ class StoreController extends Controller
     /**
      * POST /api/v1/stores/{id}/set-default
      */
-    public function setDefault(Request $request, string $id): JsonResponse
+    public function setDefault(Request $request, string $storeId): JsonResponse
     {
         $store = $this->service->setDefault(
             $request->user()->account_id,
-            $id,
+            $storeId,
             $request->user()
         );
 
@@ -125,11 +125,11 @@ class StoreController extends Controller
     /**
      * POST /api/v1/stores/{id}/toggle-status
      */
-    public function toggleStatus(Request $request, string $id): JsonResponse
+    public function toggleStatus(Request $request, string $storeId): JsonResponse
     {
         $store = $this->service->toggleStatus(
             $request->user()->account_id,
-            $id,
+            $storeId,
             $request->user()
         );
 

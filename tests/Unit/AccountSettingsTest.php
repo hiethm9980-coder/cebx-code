@@ -11,6 +11,7 @@ use App\Models\AuditLog;
 use App\Services\AccountSettingsService;
 use App\Services\AuditService;
 use App\Exceptions\BusinessException;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-008: Account Settings — Unit Tests (20 tests)
@@ -18,6 +19,7 @@ use App\Exceptions\BusinessException;
 class AccountSettingsTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected AccountSettingsService $service;
     protected Account $account;
@@ -38,14 +40,13 @@ class AccountSettingsTest extends TestCase
             'is_owner'   => true,
         ]);
 
-        $adminRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['account:manage', 'account:view'],
-        ]);
-        $this->admin = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $adminRole->id,
+        $adminRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['account.manage', 'account.view'],
+            'account_admin'
+        );
+        $this->admin = $this->createUserWithRole((string) $this->account->id, (string) $adminRole->id, [
+            'is_owner' => false,
         ]);
 
         $this->member = User::factory()->create([
@@ -58,7 +59,7 @@ class AccountSettingsTest extends TestCase
     // Get Settings
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_all_default_settings()
     {
         $settings = $this->service->getSettings($this->account->id);
@@ -74,7 +75,7 @@ class AccountSettingsTest extends TestCase
         $this->assertArrayHasKey('extended', $settings);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_address_as_nested_object()
     {
         $this->account->update([
@@ -94,7 +95,7 @@ class AccountSettingsTest extends TestCase
     // Update Settings
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_language()
     {
         $result = $this->service->updateSettings(
@@ -107,7 +108,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('en', $this->account->fresh()->language);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_currency()
     {
         $result = $this->service->updateSettings(
@@ -119,7 +120,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('USD', $result['currency']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_timezone()
     {
         $result = $this->service->updateSettings(
@@ -131,7 +132,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('Europe/London', $result['timezone']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_multiple_settings_at_once()
     {
         $result = $this->service->updateSettings(
@@ -151,7 +152,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('lb', $result['weight_unit']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_contact_info()
     {
         $result = $this->service->updateSettings(
@@ -167,7 +168,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('info@company.sa', $result['contact_email']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_address()
     {
         $result = $this->service->updateSettings(
@@ -184,7 +185,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('الرياض', $result['address']['city']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_account_name()
     {
         $result = $this->service->updateSettings(
@@ -196,7 +197,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('شركة التقنية الجديدة', $this->account->fresh()->name);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function admin_with_permission_can_update_settings()
     {
         $result = $this->service->updateSettings(
@@ -208,7 +209,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('en', $result['language']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_cannot_update()
     {
         $this->expectException(BusinessException::class);
@@ -219,7 +220,7 @@ class AccountSettingsTest extends TestCase
         );
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function no_change_when_same_values_submitted()
     {
         $before = AuditLog::withoutGlobalScopes()->count();
@@ -238,7 +239,7 @@ class AccountSettingsTest extends TestCase
     // Extended (JSONB) Settings
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_set_extended_settings()
     {
         $result = $this->service->updateSettings(
@@ -251,7 +252,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('dark', $result['extended']['theme']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function extended_settings_merge_not_replace()
     {
         $this->account->update(['settings' => ['existing_key' => 'value']]);
@@ -270,7 +271,7 @@ class AccountSettingsTest extends TestCase
     // Audit Logging
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function update_creates_audit_log_with_old_new_values()
     {
         $this->service->updateSettings(
@@ -291,7 +292,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('USD', $log->new_values['currency']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function permission_denied_is_audit_logged()
     {
         try {
@@ -315,7 +316,7 @@ class AccountSettingsTest extends TestCase
     // Reset to Defaults
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_reset_to_defaults()
     {
         // Change settings first
@@ -333,7 +334,7 @@ class AccountSettingsTest extends TestCase
         $this->assertEquals('Asia/Riyadh', $result['timezone']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_cannot_reset_settings()
     {
         $this->expectException(BusinessException::class);
@@ -344,7 +345,7 @@ class AccountSettingsTest extends TestCase
     // Supported Options
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_supported_options()
     {
         $options = $this->service->getSupportedOptions();
@@ -368,7 +369,7 @@ class AccountSettingsTest extends TestCase
         $this->assertContains('USD', $currCodes);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function account_model_has_settings_constants()
     {
         $this->assertContains('ar', Account::SUPPORTED_LANGUAGES);

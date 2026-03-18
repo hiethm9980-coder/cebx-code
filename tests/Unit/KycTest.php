@@ -13,6 +13,7 @@ use App\Models\AuditLog;
 use App\Services\KycService;
 use App\Services\AuditService;
 use App\Exceptions\BusinessException;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-014 + FR-IAM-016: KYC Status & Document Access — Unit Tests (25 tests)
@@ -20,6 +21,7 @@ use App\Exceptions\BusinessException;
 class KycTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected KycService $kycService;
     protected Account $account;
@@ -45,14 +47,13 @@ class KycTest extends TestCase
             'is_owner'   => false,
         ]);
 
-        $kycRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['kyc:manage', 'kyc:documents', 'kyc:view'],
-        ]);
-        $this->kycManager = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $kycRole->id,
+        $kycRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['kyc.manage', 'kyc.documents', 'kyc.read'],
+            'kyc_manager'
+        );
+        $this->kycManager = $this->createUserWithRole((string) $this->account->id, (string) $kycRole->id, [
+            'is_owner' => false,
         ]);
     }
 
@@ -60,7 +61,7 @@ class KycTest extends TestCase
     // FR-IAM-014: KYC Status & Capabilities
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_unverified_status_without_kyc_record()
     {
         $status = $this->kycService->getKycStatus($this->account->id);
@@ -71,7 +72,7 @@ class KycTest extends TestCase
         $this->assertNotEmpty($status['required_documents']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_pending_capabilities()
     {
         KycVerification::factory()->pending()->create([
@@ -86,7 +87,7 @@ class KycTest extends TestCase
         $this->assertEquals(50, $status['capabilities']['shipping_limit']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_approved_capabilities()
     {
         KycVerification::factory()->approved()->create([
@@ -101,7 +102,7 @@ class KycTest extends TestCase
         $this->assertNull($status['capabilities']['shipping_limit']); // Unlimited
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_rejected_capabilities_with_reason()
     {
         KycVerification::factory()->rejected()->create([
@@ -115,7 +116,7 @@ class KycTest extends TestCase
         $this->assertEquals(10, $status['capabilities']['shipping_limit']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_status_display_info()
     {
         $kyc = KycVerification::factory()->approved()->create([
@@ -132,7 +133,7 @@ class KycTest extends TestCase
 
     // ─── Approve ─────────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_approve_pending_kyc()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -149,7 +150,7 @@ class KycTest extends TestCase
         $this->assertEquals('approved', $this->account->fresh()->kyc_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function approve_creates_audit_log()
     {
         KycVerification::factory()->pending()->create([
@@ -166,7 +167,7 @@ class KycTest extends TestCase
         $this->assertNotNull($log);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_approve_non_pending_kyc()
     {
         KycVerification::factory()->approved()->create([
@@ -177,7 +178,7 @@ class KycTest extends TestCase
         $this->kycService->approveKyc($this->account->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_cannot_approve()
     {
         KycVerification::factory()->pending()->create([
@@ -190,7 +191,7 @@ class KycTest extends TestCase
 
     // ─── Reject ──────────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_reject_pending_kyc()
     {
         KycVerification::factory()->pending()->create([
@@ -206,7 +207,7 @@ class KycTest extends TestCase
         $this->assertEquals('rejected', $this->account->fresh()->kyc_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_reject_non_pending_kyc()
     {
         KycVerification::factory()->approved()->create([
@@ -219,7 +220,7 @@ class KycTest extends TestCase
 
     // ─── Resubmit ────────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_resubmit_after_rejection()
     {
         KycVerification::factory()->rejected()->create([
@@ -237,7 +238,7 @@ class KycTest extends TestCase
         $this->assertEquals('pending', $this->account->fresh()->kyc_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_resubmit_after_expiry()
     {
         KycVerification::factory()->expired()->create([
@@ -253,7 +254,7 @@ class KycTest extends TestCase
         $this->assertEquals('pending', $result->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_resubmit_pending_kyc()
     {
         KycVerification::factory()->pending()->create([
@@ -270,7 +271,7 @@ class KycTest extends TestCase
     // FR-IAM-016: Document Access Control
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_upload_document()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -288,7 +289,7 @@ class KycTest extends TestCase
         $this->assertTrue($doc->is_sensitive);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function upload_creates_audit_log()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -307,7 +308,7 @@ class KycTest extends TestCase
         $this->assertNotNull($log);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_list_documents()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -325,7 +326,7 @@ class KycTest extends TestCase
         $this->assertCount(3, $docs);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_cannot_list_documents()
     {
         KycVerification::factory()->pending()->create([
@@ -336,7 +337,7 @@ class KycTest extends TestCase
         $this->kycService->listDocuments($this->account->id, $this->member);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function document_access_denied_is_logged()
     {
         KycVerification::factory()->pending()->create([
@@ -355,7 +356,7 @@ class KycTest extends TestCase
         $this->assertNotNull($log);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_get_download_url()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -376,7 +377,7 @@ class KycTest extends TestCase
         $this->assertEquals(15, $result['ttl_minutes']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function document_access_is_logged()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -399,7 +400,7 @@ class KycTest extends TestCase
         $this->assertEquals($doc->id, $log->entity_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_purge_document()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -420,7 +421,7 @@ class KycTest extends TestCase
         $this->assertNotNull($result->purged_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_purge_already_purged_document()
     {
         $kyc = KycVerification::factory()->pending()->create([
@@ -436,7 +437,7 @@ class KycTest extends TestCase
         $this->kycService->purgeDocument($this->account->id, $doc->id, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function purged_documents_excluded_from_list()
     {
         $kyc = KycVerification::factory()->pending()->create([

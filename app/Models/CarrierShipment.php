@@ -54,6 +54,7 @@ class CarrierShipment extends Model
 
     // ── Carrier Constants ────────────────────────────────────
     const CARRIER_DHL = 'dhl';
+    const CARRIER_FEDEX = 'fedex';
 
     // ── Label Formats ────────────────────────────────────────
     const FORMAT_PDF = 'pdf';

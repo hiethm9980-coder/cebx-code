@@ -49,7 +49,7 @@ class SupportWebController extends WebController
     public function reply(Request $request, SupportTicket $ticket)
     {
         $v = $request->validate(['message' => 'required|string']);
-        $isAgent = $this->isAdmin() || auth()->user()->is_super_admin;
+        $isAgent = $this->isAdmin();
         TicketReply::create([
             'ticket_id' => $ticket->id, 'user_id' => auth()->id(),
             'message' => $v['message'], 'is_agent' => $isAgent,

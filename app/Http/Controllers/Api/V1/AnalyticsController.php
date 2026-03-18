@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Analytics;
 use App\Models\Shipment;
 use App\Models\Invoice;
 use App\Models\Branch;
@@ -32,7 +33,13 @@ class AnalyticsController extends Controller
      */
     public function overview(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Analytics::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $from = $request->get('from', now()->subDays(30)->toDateString());
         $to = $request->get('to', now()->toDateString());
 
@@ -73,7 +80,13 @@ class AnalyticsController extends Controller
      */
     public function shipmentTrends(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Analytics::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $period = $request->get('period', 'daily'); // daily, weekly, monthly
         $days = $request->get('days', 30);
 
@@ -100,7 +113,13 @@ class AnalyticsController extends Controller
      */
     public function revenue(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Analytics::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $days = $request->get('days', 30);
 
         $daily = Invoice::where('account_id', $accountId)
@@ -135,7 +154,13 @@ class AnalyticsController extends Controller
      */
     public function carrierPerformance(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Analytics::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $days = $request->get('days', 30);
 
         $carriers = Shipment::where('account_id', $accountId)
@@ -164,7 +189,13 @@ class AnalyticsController extends Controller
      */
     public function branchPerformance(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Analytics::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $days = $request->get('days', 30);
 
         $branches = Branch::where('account_id', $accountId)
@@ -192,7 +223,12 @@ class AnalyticsController extends Controller
      */
     public function geoDistribution(Request $request): JsonResponse
     {
-        $accountId = $request->user()->account_id;
+        $this->authorize('viewAny', Analytics::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
 
         $origins = Shipment::where('account_id', $accountId)
             ->selectRaw("origin_country as country, count(*) as count")
@@ -225,11 +261,18 @@ class AnalyticsController extends Controller
      */
     public function commissions(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', Analytics::class);
+
+        $accountId = $this->resolveCurrentAccountId($request);
+        if ($accountId === null) {
+            abort(404);
+        }
+
         $from = $request->get('from', now()->startOfMonth()->toDateString());
         $to = $request->get('to', now()->toDateString());
 
         return response()->json([
-            'data' => $this->commission->report($request->user()->account_id, $from, $to),
+            'data' => $this->commission->report($accountId, $from, $to),
         ]);
     }
 
@@ -260,5 +303,20 @@ class AnalyticsController extends Controller
             ->value('avg');
 
         return $avg ? round($avg, 1) : null;
+    }
+
+    protected function resolveCurrentAccountId(Request $request): ?string
+    {
+        $current = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($current !== '') {
+            return $current;
+        }
+
+        $fallback = trim((string) ($request->user()?->account_id ?? ''));
+
+        return $fallback === '' ? null : $fallback;
     }
 }

@@ -5,14 +5,19 @@ namespace App\Services;
 use App\Models\Account;
 use App\Models\Address;
 use App\Models\AuditLog;
+use App\Models\BillingWallet;
+use App\Models\KycVerification;
 use App\Models\Order;
 use App\Models\Parcel;
 use App\Models\Shipment;
 use App\Models\ShipmentStatusHistory;
 use App\Models\Store;
 use App\Models\User;
+use App\Models\WalletHold;
 use App\Exceptions\BusinessException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * ShipmentService — FR-SH-001→019 (19 requirements)
@@ -40,7 +45,9 @@ use Illuminate\Support\Facades\DB;
 class ShipmentService
 {
     public function __construct(
-        protected AuditService $auditService
+        protected AuditService $auditService,
+        protected BillingWalletService $billingWalletService,
+        protected DgComplianceService $dgComplianceService
     ) {}
 
     // ═══════════════════════════════════════════════════════════════
@@ -49,72 +56,37 @@ class ShipmentService
 
     public function createDirect(string $accountId, array $data, User $performer): Shipment
     {
-        $this->assertCanManageShipments($performer);
+        $this->assertCanCreateShipmentDraft($performer);
 
-        return DB::transaction(function () use ($accountId, $data, $performer) {
-            $shipment = Shipment::create([
-                'account_id'       => $accountId,
-                'store_id'         => $data['store_id'] ?? null,
-                'reference_number' => Shipment::generateReference(),
-                'source'           => Shipment::SOURCE_DIRECT,
-                'status'           => Shipment::STATUS_DRAFT,
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            try {
+                return DB::transaction(function () use ($accountId, $data, $performer) {
+                    $shipment = Shipment::create($this->buildShipmentDraftAttributes($accountId, $data, $performer));
 
-                // Sender
-                'sender_address_id'  => $data['sender_address_id'] ?? null,
-                'sender_name'        => $data['sender_name'],
-                'sender_company'     => $data['sender_company'] ?? null,
-                'sender_phone'       => $data['sender_phone'],
-                'sender_email'       => $data['sender_email'] ?? null,
-                'sender_address_1'   => $data['sender_address_1'],
-                'sender_address_2'   => $data['sender_address_2'] ?? null,
-                'sender_city'        => $data['sender_city'],
-                'sender_state'       => $data['sender_state'] ?? null,
-                'sender_postal_code' => $data['sender_postal_code'] ?? null,
-                'sender_country'     => $data['sender_country'],
+                    // Create parcels (FR-SH-003)
+                    $this->createParcels($shipment, $data['parcels'] ?? [['weight' => $data['weight'] ?? 0.5]]);
 
-                // Recipient
-                'recipient_address_id'  => $data['recipient_address_id'] ?? null,
-                'recipient_name'        => $data['recipient_name'],
-                'recipient_company'     => $data['recipient_company'] ?? null,
-                'recipient_phone'       => $data['recipient_phone'],
-                'recipient_email'       => $data['recipient_email'] ?? null,
-                'recipient_address_1'   => $data['recipient_address_1'],
-                'recipient_address_2'   => $data['recipient_address_2'] ?? null,
-                'recipient_city'        => $data['recipient_city'],
-                'recipient_state'       => $data['recipient_state'] ?? null,
-                'recipient_postal_code' => $data['recipient_postal_code'] ?? null,
-                'recipient_country'     => $data['recipient_country'],
+                    // Record initial status
+                    $this->recordStatusChange($shipment, null, Shipment::STATUS_DRAFT, 'system', $performer->id, 'Shipment created');
 
-                // Flags
-                'is_international'    => ($data['sender_country'] ?? 'SA') !== ($data['recipient_country'] ?? 'SA'),
-                'is_cod'              => !empty($data['cod_amount']) && $data['cod_amount'] > 0,
-                'cod_amount'          => $data['cod_amount'] ?? 0,
-                'is_insured'          => !empty($data['insurance_amount']) && $data['insurance_amount'] > 0,
-                'insurance_amount'    => $data['insurance_amount'] ?? 0,
-                'is_return'           => $data['is_return'] ?? false,
-                'has_dangerous_goods' => $data['has_dangerous_goods'] ?? false,
-                'delivery_instructions' => $data['delivery_instructions'] ?? null,
+                    $this->auditService->info(
+                        $accountId, $performer->id,
+                        'shipment.created', AuditLog::CATEGORY_ACCOUNT,
+                        'Shipment', $shipment->id,
+                        null,
+                        ['source' => 'direct', 'reference' => $shipment->reference_number]
+                    );
 
-                'created_by' => $performer->id,
-                'metadata'   => $data['metadata'] ?? null,
-            ]);
+                    return $shipment->fresh(['parcels']);
+                });
+            } catch (QueryException $exception) {
+                if (! Shipment::isReferenceConflict($exception) || $attempt === 2) {
+                    throw $exception;
+                }
+            }
+        }
 
-            // Create parcels (FR-SH-003)
-            $this->createParcels($shipment, $data['parcels'] ?? [['weight' => $data['weight'] ?? 0.5]]);
-
-            // Record initial status
-            $this->recordStatusChange($shipment, null, Shipment::STATUS_DRAFT, 'system', $performer->id, 'Shipment created');
-
-            $this->auditService->info(
-                $accountId, $performer->id,
-                'shipment.created', AuditLog::CATEGORY_ACCOUNT,
-                'Shipment', $shipment->id,
-                null,
-                ['source' => 'direct', 'reference' => $shipment->reference_number]
-            );
-
-            return $shipment->load('parcels');
-        });
+        throw new \RuntimeException('Shipment draft reference generation exhausted retries.');
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -123,7 +95,7 @@ class ShipmentService
 
     public function createFromOrder(string $accountId, string $orderId, array $overrides, User $performer): Shipment
     {
-        $this->assertCanManageShipments($performer);
+        $this->assertCanCreateShipmentDraft($performer);
 
         $order = Order::where('account_id', $accountId)
             ->where('id', $orderId)
@@ -186,61 +158,362 @@ class ShipmentService
 
     public function validateShipment(string $accountId, string $shipmentId, User $performer): Shipment
     {
+        $this->assertCanUpdateShipmentDraft($performer);
+
         $shipment = $this->findShipment($accountId, $shipmentId);
 
-        if ($shipment->status !== Shipment::STATUS_DRAFT) {
-            throw new BusinessException('يمكن التحقق فقط من الشحنات في حالة مسودة.', 'ERR_INVALID_STATE', 422);
+        if (!in_array($shipment->status, [
+            Shipment::STATUS_DRAFT,
+            Shipment::STATUS_VALIDATED,
+            Shipment::STATUS_KYC_BLOCKED,
+        ], true)) {
+            throw new BusinessException(
+                'لا يمكن تجهيز هذه الشحنة للتسعير من حالتها الحالية.',
+                'ERR_INVALID_STATE',
+                422,
+                [
+                    'shipment_id' => $shipment->id,
+                    'current_status' => $shipment->status,
+                    'allowed_statuses' => [
+                        Shipment::STATUS_DRAFT,
+                        Shipment::STATUS_VALIDATED,
+                        Shipment::STATUS_KYC_BLOCKED,
+                    ],
+                ]
+            );
         }
 
         $errors = $this->runValidation($shipment);
 
         if (!empty($errors)) {
             throw new BusinessException(
-                'فشل التحقق: ' . implode('، ', $errors),
-                'ERR_VALIDATION_FAILED', 422
+                'تعذر متابعة الشحنة قبل تصحيح بيانات الطلب.',
+                'ERR_VALIDATION_FAILED',
+                422,
+                [
+                    'shipment_id' => $shipment->id,
+                    'current_status' => Shipment::STATUS_DRAFT,
+                    'next_action' => 'صحح بيانات المرسل أو المستلم أو الطرود، ثم أعد محاولة التحقق.',
+                    'validation_errors' => $errors,
+                ]
             );
         }
 
-        $this->transitionStatus($shipment, Shipment::STATUS_VALIDATED, 'system', $performer->id, 'Validation passed');
+        if ($shipment->status !== Shipment::STATUS_VALIDATED) {
+            $this->transitionStatus($shipment, Shipment::STATUS_VALIDATED, 'system', $performer->id, 'Validation passed');
+            $shipment = $shipment->fresh(['parcels', 'account.kycVerification']);
+        }
+
+        $kycGate = $this->evaluateKycRestrictionGate($shipment);
+        if (!$kycGate['allowed']) {
+            if ($shipment->status !== Shipment::STATUS_KYC_BLOCKED) {
+                $this->transitionStatus(
+                    $shipment,
+                    Shipment::STATUS_KYC_BLOCKED,
+                    'system',
+                    $performer->id,
+                    $kycGate['message']
+                );
+            } else {
+                $this->updateShipmentCompat($shipment, ['status_reason' => $kycGate['message']]);
+            }
+
+            $this->updateShipmentCompat($shipment, ['kyc_verified' => false]);
+
+            throw new BusinessException(
+                $kycGate['message'],
+                $kycGate['error_code'],
+                422,
+                [
+                    'shipment_id' => $shipment->id,
+                    'current_status' => Shipment::STATUS_KYC_BLOCKED,
+                    'kyc_status' => $kycGate['kyc_status'],
+                    'reason_code' => $kycGate['reason_code'],
+                    'next_action' => $kycGate['next_action'],
+                    'capabilities' => $kycGate['capabilities'],
+                ]
+            );
+        }
+
+        if ($shipment->status !== Shipment::STATUS_READY_FOR_RATES) {
+            $this->transitionStatus($shipment, Shipment::STATUS_READY_FOR_RATES, 'system', $performer->id, 'Shipment cleared for rate fetching');
+        }
+
+        $this->updateShipmentCompat($shipment, [
+            'kyc_verified' => $kycGate['kyc_status'] === 'verified',
+            'status_reason' => null,
+        ]);
 
         return $shipment->fresh();
     }
 
+    /**
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
+     */
+    public function createWalletPreflightReservation(
+        string $accountId,
+        string $shipmentId,
+        User $performer,
+        array $options = []
+    ): array {
+        if (! $performer->hasPermission('billing.manage')) {
+            throw BusinessException::permissionDenied();
+        }
+
+        return DB::transaction(function () use ($accountId, $shipmentId, $performer, $options): array {
+            /** @var Shipment $shipment */
+            $shipment = Shipment::query()
+                ->where('account_id', $accountId)
+                ->where('id', $shipmentId)
+                ->with(['selectedRateOption', 'balanceReservation'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $selectedOption = $shipment->selectedRateOption;
+            if ($selectedOption === null) {
+                throw new BusinessException(
+                    'Select a shipment offer before requesting wallet pre-flight reservation.',
+                    'ERR_SELECTED_OFFER_REQUIRED',
+                    422,
+                    [
+                        'shipment_id' => (string) $shipment->id,
+                        'current_status' => (string) $shipment->status,
+                        'next_action' => 'Select one offer for the shipment before continuing to wallet pre-flight.',
+                    ]
+                );
+            }
+
+            $this->dgComplianceService->validateForIssuance((string) $shipment->id, $accountId);
+
+            if (! in_array((string) $shipment->status, [
+                Shipment::STATUS_DECLARATION_COMPLETE,
+                Shipment::STATUS_PAYMENT_PENDING,
+            ], true)) {
+                throw new BusinessException(
+                    'This shipment is not in the correct state for wallet pre-flight reservation.',
+                    'ERR_INVALID_STATE',
+                    422,
+                    [
+                        'shipment_id' => (string) $shipment->id,
+                        'current_status' => (string) $shipment->status,
+                        'allowed_statuses' => [
+                            Shipment::STATUS_DECLARATION_COMPLETE,
+                            Shipment::STATUS_PAYMENT_PENDING,
+                        ],
+                        'next_action' => 'Complete declaration and offer selection before requesting wallet pre-flight.',
+                    ]
+                );
+            }
+
+            $amount = $this->resolvePreflightAmount($shipment);
+            $currency = $this->resolvePreflightCurrency($shipment);
+
+            /** @var BillingWallet|null $wallet */
+            $wallet = BillingWallet::query()
+                ->where('account_id', $accountId)
+                ->where('currency', $currency)
+                ->first();
+
+            if (! $wallet instanceof BillingWallet) {
+                throw new BusinessException(
+                    'No wallet is available for the selected shipment currency.',
+                    'ERR_WALLET_NOT_AVAILABLE',
+                    422,
+                    [
+                        'shipment_id' => (string) $shipment->id,
+                        'currency' => $currency,
+                        'next_action' => 'Create or fund a wallet in the shipment currency before continuing.',
+                    ]
+                );
+            }
+
+            if (! $wallet->isActive()) {
+                throw BusinessException::walletFrozen();
+            }
+
+            $existingHold = $this->resolveExistingActiveReservation($shipment, (string) $wallet->id);
+            if ($existingHold instanceof WalletHold) {
+                if (round((float) $existingHold->amount, 2) !== round($amount, 2)) {
+                    throw new BusinessException(
+                        'An existing reservation no longer matches the selected offer total.',
+                        'ERR_PREFLIGHT_AMOUNT_MISMATCH',
+                        409,
+                        [
+                            'shipment_id' => (string) $shipment->id,
+                            'existing_hold_id' => (string) $existingHold->id,
+                            'existing_amount' => (float) $existingHold->amount,
+                            'expected_amount' => $amount,
+                            'currency' => $currency,
+                            'next_action' => 'Release the stale reservation before creating a new wallet pre-flight hold.',
+                        ]
+                    );
+                }
+
+                $this->syncShipmentReservation($shipment, $existingHold, $performer, false);
+
+                return $this->formatWalletPreflightResult(
+                    $shipment->fresh(['selectedRateOption', 'rateQuote', 'balanceReservation']),
+                    $existingHold->fresh(),
+                    $wallet->fresh(),
+                    false
+                );
+            }
+
+            $correlationId = trim((string) ($options['correlation_id'] ?? AuditService::getRequestId()));
+            $idempotencyKey = trim((string) ($options['idempotency_key'] ?? ''));
+            if ($idempotencyKey === '') {
+                $idempotencyKey = 'shipment-preflight-' . $shipment->id . '-' . $correlationId;
+            }
+
+            try {
+                $hold = $this->billingWalletService->createHold(
+                    (string) $wallet->id,
+                    (string) $shipment->id,
+                    $amount,
+                    $idempotencyKey,
+                    [
+                        'account_id' => $accountId,
+                        'currency' => $currency,
+                        'source' => 'shipment_preflight',
+                        'correlation_id' => $correlationId,
+                        'actor_id' => (string) $performer->id,
+                    ]
+                );
+            } catch (\RuntimeException $exception) {
+                if (str_contains($exception->getMessage(), 'ERR_INSUFFICIENT_BALANCE')) {
+                    throw new BusinessException(
+                        'Wallet balance is insufficient for the selected shipment offer.',
+                        'ERR_INSUFFICIENT_BALANCE',
+                        422,
+                        [
+                            'shipment_id' => (string) $shipment->id,
+                            'wallet_id' => (string) $wallet->id,
+                            'required_amount' => $amount,
+                            'currency' => $currency,
+                            'effective_balance' => $wallet->fresh()->getEffectiveBalance(),
+                            'next_action' => 'Top up the wallet or select a lower-cost offer before continuing.',
+                        ]
+                    );
+                }
+
+                if (str_contains($exception->getMessage(), 'ERR_HOLD_ALREADY_EXISTS')) {
+                    throw new BusinessException(
+                        'A wallet reservation is already active for this shipment.',
+                        'ERR_HOLD_ALREADY_EXISTS',
+                        409,
+                        [
+                            'shipment_id' => (string) $shipment->id,
+                            'wallet_id' => (string) $wallet->id,
+                        ]
+                    );
+                }
+
+                if (str_contains($exception->getMessage(), 'ERR_WALLET_FROZEN')) {
+                    throw BusinessException::walletFrozen();
+                }
+
+                throw $exception;
+            }
+
+            $this->syncShipmentReservation($shipment, $hold, $performer, true);
+
+            return $this->formatWalletPreflightResult(
+                $shipment->fresh(['selectedRateOption', 'rateQuote', 'balanceReservation']),
+                $hold->fresh(),
+                $wallet->fresh(),
+                true
+            );
+        });
+    }
+
     private function runValidation(Shipment $shipment): array
     {
-        $errors = [];
+        $errors = [
+            'sender' => [],
+            'recipient' => [],
+            'routing' => [],
+            'parcels' => [],
+        ];
 
         // Sender validation
-        if (empty($shipment->sender_name))      $errors[] = 'اسم المرسل مطلوب';
-        if (empty($shipment->sender_phone))      $errors[] = 'هاتف المرسل مطلوب';
-        if (empty($shipment->sender_address_1))  $errors[] = 'عنوان المرسل مطلوب';
-        if (empty($shipment->sender_city))       $errors[] = 'مدينة المرسل مطلوبة';
-        if (empty($shipment->sender_country))    $errors[] = 'دولة المرسل مطلوبة';
+        if (empty($shipment->sender_name))      $errors['sender'][] = 'اسم المرسل مطلوب.';
+        if (empty($shipment->sender_phone))     $errors['sender'][] = 'هاتف المرسل مطلوب.';
+        if (empty($this->shipmentAttribute($shipment, 'sender_address_1', 'sender_address'))) $errors['sender'][] = 'عنوان المرسل مطلوب.';
+        if (empty($shipment->sender_city))      $errors['sender'][] = 'مدينة المرسل مطلوبة.';
+        if (empty($this->shipmentAttribute($shipment, 'sender_country')))   $errors['sender'][] = 'دولة المرسل مطلوبة.';
 
         // Recipient validation
-        if (empty($shipment->recipient_name))      $errors[] = 'اسم المستلم مطلوب';
-        if (empty($shipment->recipient_phone))      $errors[] = 'هاتف المستلم مطلوب';
-        if (empty($shipment->recipient_address_1))  $errors[] = 'عنوان المستلم مطلوب';
-        if (empty($shipment->recipient_city))       $errors[] = 'مدينة المستلم مطلوبة';
-        if (empty($shipment->recipient_country))    $errors[] = 'دولة المستلم مطلوبة';
+        if (empty($shipment->recipient_name))      $errors['recipient'][] = 'اسم المستلم مطلوب.';
+        if (empty($shipment->recipient_phone))     $errors['recipient'][] = 'هاتف المستلم مطلوب.';
+        if (empty($this->shipmentAttribute($shipment, 'recipient_address_1', 'recipient_address'))) $errors['recipient'][] = 'عنوان المستلم مطلوب.';
+        if (empty($shipment->recipient_city))      $errors['recipient'][] = 'مدينة المستلم مطلوبة.';
+        if (empty($shipment->recipient_country))   $errors['recipient'][] = 'دولة المستلم مطلوبة.';
+
+        foreach ([
+            'sender' => [
+                'phone' => (string) $shipment->sender_phone,
+                'country' => (string) $this->shipmentAttribute($shipment, 'sender_country'),
+                'postal_code' => (string) ($this->shipmentAttribute($shipment, 'sender_postal_code') ?? ''),
+            ],
+            'recipient' => [
+                'phone' => (string) $shipment->recipient_phone,
+                'country' => (string) $shipment->recipient_country,
+                'postal_code' => (string) ($shipment->recipient_postal_code ?? ''),
+            ],
+        ] as $party => $details) {
+            if ($details['phone'] !== '' && !$this->isPhoneFormatReasonable($details['phone'])) {
+                $errors[$party][] = 'رقم الهاتف يجب أن يكون بصيغة رقمية واضحة مع رمز الدولة عند الحاجة.';
+            }
+
+            if ($details['country'] !== '' && !$this->isCountryCodeReasonable($details['country'])) {
+                $errors[$party][] = 'رمز الدولة يجب أن يتكون من حرفين لاتينيين.';
+            }
+
+            if ($details['postal_code'] !== '' && !$this->isPostalCodeReasonable($details['postal_code'])) {
+                $errors[$party][] = 'الرمز البريدي يحتوي على صيغة غير صالحة.';
+            }
+        }
+
+        if ($this->isInternationalShipment($shipment)) {
+            if (blank($this->shipmentAttribute($shipment, 'sender_postal_code'))) {
+                $errors['routing'][] = 'الشحن الدولي يتطلب رمزًا بريديًا للمرسل.';
+            }
+            if (blank($this->shipmentAttribute($shipment, 'recipient_postal_code'))) {
+                $errors['routing'][] = 'الشحن الدولي يتطلب رمزًا بريديًا للمستلم.';
+            }
+        }
 
         // Parcel validation
         if ($shipment->parcels->isEmpty()) {
-            $errors[] = 'يجب إضافة طرد واحد على الأقل';
+            $errors['parcels'][] = 'يجب إضافة طرد واحد على الأقل.';
         } else {
             foreach ($shipment->parcels as $parcel) {
                 if ($parcel->weight <= 0) {
-                    $errors[] = "الطرد #{$parcel->sequence}: الوزن يجب أن يكون أكبر من 0";
+                    $errors['parcels'][] = "الطرد #{$parcel->sequence}: الوزن يجب أن يكون أكبر من 0.";
+                }
+
+                foreach (['length', 'width', 'height'] as $dimension) {
+                    $value = $parcel->{$dimension};
+                    if ($value !== null && (float) $value <= 0) {
+                        $errors['parcels'][] = "الطرد #{$parcel->sequence}: قيمة {$dimension} يجب أن تكون أكبر من 0.";
+                    }
+                }
+
+                if ($parcel->length !== null || $parcel->width !== null || $parcel->height !== null) {
+                    if ($parcel->length === null || $parcel->width === null || $parcel->height === null) {
+                        $errors['parcels'][] = "الطرد #{$parcel->sequence}: عند إدخال الأبعاد يجب تعبئة الطول والعرض والارتفاع معًا.";
+                    }
                 }
             }
         }
 
         // COD validation (FR-SH-019)
         if ($shipment->is_cod && $shipment->cod_amount <= 0) {
-            $errors[] = 'مبلغ الدفع عند الاستلام يجب أن يكون أكبر من 0';
+            $errors['routing'][] = 'مبلغ الدفع عند الاستلام يجب أن يكون أكبر من 0.';
         }
 
-        return $errors;
+        return array_filter($errors);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -298,6 +571,7 @@ class ShipmentService
         return DB::transaction(function () use ($shipment, $performer, $reason) {
             $oldStatus = $shipment->status;
             $needsRefund = in_array($oldStatus, [Shipment::STATUS_PURCHASED, Shipment::STATUS_READY_FOR_PICKUP]);
+            $reservationId = trim((string) ($shipment->balance_reservation_id ?? ''));
 
             // FR-SH-015: Refund to wallet if already charged
             if ($needsRefund && $shipment->total_charge > 0) {
@@ -305,7 +579,12 @@ class ShipmentService
             }
 
             // Release balance reservation (FR-SH-014)
-            if ($shipment->balance_reservation_id) {
+            if ($reservationId !== '') {
+                $hold = WalletHold::query()->find($reservationId);
+                if ($hold instanceof WalletHold && $hold->isActive()) {
+                    $this->billingWalletService->releaseHold((string) $hold->id);
+                }
+
                 $shipment->update(['balance_reservation_id' => null, 'reserved_amount' => null]);
             }
 
@@ -404,7 +683,7 @@ class ShipmentService
         $shipments = $query->orderByDesc('created_at')->limit($limit)->offset($offset)->get();
 
         // FR-SH-011: Mask financial fields if user lacks permission
-        if (!$performer->is_owner && !$performer->hasPermission('shipments:view_financial')) {
+        if (!$performer->hasPermission('shipments.view_financial')) {
             $shipments->each(function ($sh) {
                 $sh->makeHidden(['shipping_rate', 'total_charge', 'platform_fee', 'profit_margin', 'insurance_amount']);
             });
@@ -451,17 +730,7 @@ class ShipmentService
 
     public function checkKycForPurchase(Shipment $shipment): bool
     {
-        $account = $shipment->account ?? Account::find($shipment->account_id);
-
-        // KYC required for international or high-value shipments
-        if ($shipment->is_international || ($shipment->total_charge && $shipment->total_charge > 2000)) {
-            $kycStatus = $account->kyc_status ?? 'pending';
-            if ($kycStatus !== 'verified') {
-                return false;
-            }
-        }
-
-        return true;
+        return $this->evaluateKycRestrictionGate($shipment)['allowed'];
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -568,6 +837,8 @@ class ShipmentService
 
     public function addParcel(string $accountId, string $shipmentId, array $data, User $performer): Parcel
     {
+        $this->assertCanUpdateShipmentDraft($performer);
+
         $shipment = $this->findShipment($accountId, $shipmentId);
         if (!$shipment->isDraft() && $shipment->status !== Shipment::STATUS_VALIDATED) {
             throw new BusinessException('لا يمكن إضافة طرود بعد تسعير الشحنة.', 'ERR_CANNOT_MODIFY_PARCELS', 422);
@@ -595,6 +866,8 @@ class ShipmentService
 
     public function removeParcel(string $accountId, string $shipmentId, string $parcelId, User $performer): void
     {
+        $this->assertCanUpdateShipmentDraft($performer);
+
         $shipment = $this->findShipment($accountId, $shipmentId);
         if ($shipment->parcels->count() <= 1) {
             throw new BusinessException('لا يمكن حذف آخر طرد.', 'ERR_LAST_PARCEL', 422);
@@ -610,6 +883,10 @@ class ShipmentService
 
     private function createParcels(Shipment $shipment, array $parcelsData): void
     {
+        if (! Schema::hasTable('parcels')) {
+            return;
+        }
+
         foreach ($parcelsData as $i => $pd) {
             $parcel = Parcel::create([
                 'shipment_id'    => $shipment->id,
@@ -630,12 +907,16 @@ class ShipmentService
     private function transitionStatus(Shipment $shipment, string $newStatus, string $source, ?string $userId, ?string $reason): void
     {
         $oldStatus = $shipment->status;
-        $shipment->update(['status' => $newStatus, 'status_reason' => $reason]);
+        $this->updateShipmentCompat($shipment, ['status' => $newStatus, 'status_reason' => $reason]);
         $this->recordStatusChange($shipment, $oldStatus, $newStatus, $source, $userId, $reason);
     }
 
     private function recordStatusChange(Shipment $shipment, ?string $from, string $to, string $source, ?string $userId, ?string $reason): void
     {
+        if (! Schema::hasTable('shipment_status_history')) {
+            return;
+        }
+
         ShipmentStatusHistory::create([
             'shipment_id' => $shipment->id,
             'from_status' => $from,
@@ -649,23 +930,451 @@ class ShipmentService
 
     private function findShipment(string $accountId, string $shipmentId): Shipment
     {
-        return Shipment::where('account_id', $accountId)
-            ->where('id', $shipmentId)
-            ->with('parcels')
-            ->firstOrFail();
+        $query = Shipment::where('account_id', $accountId)
+            ->where('id', $shipmentId);
+
+        if (Schema::hasTable('parcels')) {
+            $query->with('parcels');
+        }
+
+        return $query->firstOrFail();
+    }
+
+    private function assertCanCreateShipmentDraft(User $user): void
+    {
+        if (!$user->hasPermission('shipments.create') && !$user->hasPermission('shipments.manage')) {
+            throw BusinessException::permissionDenied();
+        }
+    }
+
+    private function assertCanUpdateShipmentDraft(User $user): void
+    {
+        if (!$user->hasPermission('shipments.update_draft') && !$user->hasPermission('shipments.manage')) {
+            throw BusinessException::permissionDenied();
+        }
     }
 
     private function assertCanManageShipments(User $user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('shipments:manage')) {
+        if (!$user->hasPermission('shipments.manage')) {
             throw BusinessException::permissionDenied();
         }
     }
 
     private function assertCanPrintLabel(User $user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('shipments:manage') && !$user->hasPermission('shipments:print_label')) {
+        if (!$user->hasPermission('shipments.manage') && !$user->hasPermission('shipments.print_label')) {
             throw BusinessException::permissionDenied();
         }
+    }
+
+    /**
+     * @return array{
+     *   allowed: bool,
+     *   kyc_status: string,
+     *   error_code: string,
+     *   reason_code: string,
+     *   message: string,
+     *   next_action: string,
+     *   capabilities: array<string, mixed>
+     * }
+     */
+    private function evaluateKycRestrictionGate(Shipment $shipment): array
+    {
+        /** @var Account $account */
+        $account = $shipment->account ?? Account::with('kycVerification')->findOrFail($shipment->account_id);
+        $verification = $account->kycVerification;
+
+        $rawStatus = $verification?->status ?? (string) ($account->kyc_status ?? KycVerification::STATUS_UNVERIFIED);
+        $canonicalStatus = match ($rawStatus) {
+            'verified', KycVerification::STATUS_APPROVED => 'verified',
+            'pending', 'pending_review', KycVerification::STATUS_PENDING => 'pending_review',
+            'rejected', KycVerification::STATUS_REJECTED => 'rejected',
+            default => 'unverified',
+        };
+
+        $capabilities = $verification?->capabilities() ?? $this->fallbackKycCapabilities($canonicalStatus);
+
+        if (($account->status ?? 'active') !== 'active') {
+            return [
+                'allowed' => false,
+                'kyc_status' => $canonicalStatus,
+                'error_code' => 'ERR_ACCOUNT_RESTRICTED',
+                'reason_code' => 'account_inactive',
+                'message' => 'الحساب غير نشط حاليًا ولا يمكنه متابعة الشحن.',
+                'next_action' => 'تواصل مع الدعم أو مع مدير الحساب لتفعيل الحساب أولًا.',
+                'capabilities' => $capabilities,
+            ];
+        }
+
+        if ($this->isInternationalShipment($shipment) && !($capabilities['can_ship_international'] ?? false)) {
+            return [
+                'allowed' => false,
+                'kyc_status' => $canonicalStatus,
+                'error_code' => match ($canonicalStatus) {
+                    'pending_review' => 'ERR_KYC_PENDING_REVIEW',
+                    'rejected' => 'ERR_KYC_REJECTED',
+                    default => 'ERR_KYC_REQUIRED',
+                },
+                'reason_code' => 'international_restricted',
+                'message' => match ($canonicalStatus) {
+                    'pending_review' => 'الحساب بانتظار مراجعة التحقق. الشحن الدولي سيتاح بعد اعتماد الطلب.',
+                    'rejected' => 'تم رفض طلب التحقق الحالي. الشحن الدولي متوقف حتى إعادة تقديم المستندات المطلوبة.',
+                    default => 'يلزم إكمال التحقق من الهوية قبل الشحن الدولي.',
+                },
+                'next_action' => match ($canonicalStatus) {
+                    'pending_review' => 'انتظر اكتمال مراجعة التحقق أو تابع مع الدعم إذا طال وقت المراجعة.',
+                    'rejected' => 'أعد رفع مستندات التحقق أو صحح الطلب الحالي ثم أعد المحاولة.',
+                    default => 'أكمل التحقق من الهوية وارفع المستندات المطلوبة ثم أعد المحاولة.',
+                },
+                'capabilities' => $capabilities,
+            ];
+        }
+
+        $dailyLimit = $capabilities['daily_shipment_limit'] ?? null;
+        if ($dailyLimit !== null) {
+            $todayCount = Shipment::query()
+                ->where('account_id', $shipment->account_id)
+                ->whereDate('created_at', now()->toDateString())
+                ->where('id', '!=', $shipment->id)
+                ->whereNotIn('status', [Shipment::STATUS_CANCELLED, Shipment::STATUS_FAILED])
+                ->count();
+
+            if ($todayCount >= (int) $dailyLimit) {
+                return [
+                    'allowed' => false,
+                    'kyc_status' => $canonicalStatus,
+                    'error_code' => 'ERR_KYC_USAGE_LIMIT',
+                    'reason_code' => 'daily_shipment_limit',
+                    'message' => 'تم الوصول إلى الحد اليومي المسموح به لهذا الحساب قبل فتح التسعير.',
+                    'next_action' => 'انتظر حتى اليوم التالي أو أكمل التحقق لرفع حدود الاستخدام الحالية.',
+                    'capabilities' => $capabilities,
+                ];
+            }
+        }
+
+        return [
+            'allowed' => true,
+            'kyc_status' => $canonicalStatus,
+            'error_code' => 'OK',
+            'reason_code' => 'ready_for_rates',
+            'message' => 'الشحنة جاهزة للانتقال إلى مرحلة التسعير.',
+            'next_action' => 'يمكنك الآن متابعة جلب الأسعار واختيار العرض المناسب.',
+            'capabilities' => $capabilities,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function fallbackKycCapabilities(string $canonicalStatus): array
+    {
+        return match ($canonicalStatus) {
+            'verified' => [
+                'can_ship_domestic' => true,
+                'can_ship_international' => true,
+                'daily_shipment_limit' => null,
+                'message' => 'الحساب موثق بالكامل.',
+            ],
+            'pending_review' => [
+                'can_ship_domestic' => true,
+                'can_ship_international' => false,
+                'daily_shipment_limit' => 10,
+                'message' => 'الحساب بانتظار المراجعة.',
+            ],
+            'rejected' => [
+                'can_ship_domestic' => true,
+                'can_ship_international' => false,
+                'daily_shipment_limit' => 5,
+                'message' => 'تم رفض التحقق الحالي.',
+            ],
+            default => [
+                'can_ship_domestic' => true,
+                'can_ship_international' => false,
+                'daily_shipment_limit' => 3,
+                'message' => 'يلزم إكمال التحقق.',
+            ],
+        };
+    }
+
+    private function isPhoneFormatReasonable(string $phone): bool
+    {
+        return preg_match('/^\+?[0-9]{7,15}$/', preg_replace('/\s+/', '', $phone)) === 1;
+    }
+
+    private function isCountryCodeReasonable(string $country): bool
+    {
+        return preg_match('/^[A-Z]{2}$/', strtoupper($country)) === 1;
+    }
+
+    private function isPostalCodeReasonable(string $postalCode): bool
+    {
+        return preg_match('/^[A-Za-z0-9 -]{3,12}$/', trim($postalCode)) === 1;
+    }
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function buildShipmentDraftAttributes(string $accountId, array $data, User $performer): array
+    {
+        $parcels = is_array($data['parcels'] ?? null) && $data['parcels'] !== [] ? $data['parcels'] : [['weight' => $data['weight'] ?? 0.5]];
+        $pieces = max(1, count($parcels));
+        $totalWeight = round((float) collect($parcels)->sum(fn (array $parcel) => (float) ($parcel['weight'] ?? 0)), 3);
+        $chargeableWeight = $totalWeight > 0 ? $totalWeight : (float) ($data['weight'] ?? 0.5);
+        $senderCountry = strtoupper((string) ($data['sender_country'] ?? ''));
+        $recipientCountry = strtoupper((string) ($data['recipient_country'] ?? ''));
+        $isInternational = $senderCountry !== '' && $recipientCountry !== '' && $senderCountry !== $recipientCountry;
+        $firstParcel = $parcels[0] ?? [];
+        $payload = [
+            'account_id' => $accountId,
+            'store_id' => $data['store_id'] ?? null,
+            'reference_number' => Shipment::generateReference(),
+            'source' => Shipment::SOURCE_DIRECT,
+            'status' => Shipment::STATUS_DRAFT,
+            'type' => $isInternational ? 'international' : 'domestic',
+            'sender_address_id' => $data['sender_address_id'] ?? null,
+            'sender_name' => $data['sender_name'],
+            'sender_company' => $data['sender_company'] ?? null,
+            'sender_phone' => $data['sender_phone'],
+            'sender_email' => $data['sender_email'] ?? null,
+            'sender_address' => $data['sender_address_1'],
+            'sender_address_1' => $data['sender_address_1'],
+            'sender_address_2' => $data['sender_address_2'] ?? null,
+            'sender_city' => $data['sender_city'],
+            'sender_state' => $data['sender_state'] ?? null,
+            'sender_postal_code' => $data['sender_postal_code'] ?? null,
+            'sender_country' => $senderCountry,
+            'recipient_address_id' => $data['recipient_address_id'] ?? null,
+            'recipient_name' => $data['recipient_name'],
+            'recipient_company' => $data['recipient_company'] ?? null,
+            'recipient_phone' => $data['recipient_phone'],
+            'recipient_email' => $data['recipient_email'] ?? null,
+            'recipient_address' => $data['recipient_address_1'],
+            'recipient_address_1' => $data['recipient_address_1'],
+            'recipient_address_2' => $data['recipient_address_2'] ?? null,
+            'recipient_city' => $data['recipient_city'],
+            'recipient_state' => $data['recipient_state'] ?? null,
+            'recipient_postal_code' => $data['recipient_postal_code'] ?? null,
+            'recipient_country' => $recipientCountry,
+            'is_international' => $isInternational,
+            'is_cod' => !empty($data['cod_amount']) && (float) $data['cod_amount'] > 0,
+            'cod_amount' => $data['cod_amount'] ?? 0,
+            'is_insured' => !empty($data['insurance_amount']) && (float) $data['insurance_amount'] > 0,
+            'insurance_amount' => $data['insurance_amount'] ?? 0,
+            'insurance_flag' => !empty($data['insurance_amount']) && (float) $data['insurance_amount'] > 0,
+            'is_return' => $data['is_return'] ?? false,
+            'has_dangerous_goods' => $data['has_dangerous_goods'] ?? false,
+            'delivery_instructions' => $data['delivery_instructions'] ?? null,
+            'parcels_count' => $pieces,
+            'pieces' => $pieces,
+            'total_weight' => $totalWeight,
+            'weight' => $chargeableWeight,
+            'chargeable_weight' => $chargeableWeight,
+            'content_description' => $firstParcel['description'] ?? ($data['content_description'] ?? 'Shipment draft'),
+            'user_id' => $performer->id,
+            'created_by' => $performer->id,
+            'metadata' => array_filter([
+                'phase' => 'phase_b',
+                'workflow_state' => Shipment::STATUS_DRAFT,
+                'workflow_type' => $isInternational ? 'international' : 'domestic',
+                'sender_postal_code' => $data['sender_postal_code'] ?? null,
+                'sender_country' => $senderCountry ?: null,
+                'recipient_postal_code' => $data['recipient_postal_code'] ?? null,
+                'recipient_country' => $recipientCountry ?: null,
+                'parcels' => $parcels,
+                'input' => $data['metadata'] ?? null,
+            ], fn ($value) => $value !== null && $value !== []),
+        ];
+
+        // Keep Phase B workflow classification separate from the existing shipment_type enum.
+        if (Schema::hasColumn('shipments', 'shipment_type') && !isset($payload['shipment_type']) && array_key_exists('shipment_type', $data)) {
+            $payload['shipment_type'] = $data['shipment_type'];
+        }
+
+        return $this->filterShipmentAttributes($payload);
+    }
+    /**
+     * @param array<string, mixed> $attributes
+     * @return array<string, mixed>
+     */
+    private function filterShipmentAttributes(array $attributes): array
+    {
+        $filtered = [];
+        foreach ($attributes as $column => $value) {
+            if (Schema::hasColumn('shipments', $column)) {
+                $filtered[$column] = $value;
+            }
+        }
+        return $filtered;
+    }
+
+    private function resolvePreflightAmount(Shipment $shipment): float
+    {
+        $selectedOption = $shipment->selectedRateOption;
+
+        $amount = $shipment->total_charge !== null
+            ? (float) $shipment->total_charge
+            : (float) ($selectedOption?->retail_rate ?? 0);
+
+        if ($amount <= 0) {
+            throw new BusinessException(
+                'The selected shipment offer does not have a valid billable total for wallet pre-flight.',
+                'ERR_INVALID_SELECTED_OFFER_TOTAL',
+                422,
+                [
+                    'shipment_id' => (string) $shipment->id,
+                    'selected_rate_option_id' => (string) ($shipment->selected_rate_option_id ?? ''),
+                ]
+            );
+        }
+
+        return round($amount, 2);
+    }
+
+    private function resolvePreflightCurrency(Shipment $shipment): string
+    {
+        $currency = trim((string) (
+            $shipment->currency
+            ?? $shipment->selectedRateOption?->currency
+            ?? $shipment->rateQuote?->currency
+            ?? 'SAR'
+        ));
+
+        return strtoupper($currency === '' ? 'SAR' : $currency);
+    }
+
+    private function resolveExistingActiveReservation(Shipment $shipment, string $walletId): ?WalletHold
+    {
+        $linkedReservationId = trim((string) ($shipment->balance_reservation_id ?? ''));
+        if ($linkedReservationId !== '') {
+            $linkedHold = WalletHold::query()->where('wallet_id', $walletId)->find($linkedReservationId);
+            if ($linkedHold instanceof WalletHold && $linkedHold->isActive()) {
+                return $linkedHold;
+            }
+        }
+
+        return WalletHold::query()
+            ->where('wallet_id', $walletId)
+            ->where('shipment_id', (string) $shipment->id)
+            ->active()
+            ->latest('created_at')
+            ->first();
+    }
+
+    private function syncShipmentReservation(Shipment $shipment, WalletHold $hold, User $performer, bool $isNewReservation): void
+    {
+        $payload = [
+            'balance_reservation_id' => (string) $hold->id,
+            'reserved_amount' => (float) $hold->amount,
+            'status_reason' => null,
+        ];
+
+        if ((float) ($shipment->total_charge ?? 0) <= 0) {
+            $payload['total_charge'] = (float) $hold->amount;
+        }
+
+        if (Schema::hasColumn('shipments', 'total_cost') && (float) ($shipment->total_cost ?? 0) <= 0) {
+            $payload['total_cost'] = (float) $hold->amount;
+        }
+
+        $payload = $this->filterShipmentAttributes($payload);
+
+        if ($payload !== []) {
+            Shipment::withoutGlobalScopes()
+                ->where('id', (string) $shipment->id)
+                ->update($payload);
+
+            $shipment->forceFill($payload);
+        }
+
+        if ($shipment->status !== Shipment::STATUS_PAYMENT_PENDING) {
+            $this->transitionStatus(
+                $shipment,
+                Shipment::STATUS_PAYMENT_PENDING,
+                'system',
+                $performer->id,
+                'Wallet pre-flight reservation active'
+            );
+        }
+
+        $this->auditService->info(
+            (string) $shipment->account_id,
+            (string) $performer->id,
+            $isNewReservation ? 'shipment.wallet_preflight_reserved' : 'shipment.wallet_preflight_reused',
+            AuditLog::CATEGORY_FINANCIAL,
+            'Shipment',
+            (string) $shipment->id,
+            null,
+            [
+                'reservation_id' => (string) $hold->id,
+                'wallet_id' => (string) $hold->wallet_id,
+                'reserved_amount' => (float) $hold->amount,
+                'currency' => (string) ($hold->currency ?? ''),
+                'source' => (string) ($hold->source ?? 'shipment_preflight'),
+                'correlation_id' => (string) ($hold->correlation_id ?? AuditService::getRequestId()),
+                'selected_rate_option_id' => (string) ($shipment->selected_rate_option_id ?? ''),
+            ]
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatWalletPreflightResult(
+        Shipment $shipment,
+        WalletHold $hold,
+        BillingWallet $wallet,
+        bool $created
+    ): array {
+        return [
+            'shipment_id' => (string) $shipment->id,
+            'shipment_status' => (string) $shipment->status,
+            'rate_quote_id' => (string) ($shipment->rate_quote_id ?? ''),
+            'selected_rate_option_id' => (string) ($shipment->selected_rate_option_id ?? ''),
+            'wallet_id' => (string) $wallet->id,
+            'currency' => (string) ($hold->currency ?? $wallet->currency),
+            'reserved_amount' => (float) $hold->amount,
+            'reservation_id' => (string) $hold->id,
+            'reservation_status' => (string) $hold->status,
+            'source' => (string) ($hold->source ?? 'shipment_preflight'),
+            'correlation_id' => (string) ($hold->correlation_id ?? ''),
+            'available_balance' => (float) $wallet->available_balance,
+            'reserved_balance' => (float) $wallet->reserved_balance,
+            'effective_balance' => $wallet->getEffectiveBalance(),
+            'created' => $created,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    private function updateShipmentCompat(Shipment $shipment, array $attributes): void
+    {
+        $payload = $this->filterShipmentAttributes($attributes);
+        if ($payload === []) {
+            return;
+        }
+        $shipment->update($payload);
+    }
+    private function shipmentAttribute(Shipment $shipment, string $primary, ?string $fallback = null): mixed
+    {
+        $value = $shipment->{$primary} ?? null;
+        if ($value !== null && $value !== '') {
+            return $value;
+        }
+        if ($fallback === null) {
+            return null;
+        }
+        $fallbackValue = $shipment->{$fallback} ?? null;
+        return $fallbackValue !== '' ? $fallbackValue : null;
+    }
+    private function isInternationalShipment(Shipment $shipment): bool
+    {
+        if ($shipment->is_international !== null) {
+            return (bool) $shipment->is_international;
+        }
+        $senderCountry = strtoupper((string) ($this->shipmentAttribute($shipment, 'sender_country') ?? ''));
+        $recipientCountry = strtoupper((string) ($this->shipmentAttribute($shipment, 'recipient_country') ?? ''));
+        return $senderCountry !== '' && $recipientCountry !== '' && $senderCountry !== $recipientCountry;
     }
 }

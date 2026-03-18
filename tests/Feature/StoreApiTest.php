@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Models\Store;
 use App\Models\AuditLog;
 use App\Services\AuditService;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-009: Multi-Store Management — Integration Tests (20 tests)
@@ -17,6 +18,7 @@ use App\Services\AuditService;
 class StoreApiTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected Account $account;
     protected User $owner;
@@ -34,14 +36,13 @@ class StoreApiTest extends TestCase
             'is_owner'   => true,
         ]);
 
-        $mgrRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['store:manage', 'store:view'],
-        ]);
-        $this->storeManager = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $mgrRole->id,
+        $mgrRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['stores.manage', 'stores.read'],
+            'store_manager'
+        );
+        $this->storeManager = $this->createUserWithRole((string) $this->account->id, (string) $mgrRole->id, [
+            'is_owner' => false,
         ]);
 
         $this->member = User::factory()->create([
@@ -54,7 +55,7 @@ class StoreApiTest extends TestCase
     // POST /stores (Create)
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_store()
     {
         $response = $this->actingAs($this->owner)
@@ -76,7 +77,7 @@ class StoreApiTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function store_manager_can_create_store()
     {
         $response = $this->actingAs($this->storeManager)
@@ -85,7 +86,7 @@ class StoreApiTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_cannot_create()
     {
         $response = $this->actingAs($this->member)
@@ -94,7 +95,7 @@ class StoreApiTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function duplicate_name_returns_422()
     {
         Store::factory()->create(['account_id' => $this->account->id, 'name' => 'Existing Store']);
@@ -106,7 +107,7 @@ class StoreApiTest extends TestCase
             ->assertJsonPath('error_code', 'ERR_STORE_EXISTS');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function max_stores_limit_returns_422()
     {
         for ($i = 1; $i <= Store::MAX_STORES_PER_ACCOUNT; $i++) {
@@ -124,7 +125,7 @@ class StoreApiTest extends TestCase
             ->assertJsonPath('error_code', 'ERR_MAX_STORES_REACHED');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function name_is_required()
     {
         $response = $this->actingAs($this->owner)
@@ -134,7 +135,7 @@ class StoreApiTest extends TestCase
             ->assertJsonValidationErrors('name');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function create_is_audit_logged()
     {
         $this->actingAs($this->owner)
@@ -151,7 +152,7 @@ class StoreApiTest extends TestCase
     // GET /stores (List)
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_list_stores()
     {
         Store::factory()->count(3)->create(['account_id' => $this->account->id]);
@@ -163,7 +164,7 @@ class StoreApiTest extends TestCase
             ->assertJsonPath('meta.count', 3);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function list_filters_by_status()
     {
         Store::factory()->create(['account_id' => $this->account->id, 'name' => 'Active', 'status' => 'active']);
@@ -176,7 +177,7 @@ class StoreApiTest extends TestCase
             ->assertJsonPath('meta.count', 1);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function list_filters_by_platform()
     {
         Store::factory()->shopify()->create(['account_id' => $this->account->id, 'name' => 'Shopify Store']);
@@ -193,7 +194,7 @@ class StoreApiTest extends TestCase
     // GET /stores/{id} (Show)
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_single_store()
     {
         $store = Store::factory()->create(['account_id' => $this->account->id]);
@@ -212,7 +213,7 @@ class StoreApiTest extends TestCase
     // PUT /stores/{id} (Update)
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_store()
     {
         $store = Store::factory()->create(['account_id' => $this->account->id, 'name' => 'Old']);
@@ -228,7 +229,7 @@ class StoreApiTest extends TestCase
             ->assertJsonPath('data.address.city', 'جدة');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function update_rejects_duplicate_name()
     {
         Store::factory()->create(['account_id' => $this->account->id, 'name' => 'Taken']);
@@ -244,7 +245,7 @@ class StoreApiTest extends TestCase
     // DELETE /stores/{id}
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_delete_non_default_store()
     {
         Store::factory()->default()->create(['account_id' => $this->account->id, 'name' => 'Default']);
@@ -257,7 +258,7 @@ class StoreApiTest extends TestCase
         $this->assertSoftDeleted('stores', ['id' => $store2->id]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_delete_default_store()
     {
         $default = Store::factory()->default()->create(['account_id' => $this->account->id, 'name' => 'Default']);
@@ -273,7 +274,7 @@ class StoreApiTest extends TestCase
     // POST /stores/{id}/set-default
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_set_default_store()
     {
         $store1 = Store::factory()->default()->create(['account_id' => $this->account->id, 'name' => 'S1']);
@@ -292,7 +293,7 @@ class StoreApiTest extends TestCase
     // POST /stores/{id}/toggle-status
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_toggle_store_status()
     {
         $store = Store::factory()->create(['account_id' => $this->account->id, 'status' => 'active']);
@@ -308,7 +309,7 @@ class StoreApiTest extends TestCase
     // GET /stores/stats
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_store_stats()
     {
         Store::factory()->count(2)->create(['account_id' => $this->account->id]);

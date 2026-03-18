@@ -10,7 +10,7 @@
 </div>
 
 
-<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+<div class="stats-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:20px">
     <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
 <?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '📦','label' => 'الكل','value' => $allCount ?? 0]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
@@ -21,6 +21,26 @@
 <?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
 <?php endif; ?>
 <?php $component->withAttributes(['icon' => '📦','label' => 'الكل','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($allCount ?? 0)]); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $attributes = $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+    <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '⏳','label' => 'قيد الانتظار','value' => $pendingCount ?? 0]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('stat-card'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['icon' => '⏳','label' => 'قيد الانتظار','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($pendingCount ?? 0)]); ?>
 <?php echo $__env->renderComponent(); ?>
 <?php endif; ?>
 <?php if (isset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
@@ -73,14 +93,34 @@
 <?php endif; ?>
     <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
 <?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
-<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '⏳','label' => 'قيد الانتظار','value' => $pendingCount ?? 0]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '↩️','label' => 'مرتجع','value' => $returnedCount ?? 0]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
 <?php $component->withName('stat-card'); ?>
 <?php if ($component->shouldRender()): ?>
 <?php $__env->startComponent($component->resolveView(), $component->data()); ?>
 <?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
 <?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
 <?php endif; ?>
-<?php $component->withAttributes(['icon' => '⏳','label' => 'قيد الانتظار','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($pendingCount ?? 0)]); ?>
+<?php $component->withAttributes(['icon' => '↩️','label' => 'مرتجع','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($returnedCount ?? 0)]); ?>
+<?php echo $__env->renderComponent(); ?>
+<?php endif; ?>
+<?php if (isset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $attributes = $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+<?php if (isset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
+<?php $component = $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682; ?>
+<?php unset($__componentOriginal527fae77f4db36afc8c8b7e9f5f81682); ?>
+<?php endif; ?>
+    <?php if (isset($component)) { $__componentOriginal527fae77f4db36afc8c8b7e9f5f81682 = $component; } ?>
+<?php if (isset($attributes)) { $__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682 = $attributes; } ?>
+<?php $component = Illuminate\View\AnonymousComponent::resolve(['view' => 'components.stat-card','data' => ['icon' => '❌','label' => 'ملغي','value' => $cancelledCount ?? 0]] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>
+<?php $component->withName('stat-card'); ?>
+<?php if ($component->shouldRender()): ?>
+<?php $__env->startComponent($component->resolveView(), $component->data()); ?>
+<?php if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag): ?>
+<?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
+<?php endif; ?>
+<?php $component->withAttributes(['icon' => '❌','label' => 'ملغي','value' => \Illuminate\View\Compilers\BladeCompiler::sanitizeComponentAttribute($cancelledCount ?? 0)]); ?>
 <?php echo $__env->renderComponent(); ?>
 <?php endif; ?>
 <?php if (isset($__attributesOriginal527fae77f4db36afc8c8b7e9f5f81682)): ?>
@@ -105,11 +145,24 @@
 <?php endif; ?>
 <?php $component->withAttributes([]); ?>
     <form method="GET" action="<?php echo e(route('shipments.index')); ?>" style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--tm)">
+            <span>من</span>
+            <input type="date" name="from" value="<?php echo e(request('from')); ?>" class="form-input" style="width:140px;direction:ltr">
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--tm)">
+            <span>إلى</span>
+            <input type="date" name="to" value="<?php echo e(request('to')); ?>" class="form-input" style="width:140px;direction:ltr">
+        </label>
+        <?php if(request('status')): ?>
+            <input type="hidden" name="status" value="<?php echo e(request('status')); ?>">
+        <?php endif; ?>
+        <button type="submit" class="btn btn-s" style="font-size:13px">تطبيق الفترة</button>
         <?php $__currentLoopData = [
             ['' , 'الكل'],
             ['pending', 'قيد الانتظار'],
             ['in_transit', 'في الطريق'],
             ['delivered', 'تم التسليم'],
+            ['returned', 'مرتجع'],
             ['cancelled', 'ملغي'],
         ]; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as [$val, $label]): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
             <button type="submit" name="status" value="<?php echo e($val); ?>"
@@ -155,7 +208,7 @@
 <?php $component = $__componentOriginal2ddbc40e602c342e508ac696e52f8719; ?>
 <?php unset($__componentOriginal2ddbc40e602c342e508ac696e52f8719); ?>
 <?php endif; ?></td>
-                        <td style="font-size:12px;color:var(--tm)"><?php echo e($s->created_at->format('Y-m-d')); ?></td>
+                        <td style="font-size:12px;color:var(--tm);direction:ltr;text-align:right"><?php echo e($s->created_at->format('d/m/Y')); ?></td>
                         <td><a href="<?php echo e(route('shipments.show', $s)); ?>" class="btn btn-s" style="font-size:12px;padding:5px 14px">عرض</a></td>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>

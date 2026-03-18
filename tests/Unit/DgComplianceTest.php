@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Exceptions\BusinessException;
 use App\Models\Account;
 use App\Models\ContentDeclaration;
 use App\Models\DgAuditLog;
@@ -32,7 +33,7 @@ class DgComplianceTest extends TestCase
         $this->service = $this->app->make(DgComplianceService::class);
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
         $this->waiver = WaiverVersion::factory()->create();
     }
 
@@ -40,7 +41,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-001: Mandatory Content Declaration Step (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_declaration(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-001', $this->user->id);
@@ -49,7 +50,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals(ContentDeclaration::STATUS_PENDING, $decl->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_declaration_linked_to_shipment(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-002', $this->user->id);
@@ -57,7 +58,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals($this->account->id, $decl->account_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_declaration_records_ip_and_user_agent(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-003', $this->user->id, 'ar', '192.168.1.1', 'TestAgent');
@@ -65,7 +66,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals('TestAgent', $decl->user_agent);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_idempotent_declaration_creation(): void
     {
         $d1 = $this->service->createDeclaration($this->account->id, 'SH-004', $this->user->id);
@@ -73,7 +74,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals($d1->id, $d2->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_declaration_has_locale(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-005', $this->user->id, 'en');
@@ -84,7 +85,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-002: Mandatory DG Yes/No Question (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_set_dg_flag_no(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-010', $this->user->id);
@@ -93,7 +94,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals(ContentDeclaration::STATUS_PENDING, $updated->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_set_dg_flag_yes(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-011', $this->user->id);
@@ -102,7 +103,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals(ContentDeclaration::STATUS_HOLD_DG, $updated->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dg_flag_creates_audit_log(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-012', $this->user->id);
@@ -112,7 +113,7 @@ class DgComplianceTest extends TestCase
         $this->assertCount(1, $logs);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dg_flag_change_tracked(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-013', $this->user->id);
@@ -127,7 +128,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-003: Block Label Issuance when DG=Yes (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dg_yes_blocks_shipment(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-020', $this->user->id);
@@ -135,7 +136,7 @@ class DgComplianceTest extends TestCase
         $this->assertTrue($updated->isBlocked());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dg_yes_hold_reason(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-021', $this->user->id);
@@ -143,7 +144,7 @@ class DgComplianceTest extends TestCase
         $this->assertNotNull($updated->hold_reason);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_hold_info_returns_alternatives(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-022', $this->user->id);
@@ -154,7 +155,7 @@ class DgComplianceTest extends TestCase
         $this->assertNotEmpty($info['alternatives']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_hold_creates_audit_entry(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-023', $this->user->id);
@@ -168,7 +169,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-004: Liability Waiver when DG=No (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_accept_waiver(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-030', $this->user->id);
@@ -179,17 +180,21 @@ class DgComplianceTest extends TestCase
         $this->assertEquals(ContentDeclaration::STATUS_COMPLETED, $updated->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_waiver_cannot_accept_when_dg_yes(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-031', $this->user->id);
         $this->service->setDgFlag($decl->id, true, $this->user->id);
 
-        $this->expectException(\RuntimeException::class);
-        $this->service->acceptWaiver($decl->id, $this->user->id);
+        try {
+            $this->service->acceptWaiver($decl->id, $this->user->id);
+            $this->fail('Expected BusinessException for dangerous goods hold.');
+        } catch (BusinessException $e) {
+            $this->assertEquals('ERR_DG_HOLD_REQUIRED', $e->getErrorCode());
+        }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_waiver_stores_version_info(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-032', $this->user->id);
@@ -200,7 +205,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals($this->waiver->waiver_hash, $updated->waiver_hash_snapshot);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_waiver_stores_text_snapshot(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-033', $this->user->id);
@@ -211,7 +216,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals($this->waiver->waiver_text, $updated->waiver_text_snapshot);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_waiver_accepted_at_timestamp(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-034', $this->user->id);
@@ -225,7 +230,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-005: Append-only Audit Log (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_creation_creates_audit_entry(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-040', $this->user->id);
@@ -233,7 +238,7 @@ class DgComplianceTest extends TestCase
         $this->assertGreaterThanOrEqual(1, $logs->count());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_waiver_acceptance_creates_audit(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-041', $this->user->id);
@@ -244,7 +249,7 @@ class DgComplianceTest extends TestCase
         $this->assertCount(1, $logs);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_audit_log_retrieval(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-042', $this->user->id);
@@ -254,7 +259,7 @@ class DgComplianceTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $log->total()); // creation + dg_flag
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_audit_export(): void
     {
         $this->service->createDeclaration($this->account->id, 'SH-043', $this->user->id);
@@ -263,7 +268,7 @@ class DgComplianceTest extends TestCase
         $this->assertNotEmpty($export);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_shipment_audit_log(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-044', $this->user->id);
@@ -275,7 +280,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-006: Waiver Versioning (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_publish_waiver_version(): void
     {
         $v = $this->service->publishWaiverVersion('2.0', 'en', 'New waiver text', $this->user->id);
@@ -283,7 +288,7 @@ class DgComplianceTest extends TestCase
         $this->assertTrue($v->is_active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_new_version_deactivates_old(): void
     {
         $this->service->publishWaiverVersion('2.0', 'ar', 'Updated text');
@@ -292,7 +297,7 @@ class DgComplianceTest extends TestCase
         $this->assertFalse($oldWaiver->is_active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_active_waiver(): void
     {
         $active = $this->service->getActiveWaiver('ar');
@@ -300,7 +305,7 @@ class DgComplianceTest extends TestCase
         $this->assertTrue($active->is_active);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_waiver_versions(): void
     {
         $this->service->publishWaiverVersion('2.0', 'ar', 'V2 text');
@@ -312,7 +317,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-007: Block Carrier Call Without Declaration (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_validate_completed_declaration(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-060', $this->user->id);
@@ -323,51 +328,64 @@ class DgComplianceTest extends TestCase
         $this->assertTrue($valid->isReadyForIssuance());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_validate_no_declaration_throws(): void
     {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('DG_DECLARATION_REQUIRED');
-        $this->service->validateForIssuance('SH-NONE', $this->account->id);
+        try {
+            $this->service->validateForIssuance('SH-NONE', $this->account->id);
+            $this->fail('Expected BusinessException for missing declaration.');
+        } catch (BusinessException $e) {
+            $this->assertEquals('ERR_DG_DECLARATION_REQUIRED', $e->getErrorCode());
+        }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_validate_dg_hold_throws(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-061', $this->user->id);
         $this->service->setDgFlag($decl->id, true, $this->user->id);
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('DG_NOT_SUPPORTED');
-        $this->service->validateForIssuance('SH-061', $this->account->id);
+        try {
+            $this->service->validateForIssuance('SH-061', $this->account->id);
+            $this->fail('Expected BusinessException for DG hold.');
+        } catch (BusinessException $e) {
+            $this->assertEquals('ERR_DG_HOLD_REQUIRED', $e->getErrorCode());
+        }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_validate_incomplete_declaration_throws(): void
     {
         $this->service->createDeclaration($this->account->id, 'SH-062', $this->user->id);
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('DG_DECLARATION_INCOMPLETE');
-        $this->service->validateForIssuance('SH-062', $this->account->id);
+        try {
+            $this->service->validateForIssuance('SH-062', $this->account->id);
+            $this->fail('Expected BusinessException for incomplete declaration.');
+        } catch (BusinessException $e) {
+            $this->assertEquals('ERR_DG_DECLARATION_INCOMPLETE', $e->getErrorCode());
+        }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_validate_no_waiver_throws(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-063', $this->user->id);
         $this->service->setDgFlag($decl->id, false, $this->user->id);
         // Don't accept waiver
 
-        $this->expectException(\RuntimeException::class);
-        $this->service->validateForIssuance('SH-063', $this->account->id);
+        try {
+            $this->service->validateForIssuance('SH-063', $this->account->id);
+            $this->fail('Expected BusinessException for missing disclaimer acceptance.');
+        } catch (BusinessException $e) {
+            $this->assertEquals('ERR_DG_DISCLAIMER_REQUIRED', $e->getErrorCode());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
     // FR-DG-008: RBAC Access Control (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_summary_view_no_sensitive_data(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-070', $this->user->id, 'ar', '192.168.1.1');
@@ -377,7 +395,7 @@ class DgComplianceTest extends TestCase
         $this->assertArrayNotHasKey('user_agent', $summary);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_detail_view_includes_sensitive_data(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-071', $this->user->id, 'ar', '10.0.0.1');
@@ -387,7 +405,7 @@ class DgComplianceTest extends TestCase
         $this->assertArrayHasKey('declared_by', $detail);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_view_creates_audit_log(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-072', $this->user->id);
@@ -401,7 +419,7 @@ class DgComplianceTest extends TestCase
     // FR-DG-009: Optional DG Metadata (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_save_dg_metadata(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-080', $this->user->id);
@@ -417,7 +435,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals('9', $meta->dg_class);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dg_metadata_linked_to_declaration(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-081', $this->user->id);
@@ -429,7 +447,7 @@ class DgComplianceTest extends TestCase
         $this->assertEquals('UN1203', $decl->dgMetadata->un_number);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_valid_un_number_format(): void
     {
         $meta = new DgMetadata(['un_number' => 'UN3481']);
@@ -439,7 +457,7 @@ class DgComplianceTest extends TestCase
         $this->assertFalse($meta2->isValidUnNumber());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_valid_dg_class(): void
     {
         $meta = new DgMetadata(['dg_class' => '9']);
@@ -449,7 +467,7 @@ class DgComplianceTest extends TestCase
         $this->assertFalse($meta2->isValidClass());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_metadata_creates_audit_log(): void
     {
         $decl = $this->service->createDeclaration($this->account->id, 'SH-084', $this->user->id);

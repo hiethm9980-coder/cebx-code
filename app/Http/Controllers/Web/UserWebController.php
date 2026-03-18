@@ -2,176 +2,154 @@
 
 namespace App\Http\Controllers\Web;
 
-use App\Models\User;
 use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-/**
- * UserWebController — P1-3/P1-4: User Safety
- *
- * Changes from original:
- *   - destroy(): Hard delete → Soft delete + Owner/self protection
- *   - toggle(): Now revokes tokens + invalidates session on suspend
- *   - store(): Added account_id scoping + DB::transaction
- *
- * IMPORTANT: This file REPLACES the existing UserWebController.php
- * All existing method signatures preserved (index, store, toggle, destroy).
- */
 class UserWebController extends WebController
 {
-    /**
-     * GET /users — List users (unchanged signature)
-     */
     public function index()
     {
+        $accountId = (string) auth()->user()->account_id;
+
+        $users = User::query()
+            ->where('account_id', $accountId)
+            ->with('roles')
+            ->orderBy('name')
+            ->paginate(20);
+
+        $activeCount = User::query()
+            ->where('account_id', $accountId)
+            ->where('status', 'active')
+            ->count();
+
+        $inactiveCount = User::query()
+            ->where('account_id', $accountId)
+            ->whereIn('status', ['suspended', 'disabled'])
+            ->count();
+
         return view('pages.users.index', [
-            'users' => User::where('account_id', auth()->user()->account_id)
-                ->with('roles')
-                ->paginate(20),
-            'roles' => Role::where('account_id', auth()->user()->account_id)->get(),
+            'users' => $users,
+            'roles' => Role::query()->where('account_id', $accountId)->orderBy('name')->get(),
+            'activeCount' => $activeCount,
+            'inactiveCount' => $inactiveCount,
         ]);
     }
 
-    /**
-     * POST /users — Create user (enhanced with transaction)
-     */
-    public function store(Request $r)
+    public function store(Request $request)
     {
-        $d = $r->validate([
-            'name'     => 'required|string|max:100',
-            'email'    => 'required|email|unique:users,email',
+        $data = $request->validate([
+            'name' => 'required|string|max:100',
+            'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
-            'role'     => 'nullable|exists:roles,id',
+            'role' => 'nullable|exists:roles,id',
         ]);
 
         try {
-            $u = DB::transaction(function () use ($d) {
-                $user = User::create([
-                    'name'       => $d['name'],
-                    'email'      => $d['email'],
-                    'password'   => Hash::make($d['password']),
+            $user = DB::transaction(function () use ($data) {
+                $user = User::query()->create([
+                    'name' => $data['name'],
+                    'email' => $data['email'],
+                    'password' => Hash::make($data['password']),
                     'account_id' => auth()->user()->account_id,
-                    'status'     => 'active',
+                    'status' => 'active',
+                    'user_type' => 'external',
                 ]);
 
-                if (isset($d['role'])) {
-                    $user->roles()->attach($d['role']);
+                if (! empty($data['role'])) {
+                    $user->roles()->attach($data['role']);
                 }
 
                 return $user;
             });
 
-            return back()->with('success', 'تم إضافة ' . $u->name);
-        } catch (\Exception $e) {
+            return back()->with('success', 'تمت إضافة المستخدم ' . $user->name . ' بنجاح.');
+        } catch (\Throwable $exception) {
             Log::error('UserWebController::store failed', [
-                'error' => $e->getMessage(),
                 'account_id' => auth()->user()->account_id,
+                'error' => $exception->getMessage(),
             ]);
-            return back()->with('error', 'حدث خطأ أثناء إنشاء المستخدم');
+
+            return back()->with('error', 'تعذر إنشاء المستخدم الآن. حاول مرة أخرى أو تواصل مع الدعم.');
         }
     }
 
-    /**
-     * PATCH /users/{user}/toggle — Toggle user status
-     *
-     * P1-4: When suspending → revoke ALL tokens + invalidate remember_token
-     * This immediately prevents API access AND session-based access.
-     */
     public function toggle(User $user)
     {
-        // Security: ensure same account
-        if ($user->account_id !== auth()->user()->account_id) {
-            abort(403, 'ليس لديك صلاحية');
+        if ((string) $user->account_id !== (string) auth()->user()->account_id) {
+            abort(403, 'غير مسموح لك بإدارة هذا المستخدم.');
         }
 
-        // Cannot toggle yourself
-        if ($user->id === auth()->id()) {
-            return back()->with('error', 'لا يمكنك تعطيل حسابك الخاص');
+        if ((string) $user->id === (string) auth()->id()) {
+            return back()->with('error', 'لا يمكنك تعطيل حسابك الحالي من هذه الصفحة.');
         }
 
-        // Cannot toggle Owner
-        if ($user->is_owner) {
-            return back()->with('error', 'لا يمكن تعطيل حساب المالك');
+        if ((bool) $user->is_owner) {
+            return back()->with('error', 'لا يمكن تعطيل مالك الحساب من هذه الصفحة.');
         }
 
         $newStatus = ($user->status ?? 'active') === 'active' ? 'suspended' : 'active';
 
-        DB::transaction(function () use ($user, $newStatus) {
+        DB::transaction(function () use ($user, $newStatus): void {
             $user->update(['status' => $newStatus]);
 
-            // P1-4: On suspend → revoke all tokens + invalidate sessions
             if ($newStatus === 'suspended') {
-                // Revoke Sanctum API tokens
                 if (method_exists($user, 'tokens')) {
                     $user->tokens()->delete();
                 }
 
-                // Invalidate session-based auth (forces re-login)
                 $user->update(['remember_token' => Str::random(60)]);
             }
         });
 
-        $msg = $newStatus === 'suspended'
-            ? "تم تعطيل {$user->name} وإلغاء جميع جلساته"
-            : "تم تفعيل {$user->name}";
+        $message = $newStatus === 'suspended'
+            ? 'تم تعليق المستخدم ' . $user->name . ' وإغلاق جلساته النشطة.'
+            : 'تمت إعادة تفعيل المستخدم ' . $user->name . '.';
 
-        return back()->with('success', $msg);
+        return back()->with('success', $message);
     }
 
-    /**
-     * DELETE /users/{user} — Soft delete user
-     *
-     * P1-3: Soft delete instead of hard delete
-     * Protection: Cannot delete Owner, cannot delete yourself
-     * Also revokes all tokens before soft delete.
-     */
     public function destroy(User $user)
     {
-        // Security: ensure same account
-        if ($user->account_id !== auth()->user()->account_id) {
-            abort(403, 'ليس لديك صلاحية');
+        if ((string) $user->account_id !== (string) auth()->user()->account_id) {
+            abort(403, 'غير مسموح لك بإدارة هذا المستخدم.');
         }
 
-        // Cannot delete yourself
-        if ($user->id === auth()->id()) {
-            return back()->with('error', 'لا يمكنك حذف حسابك الخاص');
+        if ((string) $user->id === (string) auth()->id()) {
+            return back()->with('error', 'لا يمكنك حذف حسابك الحالي من هذه الصفحة.');
         }
 
-        // Cannot delete Owner
-        if ($user->is_owner) {
-            return back()->with('error', 'لا يمكن حذف حساب المالك');
+        if ((bool) $user->is_owner) {
+            return back()->with('error', 'لا يمكن حذف مالك الحساب من هذه الصفحة.');
         }
 
         try {
-            DB::transaction(function () use ($user) {
-                // Revoke all tokens first
+            DB::transaction(function () use ($user): void {
                 if (method_exists($user, 'tokens')) {
                     $user->tokens()->delete();
                 }
 
-                // Invalidate session
                 $user->update(['remember_token' => Str::random(60)]);
 
-                // Soft delete (requires SoftDeletes trait on User model)
-                // If SoftDeletes not available, mark as 'deleted' status
                 if (method_exists($user, 'trashed')) {
-                    $user->delete(); // Uses SoftDeletes
+                    $user->delete();
                 } else {
-                    $user->update(['status' => 'deleted']);
+                    $user->update(['status' => 'disabled']);
                 }
             });
 
-            return back()->with('success', "تم حذف {$user->name}");
-        } catch (\Exception $e) {
+            return back()->with('success', 'تمت إزالة المستخدم ' . $user->name . ' من الحساب.');
+        } catch (\Throwable $exception) {
             Log::error('UserWebController::destroy failed', [
                 'user_id' => $user->id,
-                'error' => $e->getMessage(),
+                'error' => $exception->getMessage(),
             ]);
-            return back()->with('error', 'حدث خطأ أثناء حذف المستخدم');
+
+            return back()->with('error', 'تعذر إزالة المستخدم الآن. حاول مرة أخرى أو تواصل مع الدعم.');
         }
     }
 }

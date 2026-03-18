@@ -28,10 +28,11 @@ class PricingApiTest extends TestCase
         parent::setUp();
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
-    /** @test FR-BRP-001 */
+    // FR-BRP-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_calculate_price(): void
     {
         PricingRule::factory()->create(['account_id' => $this->account->id, 'markup_percentage' => 20, 'is_active' => true]);
@@ -42,7 +43,8 @@ class PricingApiTest extends TestCase
         $response->assertOk()->assertJsonStructure(['data' => ['net_rate', 'retail_rate', 'correlation_id', 'applied_rules']]);
     }
 
-    /** @test FR-BRP-001 */
+    // FR-BRP-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_calculate_deterministic(): void
     {
         PricingRule::factory()->create(['account_id' => $this->account->id, 'markup_percentage' => 15, 'is_active' => true]);
@@ -54,7 +56,8 @@ class PricingApiTest extends TestCase
         $this->assertEquals($r1->json('data.retail_rate'), $r2->json('data.retail_rate'));
     }
 
-    /** @test FR-BRP-006 */
+    // FR-BRP-006
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_breakdown(): void
     {
         $engine = $this->app->make(PricingEngineService::class);
@@ -64,7 +67,8 @@ class PricingApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.entity_id', 'SH-001');
     }
 
-    /** @test FR-BRP-006 */
+    // FR-BRP-006
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_breakdowns(): void
     {
         $engine = $this->app->make(PricingEngineService::class);
@@ -74,14 +78,16 @@ class PricingApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-BRP-008 */
+    // FR-BRP-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_rule_set(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/pricing/rule-sets', ['name' => 'Q1 2026 Rules']);
         $response->assertStatus(201)->assertJsonPath('data.name', 'Q1 2026 Rules');
     }
 
-    /** @test FR-BRP-008 */
+    // FR-BRP-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_rule_sets(): void
     {
         PricingRuleSet::factory()->create(['account_id' => $this->account->id]);
@@ -89,7 +95,8 @@ class PricingApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-BRP-008 */
+    // FR-BRP-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_rule_set(): void
     {
         $set = PricingRuleSet::factory()->create(['account_id' => $this->account->id]);
@@ -97,7 +104,8 @@ class PricingApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.id', $set->id);
     }
 
-    /** @test FR-BRP-008 */
+    // FR-BRP-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_activate_rule_set(): void
     {
         $set = PricingRuleSet::factory()->draft()->create(['account_id' => $this->account->id]);
@@ -105,7 +113,8 @@ class PricingApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.status', 'active');
     }
 
-    /** @test FR-BRP-005 */
+    // FR-BRP-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_set_rounding(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/pricing/rounding', [
@@ -114,7 +123,8 @@ class PricingApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.method', 'up');
     }
 
-    /** @test FR-BRP-007 */
+    // FR-BRP-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_set_expired_policy(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/pricing/expired-policy', [
@@ -123,7 +133,8 @@ class PricingApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.policy_type', 'surcharge_percent');
     }
 
-    /** @test FR-BRP-001 */
+    // FR-BRP-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_calculate_no_rules(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/pricing/calculate', [
@@ -132,7 +143,8 @@ class PricingApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.retail_rate', '50.00');
     }
 
-    /** @test FR-BRP-004 */
+    // FR-BRP-004
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_guardrail_applied(): void
     {
         PricingRule::factory()->create([
@@ -147,7 +159,8 @@ class PricingApiTest extends TestCase
         $this->assertGreaterThanOrEqual(100, $retail);
     }
 
-    /** @test FR-BRP-005 */
+    // FR-BRP-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_rounding_applied(): void
     {
         RoundingPolicy::create(['currency' => 'SAR', 'method' => 'up', 'precision' => 0, 'step' => 1]);
@@ -160,14 +173,16 @@ class PricingApiTest extends TestCase
         $this->assertEquals(floor($retail), $retail); // Should be whole number
     }
 
-    /** @test FR-BRP-001 */
+    // FR-BRP-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_validation_required_fields(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/pricing/calculate', []);
         $response->assertStatus(422);
     }
 
-    /** @test FR-BRP-006 */
+    // FR-BRP-006
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_breakdown_not_found(): void
     {
         $response = $this->actingAs($this->user)->getJson('/api/v1/pricing/breakdowns/shipment/NONEXIST');

@@ -13,20 +13,11 @@ class AccountFactory extends Factory
     public function definition(): array
     {
         $name = fake()->company();
+
         return [
-            'name'           => $name,
-            'type'           => fake()->randomElement(['individual', 'organization']),
-            'status'         => 'active',
-            'kyc_status'     => 'unverified',
-            'slug'           => Str::slug($name) . '-' . Str::random(4),
-            'settings'       => [],
-            'language'       => 'ar',
-            'currency'       => 'SAR',
-            'timezone'       => 'Asia/Riyadh',
-            'country'        => 'SA',
-            'date_format'    => 'Y-m-d',
-            'weight_unit'    => 'kg',
-            'dimension_unit' => 'cm',
+            'name' => $name,
+            'type' => 'organization',
+            'slug' => Str::slug($name) . '-' . Str::random(4),
         ];
     }
 

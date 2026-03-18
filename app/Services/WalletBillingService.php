@@ -10,6 +10,8 @@ use App\Models\Wallet;
 use App\Models\WalletLedgerEntry;
 use App\Exceptions\BusinessException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * WalletBillingService
@@ -19,13 +21,13 @@ use Illuminate\Support\Facades\DB;
  * FR-IAM-020: Mask payment card data when account disabled
  *
  * Wallet Permissions (granular):
- * - wallet:balance     → View balance only
- * - wallet:ledger      → View ledger/transactions
- * - wallet:topup       → Initiate top-up
- * - wallet:configure   → Set threshold, manage wallet settings
- * - billing:view       → View payment methods
- * - billing:manage     → Add/remove payment methods
- * Owner has ALL permissions implicitly.
+ * - wallet:balance     â†’ View balance only
+ * - wallet:ledger      â†’ View ledger/transactions
+ * - wallet:topup       â†’ Initiate top-up
+ * - wallet:configure   â†’ Set threshold, manage wallet settings
+ * - billing:view       â†’ View payment methods
+ * - billing:manage     â†’ Add/remove payment methods
+ * Access is strictly permission-based (deny by default).
  */
 class WalletBillingService
 {
@@ -33,16 +35,16 @@ class WalletBillingService
         protected AuditService $auditService
     ) {}
 
-    // ═══════════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // Wallet Operations
-    // ═══════════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Get or create wallet for an account (auto-created on first access).
      */
     public function getWallet(string $accountId, User $performer): array
     {
-        $canViewBalance = $this->canPerform($performer, 'wallet:balance');
+        $canViewBalance = $this->canPerform($performer, 'wallet.balance');
         $wallet = $this->ensureWallet($accountId);
 
         $this->auditService->info(
@@ -59,7 +61,7 @@ class WalletBillingService
      */
     public function getLedger(string $accountId, User $performer, array $filters = []): array
     {
-        $this->assertPermission($performer, 'wallet:ledger');
+        $this->assertPermission($performer, 'wallet.ledger');
 
         $wallet = $this->ensureWallet($accountId);
         $query = $wallet->ledgerEntries();
@@ -112,34 +114,35 @@ class WalletBillingService
         ?string $description = null,
         ?array $metadata = null
     ): WalletLedgerEntry {
-        $this->assertPermission($performer, 'wallet:topup');
+        $this->assertPermission($performer, 'wallet.topup');
 
         if ($amount <= 0) {
-            throw new BusinessException('المبلغ يجب أن يكون أكبر من صفر.', 'ERR_INVALID_AMOUNT', 422);
+            throw new BusinessException('ط§ظ„ظ…ط¨ظ„ط؛ ظٹط¬ط¨ ط£ظ† ظٹظƒظˆظ† ط£ظƒط¨ط± ظ…ظ† طµظپط±.', 'ERR_INVALID_AMOUNT', 422);
         }
 
         $wallet = $this->ensureWallet($accountId);
 
         if (!$wallet->isActive()) {
-            throw new BusinessException('المحفظة مجمدة أو مغلقة.', 'ERR_WALLET_FROZEN', 422);
+            throw new BusinessException('ط§ظ„ظ…ط­ظپط¸ط© ظ…ط¬ظ…ط¯ط© ط£ظˆ ظ…ط؛ظ„ظ‚ط©.', 'ERR_WALLET_FROZEN', 422);
         }
 
         return DB::transaction(function () use ($wallet, $amount, $referenceId, $performer, $description, $metadata) {
             $wallet->increment('available_balance', $amount);
             $wallet->refresh();
 
-            $entry = WalletLedgerEntry::create([
-                'wallet_id'       => $wallet->id,
-                'type'            => WalletLedgerEntry::TYPE_TOPUP,
-                'amount'          => $amount,
-                'running_balance' => $wallet->available_balance,
-                'reference_type'  => 'topup',
-                'reference_id'    => $referenceId,
-                'actor_user_id'   => $performer->id,
-                'description'     => $description ?? 'شحن رصيد',
-                'metadata'        => $metadata,
-                'created_at'      => now(),
-            ]);
+            $entry = WalletLedgerEntry::create(
+                $this->buildLedgerPayload(
+                    walletId: (string) $wallet->id,
+                    type: WalletLedgerEntry::TYPE_TOPUP,
+                    amount: (float) $amount,
+                    runningBalance: (float) $wallet->available_balance,
+                    referenceType: 'topup',
+                    referenceId: $referenceId,
+                    actorUserId: (string) $performer->id,
+                    description: $description ?? 'شحن رصيد',
+                    metadata: $metadata
+                )
+            );
 
             $this->auditService->info(
                 $wallet->account_id, $performer->id,
@@ -168,28 +171,30 @@ class WalletBillingService
         $wallet = $this->ensureWallet($accountId);
 
         if (!$wallet->isActive()) {
-            throw new BusinessException('المحفظة مجمدة أو مغلقة.', 'ERR_WALLET_FROZEN', 422);
+            throw new BusinessException('ط§ظ„ظ…ط­ظپط¸ط© ظ…ط¬ظ…ط¯ط© ط£ظˆ ظ…ط؛ظ„ظ‚ط©.', 'ERR_WALLET_FROZEN', 422);
         }
 
         if ((float) $wallet->available_balance < $amount) {
-            throw new BusinessException('رصيد المحفظة غير كافٍ.', 'ERR_INSUFFICIENT_BALANCE', 422);
+            throw new BusinessException('ط±طµظٹط¯ ط§ظ„ظ…ط­ظپط¸ط© ط؛ظٹط± ظƒط§ظپظچ.', 'ERR_INSUFFICIENT_BALANCE', 422);
         }
 
         return DB::transaction(function () use ($wallet, $amount, $referenceType, $referenceId, $performer, $description) {
             $wallet->decrement('available_balance', $amount);
             $wallet->refresh();
 
-            $entry = WalletLedgerEntry::create([
-                'wallet_id'       => $wallet->id,
-                'type'            => WalletLedgerEntry::TYPE_DEBIT,
-                'amount'          => -$amount,
-                'running_balance' => $wallet->available_balance,
-                'reference_type'  => $referenceType,
-                'reference_id'    => $referenceId,
-                'actor_user_id'   => $performer->id,
-                'description'     => $description ?? 'خصم',
-                'created_at'      => now(),
-            ]);
+            $entry = WalletLedgerEntry::create(
+                $this->buildLedgerPayload(
+                    walletId: (string) $wallet->id,
+                    type: WalletLedgerEntry::TYPE_DEBIT,
+                    amount: (float) (-$amount),
+                    runningBalance: (float) $wallet->available_balance,
+                    referenceType: $referenceType,
+                    referenceId: $referenceId,
+                    actorUserId: (string) $performer->id,
+                    description: $description ?? 'خصم',
+                    metadata: null
+                )
+            );
 
             $this->auditService->info(
                 $wallet->account_id, $performer->id,
@@ -219,7 +224,7 @@ class WalletBillingService
      */
     public function configureThreshold(string $accountId, ?float $threshold, User $performer): array
     {
-        $this->assertPermission($performer, 'wallet:configure');
+        $this->assertPermission($performer, 'wallet.configure');
 
         $wallet = $this->ensureWallet($accountId);
         $old = $wallet->low_balance_threshold;
@@ -237,16 +242,16 @@ class WalletBillingService
         return $wallet->fresh()->summary(true);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // Payment Methods (Billing) — FR-IAM-017 + FR-IAM-020
-    // ═══════════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
+    // Payment Methods (Billing) â€” FR-IAM-017 + FR-IAM-020
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * List payment methods (respects FR-IAM-020 masking).
      */
     public function listPaymentMethods(string $accountId, User $performer): array
     {
-        $this->assertPermission($performer, 'billing:view');
+        $this->assertPermission($performer, 'billing.view');
 
         $account = Account::findOrFail($accountId);
         $accountDisabled = in_array($account->status, ['suspended', 'closed']);
@@ -272,12 +277,12 @@ class WalletBillingService
      */
     public function addPaymentMethod(string $accountId, array $data, User $performer): PaymentMethod
     {
-        $this->assertPermission($performer, 'billing:manage');
+        $this->assertPermission($performer, 'billing.manage');
 
         $account = Account::findOrFail($accountId);
         if (in_array($account->status, ['suspended', 'closed'])) {
             throw new BusinessException(
-                'لا يمكن إضافة وسيلة دفع لحساب معطل.',
+                'ظ„ط§ ظٹظ…ظƒظ† ط¥ط¶ط§ظپط© ظˆط³ظٹظ„ط© ط¯ظپط¹ ظ„ط­ط³ط§ط¨ ظ…ط¹ط·ظ„.',
                 'ERR_ACCOUNT_DISABLED', 422
             );
         }
@@ -321,7 +326,7 @@ class WalletBillingService
      */
     public function removePaymentMethod(string $accountId, string $methodId, User $performer): void
     {
-        $this->assertPermission($performer, 'billing:manage');
+        $this->assertPermission($performer, 'billing.manage');
 
         $method = PaymentMethod::withoutGlobalScopes()
             ->where('account_id', $accountId)
@@ -391,29 +396,29 @@ class WalletBillingService
         return $count;
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // Supported Permissions List (for RBAC setup)
-    // ═══════════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     public static function walletPermissions(): array
     {
         return [
-            'wallet:balance'   => 'عرض رصيد المحفظة',
-            'wallet:ledger'    => 'عرض كشف الحساب',
-            'wallet:topup'     => 'شحن الرصيد',
-            'wallet:configure' => 'إعدادات المحفظة (حد التنبيه)',
-            'billing:view'     => 'عرض وسائل الدفع',
-            'billing:manage'   => 'إضافة/إزالة وسائل الدفع',
+            'wallet.balance'   => 'ط¹ط±ط¶ ط±طµظٹط¯ ط§ظ„ظ…ط­ظپط¸ط©',
+            'wallet.ledger'    => 'ط¹ط±ط¶ ظƒط´ظپ ط§ظ„ط­ط³ط§ط¨',
+            'wallet.topup'     => 'ط´ط­ظ† ط§ظ„ط±طµظٹط¯',
+            'wallet.configure' => 'ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ظ…ط­ظپط¸ط© (ط­ط¯ ط§ظ„طھظ†ط¨ظٹظ‡)',
+            'billing.view'     => 'ط¹ط±ط¶ ظˆط³ط§ط¦ظ„ ط§ظ„ط¯ظپط¹',
+            'billing.manage'   => 'ط¥ط¶ط§ظپط©/ط¥ط²ط§ظ„ط© ظˆط³ط§ط¦ظ„ ط§ظ„ط¯ظپط¹',
         ];
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // Internal Helpers
-    // ═══════════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     private function ensureWallet(string $accountId): Wallet
     {
-        return Wallet::firstOrCreate(
+        $wallet = Wallet::firstOrCreate(
             ['account_id' => $accountId],
             [
                 'currency'          => Account::findOrFail($accountId)->currency ?? 'SAR',
@@ -422,11 +427,15 @@ class WalletBillingService
                 'status'            => Wallet::STATUS_ACTIVE,
             ]
         );
+
+        $this->syncBillingWalletCompatibilityRow($wallet);
+
+        return $wallet;
     }
 
     private function canPerform(User $user, string $permission): bool
     {
-        return $user->is_owner || $user->hasPermission($permission);
+        return $user->hasPermission($permission);
     }
 
     private function assertPermission(User $user, string $permission): void
@@ -441,4 +450,102 @@ class WalletBillingService
             throw BusinessException::permissionDenied();
         }
     }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildLedgerPayload(
+        string $walletId,
+        string $type,
+        float $amount,
+        float $runningBalance,
+        ?string $referenceType,
+        ?string $referenceId,
+        ?string $actorUserId,
+        ?string $description,
+        ?array $metadata
+    ): array {
+        $payload = [
+            'wallet_id' => $walletId,
+            'amount' => $amount,
+            'running_balance' => $runningBalance,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'metadata' => $metadata,
+            'created_at' => now(),
+        ];
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'type')) {
+            $payload['type'] = $type;
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'actor_user_id')) {
+            $payload['actor_user_id'] = $actorUserId;
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'description')) {
+            $payload['description'] = $description;
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'transaction_type')) {
+            $payload['transaction_type'] = $type;
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'direction')) {
+            $payload['direction'] = $amount >= 0 ? 'credit' : 'debit';
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'sequence')) {
+            $payload['sequence'] = ((int) WalletLedgerEntry::withoutGlobalScopes()
+                ->where('wallet_id', $walletId)
+                ->max('sequence')) + 1;
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'correlation_id')) {
+            $payload['correlation_id'] = AuditService::getRequestId() . '-' . Str::lower(Str::random(6));
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'created_by')) {
+            $payload['created_by'] = $actorUserId;
+        }
+
+        if (Schema::hasColumn('wallet_ledger_entries', 'notes')) {
+            $payload['notes'] = $description;
+        }
+
+        return $payload;
+    }
+
+    private function syncBillingWalletCompatibilityRow(Wallet $wallet): void
+    {
+        if (!Schema::hasTable('billing_wallets')) {
+            return;
+        }
+
+        DB::table('billing_wallets')->updateOrInsert(
+            ['id' => (string) $wallet->id],
+            [
+                'account_id' => (string) $wallet->account_id,
+                'organization_id' => null,
+                'currency' => (string) ($wallet->currency ?? 'SAR'),
+                'available_balance' => (float) $wallet->available_balance,
+                'reserved_balance' => (float) ($wallet->locked_balance ?? 0),
+                'total_credited' => 0,
+                'total_debited' => 0,
+                'low_balance_threshold' => $wallet->low_balance_threshold,
+                'low_balance_notified' => false,
+                'low_balance_notified_at' => null,
+                'auto_topup_enabled' => false,
+                'auto_topup_amount' => null,
+                'auto_topup_trigger' => null,
+                'status' => (string) ($wallet->status ?? Wallet::STATUS_ACTIVE),
+                'allow_negative' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+    }
 }
+
+
+

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\BusinessException;
+use App\Models\Account;
 use App\Models\AuditLog;
 use App\Models\Permission;
 use App\Models\Role;
@@ -252,6 +253,8 @@ class RbacService
      */
     public function listRoles(string $accountId): \Illuminate\Database\Eloquent\Collection
     {
+        $this->assertAccountAllowsTeamManagement($accountId);
+
         return Role::withoutGlobalScopes()
             ->where('account_id', $accountId)
             ->with('permissions')
@@ -319,18 +322,15 @@ class RbacService
                 );
             }
         }
-
-        // Validate: performer cannot grant permissions they don't have (unless owner)
-        if (!$performer->is_owner) {
-            $performerPerms = $performer->allPermissions();
-            $unauthorized = array_diff($permissionKeys, $performerPerms);
-            if (!empty($unauthorized)) {
-                throw new BusinessException(
-                    'لا يمكنك منح صلاحيات أعلى من صلاحياتك.',
-                    'ERR_ESCALATION_DENIED',
-                    403
-                );
-            }
+        // Validate: performer cannot grant permissions they do not already have.
+        $performerPerms = $performer->allPermissions();
+        $unauthorized = array_diff($permissionKeys, $performerPerms);
+        if (!empty($unauthorized)) {
+            throw new BusinessException(
+                'Cannot grant permissions higher than your own permissions.',
+                'ERR_ESCALATION_DENIED',
+                403
+            );
         }
 
         // Resolve permission IDs from keys
@@ -352,16 +352,20 @@ class RbacService
 
     private function assertCanManageRoles(User $performer): void
     {
-        if (!$performer->is_owner && !$performer->hasPermission('roles:manage')) {
+        if (!$performer->hasPermission('roles.manage')) {
             throw BusinessException::permissionDenied();
         }
+
+        $this->assertAccountAllowsTeamManagement((string) $performer->account_id);
     }
 
     private function assertCanAssignRoles(User $performer): void
     {
-        if (!$performer->is_owner && !$performer->hasPermission('roles:assign')) {
+        if (!$performer->hasPermission('roles.assign')) {
             throw BusinessException::permissionDenied();
         }
+
+        $this->assertAccountAllowsTeamManagement((string) $performer->account_id);
     }
 
     private function findRoleOrFail(string $roleId, string $accountId): Role
@@ -376,6 +380,19 @@ class RbacService
         }
 
         return $role;
+    }
+
+    /**
+     * @throws BusinessException
+     */
+    private function assertAccountAllowsTeamManagement(string $accountId): void
+    {
+        /** @var Account|null $account */
+        $account = Account::withoutGlobalScopes()->find($accountId);
+
+        if ($account instanceof Account && !$account->allowsTeamManagement()) {
+            throw BusinessException::accountUpgradeRequired();
+        }
     }
 
     private function logAction(string $accountId, string $userId, string $action, string $entityType, string $entityId, ?array $old, ?array $new): void
@@ -393,3 +410,6 @@ class RbacService
         ]);
     }
 }
+
+
+

@@ -2,199 +2,228 @@
 
 namespace App\Rbac;
 
-/**
- * PermissionsCatalog
- *
- * The single source of truth for all permissions in the system.
- * No permission can be granted outside this catalog (FR-IAM-003 business rule).
- *
- * Format: 'group:action' => 'Description'
- */
 class PermissionsCatalog
 {
     /**
-     * All permissions grouped by module.
+     * @return array<string, array<string, string>>
      */
     public static function all(): array
     {
-        return [
-            // ── Users & Account ──────────────────────────────────
+        $catalog = [
             'users' => [
-                'users:view'    => 'عرض قائمة المستخدمين',
-                'users:manage'  => 'إضافة/تعطيل/حذف المستخدمين',
-                'users:invite'  => 'دعوة مستخدمين جدد',
+                'users.view' => 'View users',
+                'users.manage' => 'Manage users',
+                'users.invite' => 'Invite users',
             ],
-
-            // ── Roles & Permissions ──────────────────────────────
             'roles' => [
-                'roles:view'   => 'عرض الأدوار والصلاحيات',
-                'roles:manage' => 'إنشاء/تعديل/حذف الأدوار',
-                'roles:assign' => 'تعيين أدوار للمستخدمين',
+                'roles.view' => 'View roles',
+                'roles.manage' => 'Manage roles',
+                'roles.assign' => 'Assign roles',
             ],
-
-            // ── Account Settings ─────────────────────────────────
             'account' => [
-                'account:view'     => 'عرض إعدادات الحساب',
-                'account:manage'   => 'تعديل إعدادات الحساب',
+                'account.view' => 'View account settings',
+                'account.manage' => 'Manage account settings',
             ],
-
-            // ── Shipments ────────────────────────────────────────
             'shipments' => [
-                'shipments:view'    => 'عرض الشحنات',
-                'shipments:create'  => 'إنشاء شحنة جديدة',
-                'shipments:edit'    => 'تعديل الشحنات',
-                'shipments:cancel'  => 'إلغاء الشحنات',
-                'shipments:print'   => 'طباعة بوليصات الشحن',
-                'shipments:export'  => 'تصدير بيانات الشحنات',
+                'shipments.view' => 'View shipments',
+                'shipments.create' => 'Create shipments',
+                'shipments.update_draft' => 'Update shipment drafts',
+                'shipments.edit' => 'Edit shipments',
+                'shipments.cancel' => 'Cancel shipments',
+                'shipments.print' => 'Print shipments',
+                'shipments.export' => 'Export shipments',
+                'shipments.manage' => 'Manage shipment lifecycle',
+                'shipments.print_label' => 'Print shipment labels',
+                'shipments.view_financial' => 'View shipment financial fields',
             ],
-
-            // ── Orders ───────────────────────────────────────────
             'orders' => [
-                'orders:view'    => 'عرض الطلبات',
-                'orders:manage'  => 'إدارة الطلبات',
-                'orders:export'  => 'تصدير بيانات الطلبات',
+                'orders.view' => 'View orders',
+                'orders.manage' => 'Manage orders',
+                'orders.export' => 'Export orders',
             ],
-
-            // ── Stores ───────────────────────────────────────────
             'stores' => [
-                'stores:view'   => 'عرض المتاجر',
-                'stores:manage' => 'إدارة المتاجر وقنوات البيع',
+                'stores.view' => 'View stores',
+                'stores.manage' => 'Manage stores',
             ],
-
-            // ── Financial ────────────────────────────────────────
             'financial' => [
-                'financial:view'           => 'عرض البيانات المالية العامة',
-                'financial:profit.view'    => 'عرض بيانات الربح والتكلفة الصافية (Net/Retail/Profit)',
-                'financial:cards.view'     => 'عرض بيانات بطاقات الدفع (غير مخفية)',
-                'financial:wallet_topup'   => 'شحن المحفظة',
-                'financial:wallet_view'    => 'عرض رصيد المحفظة',
-                'financial:ledger_view'    => 'عرض كشف الحساب',
-                'financial:invoices_view'  => 'عرض الفواتير',
-                'financial:invoices_manage'=> 'إدارة الفواتير',
-                'financial:refund_review'  => 'مراجعة طلبات الاسترداد',
-                'financial:threshold'      => 'ضبط حدود التنبيه المالي',
+                'financial.view' => 'View financial data',
+                'financial.profit.view' => 'View profit data',
+                'financial.cards.view' => 'View card data',
+                'financial.wallet_topup' => 'Top up wallet',
+                'financial.wallet_view' => 'View wallet balance',
+                'financial.ledger_view' => 'View ledger',
+                'financial.invoices_view' => 'View invoices',
+                'financial.invoices_manage' => 'Manage invoices',
+                'financial.refund_review' => 'Review refunds',
+                'financial.threshold' => 'Manage financial thresholds',
             ],
-
-            // ── Reports ──────────────────────────────────────────
+            'wallet' => [
+                'wallet.balance' => 'View wallet balance',
+                'wallet.ledger' => 'View wallet ledger',
+                'wallet.topup' => 'Top up wallet',
+                'wallet.configure' => 'Configure wallet settings',
+            ],
+            'billing' => [
+                'billing.view' => 'View billing methods',
+                'billing.manage' => 'Manage billing methods',
+            ],
             'reports' => [
-                'reports:view'    => 'عرض التقارير',
-                'reports:export'  => 'تصدير التقارير',
-                'reports:create'  => 'إنشاء تقارير مخصصة',
+                'reports.view' => 'View reports',
+                'reports.export' => 'Export reports',
+                'reports.create' => 'Create reports',
             ],
-
-            // ── KYC ──────────────────────────────────────────────
             'kyc' => [
-                'kyc:view'     => 'عرض حالة التحقق',
-                'kyc:manage'   => 'إدارة وثائق التحقق',
-                'kyc:documents'=> 'الوصول لوثائق KYC الحساسة',
+                'kyc.view' => 'View KYC status',
+                'kyc.manage' => 'Manage KYC',
+                'kyc.documents' => 'Access KYC documents',
             ],
-
-            // ── API Keys ─────────────────────────────────────────
-            'apikeys' => [
-                'apikeys:view'   => 'عرض مفاتيح API',
-                'apikeys:manage' => 'إنشاء/إلغاء مفاتيح API',
+            'api_keys' => [
+                'api_keys.read' => 'View API keys',
+                'api_keys.manage' => 'Manage API keys',
             ],
-
-            // ── Audit Logs ───────────────────────────────────────
+            'webhooks' => [
+                'webhooks.read' => 'View webhooks',
+                'webhooks.manage' => 'Manage webhooks',
+            ],
+            'rates' => [
+                'rates.view_breakdown' => 'View pricing breakdown',
+                'rates.manage_rules' => 'Manage pricing rules',
+            ],
             'audit' => [
-                'audit:view'   => 'عرض سجلات التدقيق',
-                'audit:export' => 'تصدير سجلات التدقيق',
+                'audit.view' => 'View audit logs',
+                'audit.export' => 'Export audit logs',
+            ],
+            'tenancy' => [
+                'tenancy.context.select' => 'Select tenant context',
+            ],
+            'admin' => [
+                'admin.access' => 'Access admin APIs',
             ],
         ];
+
+        self::assertDotNotation($catalog);
+
+        return $catalog;
     }
 
     /**
-     * Flat list of all permission keys.
+     * @return array<int, string>
      */
     public static function keys(): array
     {
         $keys = [];
-        foreach (static::all() as $group => $permissions) {
+        foreach (static::all() as $permissions) {
             $keys = array_merge($keys, array_keys($permissions));
         }
-        return $keys;
+
+        return array_values(array_unique($keys));
     }
 
-    /**
-     * Check if a permission key exists in the catalog.
-     */
     public static function exists(string $key): bool
     {
         return in_array($key, static::keys(), true);
     }
 
     /**
-     * Get all groups.
+     * @return array<int, string>
      */
     public static function groups(): array
     {
         return array_keys(static::all());
     }
 
-    // ─── Role Templates ──────────────────────────────────────────
-
     /**
-     * Predefined role templates with suggested permissions.
+     * @return array<string, array{display_name: string, description: string, permissions: array<int, string>}>
      */
     public static function templates(): array
     {
         return [
             'admin' => [
-                'display_name' => 'مدير النظام',
-                'description'  => 'صلاحيات كاملة باستثناء حذف الحساب',
-                'permissions'  => static::keys(), // All permissions
+                'display_name' => 'System Admin',
+                'description' => 'Full access role.',
+                'permissions' => static::keys(),
             ],
-
             'accountant' => [
-                'display_name' => 'محاسب',
-                'description'  => 'إدارة المالية والفواتير',
-                'permissions'  => [
-                    'financial:view', 'financial:profit.view', 'financial:cards.view',
-                    'financial:wallet_view', 'financial:ledger_view',
-                    'financial:invoices_view', 'financial:invoices_manage',
-                    'financial:refund_review', 'financial:threshold',
-                    'reports:view', 'reports:export',
-                    'audit:view',
+                'display_name' => 'Accountant',
+                'description' => 'Financial and reporting access.',
+                'permissions' => [
+                    'financial.view',
+                    'financial.profit.view',
+                    'financial.cards.view',
+                    'financial.wallet_view',
+                    'financial.ledger_view',
+                    'financial.invoices_view',
+                    'financial.invoices_manage',
+                    'financial.refund_review',
+                    'financial.threshold',
+                    'reports.view',
+                    'reports.export',
+                    'audit.view',
                 ],
             ],
-
             'warehouse' => [
-                'display_name' => 'مدير المستودع',
-                'description'  => 'إدارة الشحنات والطلبات',
-                'permissions'  => [
-                    'shipments:view', 'shipments:create', 'shipments:edit',
-                    'shipments:print', 'shipments:export',
-                    'orders:view', 'orders:manage', 'orders:export',
-                    'stores:view',
+                'display_name' => 'Warehouse',
+                'description' => 'Operations role for fulfillment.',
+                'permissions' => [
+                    'shipments.view',
+                    'shipments.create',
+                    'shipments.edit',
+                    'shipments.print',
+                    'shipments.export',
+                    'orders.view',
+                    'orders.manage',
+                    'orders.export',
+                    'stores.view',
                 ],
             ],
-
             'viewer' => [
-                'display_name' => 'مشاهد',
-                'description'  => 'صلاحيات العرض فقط',
-                'permissions'  => [
-                    'users:view', 'roles:view', 'account:view',
-                    'shipments:view', 'orders:view', 'stores:view',
-                    'reports:view', 'kyc:view', 'audit:view',
+                'display_name' => 'Viewer',
+                'description' => 'Read-only access.',
+                'permissions' => [
+                    'users.view',
+                    'roles.view',
+                    'account.view',
+                    'shipments.view',
+                    'orders.view',
+                    'stores.view',
+                    'reports.view',
+                    'kyc.view',
+                    'audit.view',
                 ],
             ],
-
             'printer' => [
-                'display_name' => 'طباعة فقط',
-                'description'  => 'طباعة بوليصات الشحن فقط — بدون بيانات مالية',
-                'permissions'  => [
-                    'shipments:view', 'shipments:print',
-                    'orders:view',
+                'display_name' => 'Printer',
+                'description' => 'Shipment printing role without financial access.',
+                'permissions' => [
+                    'shipments.view',
+                    'shipments.print',
+                    'orders.view',
                 ],
             ],
         ];
     }
 
     /**
-     * Get a specific template.
+     * @return array{display_name: string, description: string, permissions: array<int, string>}|null
      */
     public static function template(string $name): ?array
     {
         return static::templates()[$name] ?? null;
+    }
+
+    /**
+     * @param array<string, array<string, string>> $catalog
+     */
+    private static function assertDotNotation(array $catalog): void
+    {
+        foreach ($catalog as $group => $permissions) {
+            foreach ($permissions as $key => $description) {
+                if (str_contains($key, ':')) {
+                    throw new \RuntimeException(
+                        sprintf('Phase 2B2 requires dot-notation permission keys only. Invalid key "%s" in group "%s".', $key, $group)
+                    );
+                }
+            }
+        }
     }
 }

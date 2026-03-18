@@ -1,0 +1,74 @@
+screen,route,method,permission,ui_trigger,controller,db_effect,status
+dashboard,dashboard,GET,auth+tenant,Link sidebar,DashboardController@index,read counts/aggregates,OK
+dashboard,shipments.create,GET,auth+tenant,Button شحنة جديدة,ShipmentWebController@create,read addresses,OK
+shipments.index,shipments.index,GET,auth+tenant,Link sidebar,ShipmentWebController@index,read shipments (NO account_id scope),FAIL
+shipments.index,shipments.export,GET,auth+tenant,Button تصدير,ShipmentWebController@export,read/export,OK
+shipments.index,shipments.create,GET,auth+tenant,Button + شحنة جديدة,ShipmentWebController@create,,OK
+shipments.index,shipments.show,GET,auth+tenant,Link/Button عرض,ShipmentWebController@show,read one,OK
+shipments.create,shipments.store,POST,auth+tenant,Form submit,ShipmentWebController@store,insert shipments,OK
+shipments.show,shipments.label,GET,auth+tenant,Button طباعة البوليصة,ShipmentWebController@label,read,OK
+shipments.show,shipments.cancel,PATCH,auth+tenant,Form إلغاء,ShipmentWebController@cancel,update status,OK
+shipments.show,shipments.return,POST,auth+tenant,Form إرجاع,ShipmentWebController@createReturn,create return,OK
+orders.index,orders.index,GET,auth+tenant,Link sidebar,OrderWebController@index,read orders,OK
+orders.index,orders.ship,POST,auth+tenant,Button شحن,OrderWebController@ship,create shipment/deduction,OK
+stores.index,stores.index,GET,auth+tenant,Link sidebar,StoreWebController@index,read stores,OK
+stores.index,stores.store,POST,auth+tenant,Modal ربط متجر,StoreWebController@store,insert store,OK
+stores.index,stores.sync,POST,auth+tenant,Button مزامنة,StoreWebController@sync,update,OK
+stores.index,stores.disconnect,POST/DELETE,n/a,Button فصل,n/a (route missing),n/a,FAIL
+stores.index,stores.destroy,DELETE,auth+tenant,(intended),StoreWebController@destroy,delete store,OK
+wallet.index,wallet.index,GET,auth+tenant,Link sidebar,WalletWebController@index,read wallet/ledger,OK
+wallet.index,wallet.topup,POST,auth+tenant,Modal شحن الرصيد,WalletWebController@topup,wallet+ledger,OK
+users.index,users.index,GET,auth+tenant,Link sidebar,UserWebController@index,read users,OK
+users.index,users.edit,GET,auth+tenant,Button تعديل,UserWebController@edit,read user,OK
+users.index,invitations.index,GET,auth+tenant,Button دعوة مستخدم,PageController@invitations,read,OK
+users.edit,users.update,PATCH,auth+tenant,Form حفظ/كلمة مرور,UserWebController@update,update user,OK
+users.edit,users.update,PATCH,auth+tenant,Form تفعيل/تعطيل,UserWebController@update,toggle is_active,OK
+support.index,support.index,GET,auth+tenant,Link sidebar,SupportWebController@index,read tickets,OK
+support.index,support.store,POST,auth+tenant,Form تذكرة جديدة,SupportWebController@store,insert ticket,OK
+support.show,support.reply,POST,auth+tenant,Form رد,SupportWebController@reply,insert reply,OK
+support.show,support.resolve,PATCH,auth+tenant,Form حل,SupportWebController@resolve,update status,OK
+notifications.index,notifications.index,GET,auth+tenant,Link sidebar,PageController@notifications,read,OK
+notifications.index,notifications.readAll,POST,auth+tenant,Button قراءة الكل,PageController@notificationsReadAll,update read_at,OK
+addresses.index,addresses.index,GET,auth+tenant,Link sidebar,PageController@addresses,read,OK
+addresses.index,addresses.store,POST,auth+tenant,Form إضافة,PageController@addressesStore,insert address,OK
+addresses.index,addresses.default,PATCH,auth+tenant,Button افتراضي,PageController@addressesDefault,update is_default,OK
+addresses.index,addresses.destroy,DELETE,auth+tenant,Button حذف,PageController@addressesDestroy,delete,OK
+settings.index,settings.index,GET,auth+tenant,Link sidebar,PageController@settings,read account,OK
+settings.index,settings.update,PUT,auth+tenant,Form حفظ,PageController@settingsUpdate,update account,OK
+audit.index,audit.index,GET,auth+tenant,Link sidebar,PageController@audit,read audit,OK
+audit.index,audit.export,GET,auth+tenant,Button تصدير CSV,PageController@auditExport,export,OK
+roles.index,roles.index,GET,auth+tenant,Link sidebar,PageController@roles,read roles,OK
+roles.index,roles.store,POST,auth+tenant,(if form exists),PageController@rolesStore,insert role,OK
+invitations.index,invitations.index,GET,auth+tenant,Link sidebar,PageController@invitations,read,OK
+invitations.index,invitations.store,POST,auth+tenant,Form إرسال,PageController@invitationsStore,insert invitation,OK
+containers.index,containers.index,GET,auth+tenant,Link sidebar,PageController@containers,read,OK
+containers.index,containers.store,POST,auth+tenant,Modal إضافة (wrong action),PageController@containersStore,insert,FAIL
+containers.index (modal),containers.index,POST,n/a,Form submit,n/a (GET only),n/a,FAIL
+customs.index,customs.index,GET,auth+tenant,Link sidebar,PageController@customs,read,OK
+customs.index,customs.store,POST,auth+tenant,Form,PageController@customsStore,insert,OK
+claims.index,claims.index,GET,auth+tenant,Link sidebar,PageController@claims,read,OK
+claims.index,claims.store,POST,auth+tenant,Form,PageController@claimsStore,insert,OK
+vessels.index,vessels.index,GET,auth+tenant,Link sidebar,PageController@vessels,read,OK
+vessels.index,vessels.store,POST,auth+tenant,Form,PageController@vesselsStore,insert,OK
+organizations.index,organizations.index,GET,auth+tenant,Link sidebar,PageController@organizations,read,OK
+organizations.index,organizations.store,POST,auth+tenant,Form,PageController@organizationsStore,insert,OK
+companies.index,companies.index,GET,auth+tenant,Link sidebar,PageController@companies,read,OK
+companies.index (form),companies.index,POST,n/a,Form submit,GET route,405,FAIL
+risk.index,risk.index,GET,auth+tenant,Link sidebar,PageController@risk,read,OK
+risk.index (form),risk.index,POST,n/a,Form submit,GET route,405,FAIL
+dg.index,dg.index,GET,auth+tenant,Link sidebar,PageController@dg,read,OK
+dg.index (form),dg.index,POST,n/a,Form submit,GET route,405,FAIL
+reports.index,reports.index,GET,auth+tenant,Link sidebar,PageController@reports,read,OK
+reports.index,reports.export,GET,auth+tenant,Export type,PageController@reportsExport,export,OK
+pricing.index,pricing.index,GET,auth+tenant,Link sidebar,PageController@pricing,read,OK
+pricing.index,pricing.store,POST,auth+tenant,Form,PageController@pricingStore,insert/update,OK
+tracking.index,tracking.index,GET,auth+tenant,Link sidebar,PageController@tracking,read,OK
+financial.index,financial.index,GET,auth+tenant,Link sidebar,PageController@financial,read,OK
+admin.index,admin.index,GET,auth+tenant,Link sidebar,PageController@admin,read,OK
+kyc.index,kyc.index,GET,auth+tenant,Link sidebar,PageController@kyc,read,OK
+login,login,GET,none,Portal selector,AuthWebController@showLogin,,OK
+login,login,POST,none,Form submit,AuthWebController@login,session,OK
+b2c.login,b2c.login,GET,none,Link,AuthWebController@showB2cLogin,,OK
+b2c.login,b2b.login,GET,none,Link,AuthWebController@showB2bLogin,,OK
+admin.login,admin.login,GET,none,Link,AuthWebController@showAdminLogin,,OK
+logout,logout,POST,auth,Form تسجيل الخروج,AuthWebController@logout,session destroy,OK

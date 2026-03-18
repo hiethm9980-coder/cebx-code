@@ -7,7 +7,7 @@ use App\Models\Organization;
 use App\Models\OrganizationInvite;
 use App\Models\OrganizationMember;
 use App\Models\OrganizationWallet;
-use App\Models\PermissionCatalog;
+use App\Models\Permission;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -164,24 +164,51 @@ class OrganizationService
 
     public function listPermissionCatalog(?string $module = null): Collection
     {
-        $query = PermissionCatalog::active();
-        if ($module) $query->forModule($module);
-        return $query->orderBy('sort_order')->get();
+        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+            return collect();
+        }
+
+        $query = Permission::query();
+        if ($module) {
+            $query->where('group', $module);
+        }
+
+        return $query->orderBy('key')->get();
     }
 
     public function getFinancialPermissions(): Collection
     {
-        return PermissionCatalog::active()->financial()->get();
+        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+            return collect();
+        }
+
+        return Permission::query()->where('group', 'financial')->orderBy('key')->get();
     }
 
     public function getOperationalPermissions(): Collection
     {
-        return PermissionCatalog::active()->operational()->get();
+        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+            return collect();
+        }
+
+        return Permission::query()->where('group', '!=', 'financial')->orderBy('key')->get();
     }
 
     public function validatePermissions(array $keys): array
     {
-        return PermissionCatalog::validateKeys($keys);
+        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+            return ['valid' => [], 'invalid' => array_values(array_unique($keys))];
+        }
+
+        $normalized = array_values(array_unique(array_map(
+            static fn (string $key): string => str_replace(':', '.', trim($key)),
+            $keys
+        )));
+
+        $valid = Permission::query()->whereIn('key', $normalized)->pluck('key')->toArray();
+        $invalid = array_values(array_diff($normalized, $valid));
+
+        return ['valid' => $valid, 'invalid' => $invalid];
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -209,12 +236,12 @@ class OrganizationService
         if (!$member) return false;
 
         // Financial permission gate (FR-ORG-005)
-        $catalogEntry = PermissionCatalog::where('key', $permissionKey)->first();
-        if ($catalogEntry?->isFinancial() && !$member->can_view_financial) {
+        $normalizedPermissionKey = str_replace(':', '.', $permissionKey);
+        if (str_starts_with($normalizedPermissionKey, 'financial.') && !$member->can_view_financial) {
             return false;
         }
 
-        return $member->hasPermission($permissionKey);
+        return $member->hasPermission($normalizedPermissionKey);
     }
 
     // ═══════════════════════════════════════════════════════════

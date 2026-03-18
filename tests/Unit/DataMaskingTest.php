@@ -8,6 +8,7 @@ use App\Models\Account;
 use App\Models\User;
 use App\Models\Role;
 use App\Services\DataMaskingService;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-012: Financial Data Masking — Unit Tests (30 tests)
@@ -15,6 +16,7 @@ use App\Services\DataMaskingService;
 class DataMaskingTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected Account $account;
     protected User $owner;
@@ -33,39 +35,39 @@ class DataMaskingTest extends TestCase
         ]);
 
         // Printer role — no financial permissions
-        $printerRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['shipments:view', 'shipments:print', 'orders:view'],
-        ]);
-        $this->printer = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $printerRole->id,
+        $printerRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['shipments.read', 'shipments.print_label', 'orders.read'],
+            'printer_role'
+        );
+        $this->printer = $this->createUserWithRole((string) $this->account->id, (string) $printerRole->id, [
+            'is_owner' => false,
         ]);
 
         // Accountant role — full financial permissions
-        $accountantRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => [
-                'financial:view', 'financial:profit.view', 'financial:cards.view',
-                'financial:invoices_view', 'financial:ledger_view',
+        $accountantRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            [
+                'financial.view',
+                'financial.profit.view',
+                'financial.cards.view',
+                'financial.invoices.view',
+                'financial.ledger.view',
             ],
-        ]);
-        $this->accountant = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $accountantRole->id,
+            'accountant_role'
+        );
+        $this->accountant = $this->createUserWithRole((string) $this->account->id, (string) $accountantRole->id, [
+            'is_owner' => false,
         ]);
 
         // Viewer role — financial:view only (can see totals, NOT profit/cards)
-        $viewerRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['financial:view', 'financial:invoices_view'],
-        ]);
-        $this->viewer = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $viewerRole->id,
+        $viewerRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['financial.view', 'financial.invoices.view'],
+            'viewer_role'
+        );
+        $this->viewer = $this->createUserWithRole((string) $this->account->id, (string) $viewerRole->id, [
+            'is_owner' => false,
         ]);
     }
 
@@ -73,7 +75,7 @@ class DataMaskingTest extends TestCase
     // Card Number Masking
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_16_digit_card_number()
     {
         $result = DataMaskingService::maskCardNumber('4111111111111234');
@@ -82,7 +84,7 @@ class DataMaskingTest extends TestCase
         $this->assertStringNotContainsString('4111', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_card_number_with_spaces()
     {
         $result = DataMaskingService::maskCardNumber('4111 1111 1111 1234');
@@ -90,14 +92,14 @@ class DataMaskingTest extends TestCase
         $this->assertStringContainsString('••••', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_card_number_with_dashes()
     {
         $result = DataMaskingService::maskCardNumber('4111-1111-1111-1234');
         $this->assertStringEndsWith('1234', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_15_digit_amex()
     {
         $result = DataMaskingService::maskCardNumber('371449635398431');
@@ -105,33 +107,33 @@ class DataMaskingTest extends TestCase
         $this->assertStringContainsString('•', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_13_digit_card()
     {
         $result = DataMaskingService::maskCardNumber('4222222221234');
         $this->assertStringEndsWith('1234', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_handles_short_card_number()
     {
         $result = DataMaskingService::maskCardNumber('123');
         $this->assertEquals('•••', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_handles_null_card_number()
     {
         $this->assertNull(DataMaskingService::maskCardNumber(null));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_handles_empty_card_number()
     {
         $this->assertEquals('', DataMaskingService::maskCardNumber(''));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_extracts_last_four_digits()
     {
         $this->assertEquals('1234', DataMaskingService::lastFourDigits('4111111111111234'));
@@ -144,7 +146,7 @@ class DataMaskingTest extends TestCase
     // IBAN Masking
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_iban()
     {
         $result = DataMaskingService::maskIban('SA0380000000608010167519');
@@ -153,7 +155,7 @@ class DataMaskingTest extends TestCase
         $this->assertStringContainsString('•', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_short_iban()
     {
         $result = DataMaskingService::maskIban('DE1234');
@@ -161,7 +163,7 @@ class DataMaskingTest extends TestCase
         $this->assertStringContainsString('•', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_handles_null_iban()
     {
         $this->assertNull(DataMaskingService::maskIban(null));
@@ -171,7 +173,7 @@ class DataMaskingTest extends TestCase
     // Email Masking
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_email()
     {
         $result = DataMaskingService::maskEmail('ahmad@example.com');
@@ -180,7 +182,7 @@ class DataMaskingTest extends TestCase
         $this->assertStringContainsString('•', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_short_email()
     {
         $result = DataMaskingService::maskEmail('ab@x.com');
@@ -191,7 +193,7 @@ class DataMaskingTest extends TestCase
     // Phone Masking
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_masks_phone()
     {
         $result = DataMaskingService::maskPhone('+966501234567');
@@ -203,7 +205,7 @@ class DataMaskingTest extends TestCase
     // Financial Field Filtering — Permission-Based
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_sees_all_financial_data()
     {
         $data = $this->sampleFinancialData();
@@ -216,7 +218,7 @@ class DataMaskingTest extends TestCase
         $this->assertEquals('4111111111111234', $result['card_number']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function accountant_sees_all_financial_data()
     {
         $data = $this->sampleFinancialData();
@@ -229,7 +231,7 @@ class DataMaskingTest extends TestCase
         $this->assertEquals('4111111111111234', $result['card_number']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function viewer_sees_totals_but_not_profit()
     {
         $data = $this->sampleFinancialData();
@@ -250,7 +252,7 @@ class DataMaskingTest extends TestCase
         $this->assertStringContainsString('•', $result['card_number']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function printer_sees_no_financial_data()
     {
         $data = $this->sampleFinancialData();
@@ -269,7 +271,7 @@ class DataMaskingTest extends TestCase
         $this->assertNotEquals('4111111111111234', $result['card_number']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function null_user_sees_nothing()
     {
         $data = $this->sampleFinancialData();
@@ -280,7 +282,7 @@ class DataMaskingTest extends TestCase
         $this->assertNull($result['profit']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function replace_with_stars_option()
     {
         $data = $this->sampleFinancialData();
@@ -290,7 +292,7 @@ class DataMaskingTest extends TestCase
         $this->assertEquals('***', $result['total_amount']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function non_financial_fields_are_untouched()
     {
         $data = array_merge($this->sampleFinancialData(), [
@@ -311,7 +313,7 @@ class DataMaskingTest extends TestCase
     // Collection Filtering
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_filters_collection()
     {
         $items = [
@@ -330,7 +332,7 @@ class DataMaskingTest extends TestCase
     // Permission Checks
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_view_profit_data_check()
     {
         $this->assertTrue(DataMaskingService::canViewProfitData($this->owner));
@@ -340,7 +342,7 @@ class DataMaskingTest extends TestCase
         $this->assertFalse(DataMaskingService::canViewProfitData(null));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_view_financial_data_check()
     {
         $this->assertTrue(DataMaskingService::canViewFinancialData($this->owner));
@@ -349,7 +351,7 @@ class DataMaskingTest extends TestCase
         $this->assertFalse(DataMaskingService::canViewFinancialData($this->printer));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_view_card_data_check()
     {
         $this->assertTrue(DataMaskingService::canViewCardData($this->owner));
@@ -362,7 +364,7 @@ class DataMaskingTest extends TestCase
     // Visibility Map
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function visibility_map_for_owner()
     {
         $map = DataMaskingService::visibilityMap($this->owner);
@@ -373,7 +375,7 @@ class DataMaskingTest extends TestCase
         $this->assertEmpty($map['masked_fields']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function visibility_map_for_printer()
     {
         $map = DataMaskingService::visibilityMap($this->printer);
@@ -388,7 +390,7 @@ class DataMaskingTest extends TestCase
     // Audit Log Sanitization
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_sanitizes_card_numbers_in_audit()
     {
         $values = [
@@ -403,7 +405,7 @@ class DataMaskingTest extends TestCase
         $this->assertEquals('Test', $sanitized['name']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_redacts_passwords_in_audit()
     {
         $values = [
@@ -419,7 +421,7 @@ class DataMaskingTest extends TestCase
         $this->assertEquals('Test', $sanitized['name']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function it_sanitizes_iban_in_audit()
     {
         $values = ['iban' => 'SA0380000000608010167519'];

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\BusinessException;
 use App\Models\Account;
+use App\Models\AuditLog;
 use App\Models\Shipment;
 use App\Models\ShipmentException;
 use App\Models\StatusMapping;
@@ -17,12 +18,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * TrackingService — FR-TR-001→007 (7 requirements)
+ * TrackingService â€” FR-TR-001â†’007 (7 requirements)
  *
  * FR-TR-001: Receive tracking events (Webhooks/Polling)
  * FR-TR-002: Verify webhook authenticity (signature, schema, replay)
  * FR-TR-003: Deduplication & out-of-order handling
- * FR-TR-004: Normalize carrier status → unified status + notify subscribers
+ * FR-TR-004: Normalize carrier status â†’ unified status + notify subscribers
  * FR-TR-005: Timeline display with event details
  * FR-TR-006: Update store with tracking status changes
  * FR-TR-007: Exception management (Requires Action)
@@ -32,11 +33,12 @@ class TrackingService
     public function __construct(
         private DhlApiService $dhlApi,
         private AuditService $audit,
+        private ShipmentTimelineService $shipmentTimeline,
     ) {}
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-001 + FR-TR-002: Receive & Verify Webhook
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Process an inbound DHL tracking webhook.
@@ -48,15 +50,27 @@ class TrackingService
         string $sourceIp
     ): array {
         $startTime = microtime(true);
+        $header = static function (array $headers, string $key): ?string {
+            if (!array_key_exists($key, $headers)) {
+                return null;
+            }
 
-        // ── Log the webhook ──────────────────────────────────
+            $value = $headers[$key];
+            if (is_array($value)) {
+                $value = $value[0] ?? null;
+            }
+
+            return $value === null ? null : (string) $value;
+        };
+
+        // â”€â”€ Log the webhook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $webhook = TrackingWebhook::create([
             'carrier_code'      => 'dhl',
-            'signature'         => $headers['x-dhl-signature'] ?? $headers['authorization'] ?? null,
-            'message_reference' => $headers['message-reference'] ?? null,
-            'replay_token'      => $headers['x-dhl-message-id'] ?? $payload['messageId'] ?? Str::uuid()->toString(),
+            'signature'         => $header($headers, 'x-dhl-signature') ?? $header($headers, 'authorization'),
+            'message_reference' => $header($headers, 'message-reference'),
+            'replay_token'      => $header($headers, 'x-dhl-message-id') ?? ($payload['messageId'] ?? Str::uuid()->toString()),
             'source_ip'         => $sourceIp,
-            'user_agent'        => $headers['user-agent'] ?? null,
+            'user_agent'        => $header($headers, 'user-agent'),
             'headers'           => $headers,
             'event_type'        => $payload['eventType'] ?? $payload['type'] ?? 'tracking_update',
             'tracking_number'   => $this->extractTrackingNumber($payload),
@@ -64,13 +78,13 @@ class TrackingService
             'payload_size'      => strlen(json_encode($payload)),
         ]);
 
-        // ── FR-TR-002: Verify signature ──────────────────────
+        // â”€â”€ FR-TR-002: Verify signature â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (!$this->verifyWebhookSignature($headers, $payload)) {
             $webhook->markRejected('Invalid webhook signature');
             return ['status' => 'rejected', 'reason' => 'invalid_signature', 'events' => 0];
         }
 
-        // ── FR-TR-002: Prevent replay ────────────────────────
+        // â”€â”€ FR-TR-002: Prevent replay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $existingReplay = TrackingWebhook::where('replay_token', $webhook->replay_token)
             ->where('id', '!=', $webhook->id)
             ->whereIn('status', ['validated', 'processed'])
@@ -81,7 +95,7 @@ class TrackingService
             return ['status' => 'rejected', 'reason' => 'replay_detected', 'events' => 0];
         }
 
-        // ── FR-TR-002: Validate schema ───────────────────────
+        // â”€â”€ FR-TR-002: Validate schema â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (!$this->validateWebhookSchema($payload)) {
             $webhook->markRejected('Invalid payload schema');
             return ['status' => 'rejected', 'reason' => 'invalid_schema', 'events' => 0];
@@ -89,7 +103,7 @@ class TrackingService
 
         $webhook->markValidated();
 
-        // ── Extract and process events ───────────────────────
+        // â”€â”€ Extract and process events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $rawEvents = $this->extractEventsFromPayload($payload);
         $processed = 0;
 
@@ -104,9 +118,9 @@ class TrackingService
         return ['status' => 'processed', 'events' => $processed, 'webhook_id' => $webhook->id];
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-001: Polling Fallback
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Poll DHL for tracking updates on active shipments.
@@ -134,9 +148,9 @@ class TrackingService
         return $results;
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-003 + FR-TR-004: Process & Normalize Event
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Process a single tracking event: dedup, normalize, store, notify.
@@ -148,34 +162,34 @@ class TrackingService
         $rawStatus = $raw['raw_status'];
         $locationCode = $raw['location_code'] ?? null;
 
-        // ── FR-TR-003: Deduplication ─────────────────────────
+        // â”€â”€ FR-TR-003: Deduplication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $dedupKey = TrackingEvent::generateDedupKey($trackingNumber, $rawStatus, $eventTime, $locationCode);
         $exists = TrackingEvent::where('dedup_key', $dedupKey)->exists();
         if ($exists) {
             return null; // Duplicate, skip
         }
 
-        // ── Find shipment ────────────────────────────────────
+        // â”€â”€ Find shipment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $shipment = Shipment::where('tracking_number', $trackingNumber)->first();
         if (!$shipment) {
             return null; // No matching shipment
         }
 
-        // ── FR-TR-004: Normalize status ──────────────────────
+        // â”€â”€ FR-TR-004: Normalize status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $mapping = StatusMapping::resolve('dhl', $rawStatus, $raw['raw_status_code'] ?? null);
         $unifiedStatus = $mapping?->unified_status ?? TrackingEvent::STATUS_UNKNOWN;
         $unifiedDescription = $mapping?->unified_description ?? $raw['raw_description'] ?? $rawStatus;
         $isException = $mapping?->is_exception ?? false;
         $requiresAction = $mapping?->requires_action ?? false;
 
-        // ── FR-TR-003: Out-of-order check ────────────────────
+        // â”€â”€ FR-TR-003: Out-of-order check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $latestEvent = TrackingEvent::where('shipment_id', $shipment->id)
             ->orderBy('event_time', 'desc')
             ->first();
 
         $sequenceNumber = ($latestEvent?->sequence_number ?? 0) + 1;
 
-        // ── Store event ──────────────────────────────────────
+        // â”€â”€ Store event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $event = TrackingEvent::create([
             'shipment_id'         => $shipment->id,
             'account_id'          => $shipment->account_id,
@@ -200,20 +214,21 @@ class TrackingService
             'raw_payload'         => $raw,
         ]);
 
-        // ── Update shipment status ───────────────────────────
+        // â”€â”€ Update shipment status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $this->updateShipmentStatus($shipment, $event, $latestEvent);
+        $this->shipmentTimeline->recordTrackingEvent($shipment, $event);
 
-        // ── FR-TR-006: Update store if needed ────────────────
+        // â”€â”€ FR-TR-006: Update store if needed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if ($mapping?->notify_store) {
             $this->notifyStore($shipment, $event, $mapping);
             $event->update(['notified_store' => true]);
         }
 
-        // ── FR-TR-004: Notify subscribers ────────────────────
+        // â”€â”€ FR-TR-004: Notify subscribers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $this->notifySubscribers($shipment, $event);
         $event->update(['notified_subscribers' => true]);
 
-        // ── FR-TR-007: Create exception if needed ────────────
+        // â”€â”€ FR-TR-007: Create exception if needed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if ($isException || $requiresAction) {
             $this->createException($event, $raw);
         }
@@ -231,31 +246,45 @@ class TrackingService
             return; // Out-of-order, don't update main status
         }
 
-        $shipment->update([
-            'tracking_status'      => $newEvent->unified_status,
-            'tracking_updated_at'  => $newEvent->event_time,
-        ]);
+        $this->shipmentTimeline->syncCurrentStatus($shipment, $newEvent->unified_status, $newEvent->event_time);
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-005: Timeline
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Get tracking timeline for a shipment.
      */
     public function getTimeline(Shipment $shipment): array
     {
-        $events = TrackingEvent::timeline($shipment->id)->get();
+        return $this->shipmentTimeline->present($shipment);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getCurrentStatus(Shipment $shipment): array
+    {
+        $timeline = $this->shipmentTimeline->present($shipment);
 
         return [
-            'shipment_id'       => $shipment->id,
-            'tracking_number'   => $shipment->tracking_number,
-            'current_status'    => $shipment->tracking_status ?? $shipment->status,
-            'last_updated'      => $shipment->tracking_updated_at,
-            'total_events'      => $events->count(),
-            'events'            => $events->map->toTimeline()->values()->toArray(),
+            'shipment_id' => (string) $shipment->id,
+            'current_status' => $timeline['current_status'],
+            'current_status_label' => $timeline['current_status_label'],
+            'last_updated' => $timeline['last_updated'],
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function getEvents(Shipment $shipment): array
+    {
+        return $this->shipmentTimeline->list($shipment)
+            ->map(static fn ($event): array => $event->toTimelineItem())
+            ->values()
+            ->all();
     }
 
     /**
@@ -287,9 +316,9 @@ class TrackingService
         return $query->orderBy('tracking_updated_at', 'desc')->paginate($perPage);
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-006: Store Status Update
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Send status update to the linked store.
@@ -304,9 +333,9 @@ class TrackingService
         // StoreStatusUpdateJob::dispatch($shipment, $mapping->store_status, $event->toTimeline());
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-004: Notify Subscribers
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Notify all subscribers of a shipment about a status change.
@@ -323,9 +352,9 @@ class TrackingService
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-007: Exception Management
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Create an exception record from a tracking event.
@@ -374,9 +403,17 @@ class TrackingService
         $exception = ShipmentException::findOrFail($exceptionId);
         $exception->acknowledge();
 
-        $this->audit->log('tracking.exception_acknowledged', $user, $exception, [
-            'exception_code' => $exception->exception_code,
-        ]);
+        $this->audit->info(
+            (string) $exception->account_id,
+            (string) $user->id,
+            'tracking.exception_acknowledged',
+            AuditLog::CATEGORY_TRACKING,
+            'ShipmentException',
+            (string) $exception->id,
+            null,
+            null,
+            ['exception_code' => $exception->exception_code]
+        );
 
         return $exception;
     }
@@ -389,16 +426,24 @@ class TrackingService
         $exception = ShipmentException::findOrFail($exceptionId);
         $exception->resolve($notes, $user->name ?? $user->email);
 
-        $this->audit->log('tracking.exception_resolved', $user, $exception, [
-            'exception_code' => $exception->exception_code,
-        ]);
+        $this->audit->info(
+            (string) $exception->account_id,
+            (string) $user->id,
+            'tracking.exception_resolved',
+            AuditLog::CATEGORY_TRACKING,
+            'ShipmentException',
+            (string) $exception->id,
+            null,
+            null,
+            ['exception_code' => $exception->exception_code]
+        );
 
         return $exception;
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-004: Subscription Management
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     public function subscribe(array $data, Shipment $shipment, User $user): TrackingSubscription
     {
@@ -418,9 +463,9 @@ class TrackingService
         TrackingSubscription::where('id', $subscriptionId)->update(['is_active' => false]);
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-006: Dashboard Stats
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     /**
      * Get shipment status summary for dashboard.
@@ -449,20 +494,24 @@ class TrackingService
         ];
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
     // FR-TR-002 + Helpers
-    // ═══════════════════════════════════════════════════════════
+    // â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
 
     private function verifyWebhookSignature(array $headers, array $payload): bool
     {
         $signature = $headers['x-dhl-signature'] ?? $headers['authorization'] ?? null;
+        if (is_array($signature)) {
+            $signature = $signature[0] ?? null;
+        }
+
         if (!$signature) return false;
 
         $secret = config('services.dhl.webhook_secret', '');
         if (empty($secret)) return true; // No secret configured = skip verification
 
         $expected = hash_hmac('sha256', json_encode($payload), $secret);
-        return hash_equals($expected, $signature);
+        return hash_equals($expected, (string) $signature);
     }
 
     private function validateWebhookSchema(array $payload): bool
@@ -528,3 +577,4 @@ class TrackingService
         return $events;
     }
 }
+

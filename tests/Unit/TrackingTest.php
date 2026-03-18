@@ -43,7 +43,7 @@ class TrackingTest extends TestCase
 
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id, 'slug' => 'owner']);
-        $this->owner = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->owner = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
 
         $this->shipment = Shipment::factory()->create([
             'account_id'      => $this->account->id,
@@ -59,7 +59,7 @@ class TrackingTest extends TestCase
     // FR-TR-001: Receive Tracking Events (6 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_webhook_processes_valid_tracking_event(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'transit', 'In transit');
@@ -71,7 +71,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(1, $result['events']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_webhook_creates_tracking_event_record(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'delivered', 'Delivered');
@@ -83,7 +83,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('webhook', $event->source);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_webhook_logs_receipt(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'transit', 'In transit');
@@ -95,7 +95,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('processed', $webhook->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_webhook_updates_shipment_status(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'delivered', 'Delivered');
@@ -106,7 +106,7 @@ class TrackingTest extends TestCase
         $this->assertNotNull($this->shipment->tracking_updated_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_webhook_ignores_unknown_tracking_number(): void
     {
         $payload = $this->fakeDhlWebhookPayload('UNKNOWN999', 'transit', 'In transit');
@@ -115,7 +115,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(0, $result['events']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_polling_fetches_and_processes_events(): void
     {
         $this->dhlApiMock->shouldReceive('trackShipment')
@@ -142,7 +142,7 @@ class TrackingTest extends TestCase
     // FR-TR-002: Webhook Verification (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rejects_webhook_with_invalid_signature(): void
     {
         config(['services.dhl.webhook_secret' => 'test-secret']);
@@ -156,7 +156,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('invalid_signature', $result['reason']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rejects_webhook_without_signature(): void
     {
         config(['services.dhl.webhook_secret' => 'test-secret']);
@@ -167,7 +167,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('rejected', $result['status']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rejects_replay_attack(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'transit', 'In transit');
@@ -184,7 +184,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('replay_detected', $result['reason']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rejects_invalid_schema(): void
     {
         $result = $this->service->processWebhook(
@@ -197,7 +197,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('invalid_schema', $result['reason']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_webhook_rejection_logged(): void
     {
         config(['services.dhl.webhook_secret' => 'secret']);
@@ -217,7 +217,7 @@ class TrackingTest extends TestCase
     // FR-TR-003: Deduplication & Ordering (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dedup_key_generated_consistently(): void
     {
         $key1 = TrackingEvent::generateDedupKey('TRK123', 'transit', '2026-01-01T10:00:00Z', 'DXB');
@@ -226,7 +226,7 @@ class TrackingTest extends TestCase
         $this->assertEquals($key1, $key2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dedup_key_differs_for_different_events(): void
     {
         $key1 = TrackingEvent::generateDedupKey('TRK123', 'transit', '2026-01-01T10:00:00Z');
@@ -235,7 +235,7 @@ class TrackingTest extends TestCase
         $this->assertNotEquals($key1, $key2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_duplicate_event_not_stored(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'transit', 'In transit');
@@ -253,7 +253,7 @@ class TrackingTest extends TestCase
         $this->assertCount(1, $events);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_out_of_order_event_does_not_regress_status(): void
     {
         // First: delivered (newer event)
@@ -277,7 +277,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(TrackingEvent::STATUS_DELIVERED, $this->shipment->tracking_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_sequence_numbers_assigned(): void
     {
         // Event 1
@@ -301,7 +301,7 @@ class TrackingTest extends TestCase
     // FR-TR-004: Status Normalization & Subscriptions (6 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dhl_status_mapped_to_unified(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'delivered', 'Delivered');
@@ -312,7 +312,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(TrackingEvent::STATUS_DELIVERED, $event->unified_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_unknown_status_maps_to_unknown(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'very_unusual_status', 'Something weird');
@@ -322,7 +322,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(TrackingEvent::STATUS_UNKNOWN, $event->unified_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_status_mapping_resolve(): void
     {
         $mapping = StatusMapping::resolve('dhl', 'delivered', 'OK');
@@ -331,7 +331,7 @@ class TrackingTest extends TestCase
         $this->assertTrue($mapping->is_terminal);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_subscribe_to_tracking_updates(): void
     {
         $sub = $this->service->subscribe([
@@ -345,7 +345,7 @@ class TrackingTest extends TestCase
         $this->assertFalse($sub->wantsEvent('in_transit'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_subscriber_null_event_types_means_all(): void
     {
         $sub = TrackingSubscription::factory()->create([
@@ -359,7 +359,7 @@ class TrackingTest extends TestCase
         $this->assertTrue($sub->wantsEvent('exception'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_unsubscribe_deactivates(): void
     {
         $sub = TrackingSubscription::factory()->create([
@@ -375,7 +375,7 @@ class TrackingTest extends TestCase
     // FR-TR-005: Timeline Display (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_timeline_returns_ordered_events(): void
     {
         TrackingEvent::factory()->create([
@@ -398,7 +398,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(TrackingEvent::STATUS_DELIVERED, $timeline['events'][2]['status']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_timeline_event_has_location(): void
     {
         TrackingEvent::factory()->create([
@@ -411,7 +411,7 @@ class TrackingTest extends TestCase
         $this->assertStringContainsString('Dubai', $timeline['events'][0]['location']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_timeline_includes_signatory_for_delivered(): void
     {
         TrackingEvent::factory()->delivered()->create([
@@ -424,7 +424,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('Mohammed', $timeline['events'][0]['signatory']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_search_by_status(): void
     {
         $this->shipment->update(['tracking_status' => TrackingEvent::STATUS_IN_TRANSIT]);
@@ -435,7 +435,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(1, $results->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_search_by_tracking_number(): void
     {
         $results = $this->service->searchByStatus($this->account, null, '123456');
@@ -446,7 +446,7 @@ class TrackingTest extends TestCase
     // FR-TR-006: Store Notification + Dashboard (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_store_notifiable_mappings(): void
     {
         $storeNotifiable = StatusMapping::storeNotifiable()->get();
@@ -457,7 +457,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('fulfilled', $deliveredMapping->store_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_store_notified_flag_set(): void
     {
         $this->shipment->update(['store_id' => 'some-store-id']);
@@ -470,7 +470,7 @@ class TrackingTest extends TestCase
         $this->assertTrue($event->notified_store);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dashboard_returns_status_counts(): void
     {
         Shipment::factory()->count(3)->create(['account_id' => $this->account->id, 'tracking_status' => TrackingEvent::STATUS_IN_TRANSIT]);
@@ -482,7 +482,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(2, $dashboard['by_status'][TrackingEvent::STATUS_DELIVERED] ?? 0);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dashboard_calculates_delivery_rate(): void
     {
         Shipment::factory()->count(8)->create(['account_id' => $this->account->id, 'tracking_status' => TrackingEvent::STATUS_DELIVERED]);
@@ -494,7 +494,7 @@ class TrackingTest extends TestCase
         $this->assertGreaterThan(0, $dashboard['delivery_rate']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dashboard_shows_open_exceptions(): void
     {
         ShipmentException::factory()->count(3)->create([
@@ -511,7 +511,7 @@ class TrackingTest extends TestCase
     // FR-TR-007: Exception Management (8 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exception_created_for_exception_event(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'exception', 'Delivery failed - address issue');
@@ -523,7 +523,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(ShipmentException::STATUS_OPEN, $exception->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exception_classified_correctly(): void
     {
         $payload = $this->fakeDhlWebhookPayload('1234567890', 'exception', 'Wrong address - cannot deliver');
@@ -534,7 +534,7 @@ class TrackingTest extends TestCase
         $this->assertEquals('ADDRESS_ISSUE', $exception->exception_code);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exception_has_suggested_action(): void
     {
         $exception = ShipmentException::fromTrackingEvent(
@@ -550,7 +550,7 @@ class TrackingTest extends TestCase
         $this->assertTrue($exception->requires_customer_action);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_acknowledge_exception(): void
     {
         $exception = ShipmentException::factory()->create([
@@ -564,7 +564,7 @@ class TrackingTest extends TestCase
         $this->assertNotNull($result->acknowledged_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_resolve_exception(): void
     {
         $exception = ShipmentException::factory()->create([
@@ -579,7 +579,7 @@ class TrackingTest extends TestCase
         $this->assertNotNull($result->resolved_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_escalate_exception(): void
     {
         $exception = ShipmentException::factory()->create([
@@ -593,7 +593,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(ShipmentException::PRIORITY_CRITICAL, $exception->priority);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_exceptions_for_shipment(): void
     {
         ShipmentException::factory()->count(3)->create([
@@ -605,7 +605,7 @@ class TrackingTest extends TestCase
         $this->assertCount(3, $exceptions);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_open_exceptions_scope(): void
     {
         ShipmentException::factory()->count(2)->create([
@@ -626,7 +626,7 @@ class TrackingTest extends TestCase
     // Model Tests (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_tracking_event_is_terminal(): void
     {
         $event = TrackingEvent::factory()->delivered()->make();
@@ -636,7 +636,7 @@ class TrackingTest extends TestCase
         $this->assertFalse($event2->isTerminal());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_tracking_event_to_timeline(): void
     {
         $event = TrackingEvent::factory()->create([
@@ -652,7 +652,7 @@ class TrackingTest extends TestCase
         $this->assertStringContainsString('Jeddah', $timeline['location']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_webhook_marking_lifecycle(): void
     {
         $wh = TrackingWebhook::factory()->create(['status' => TrackingWebhook::STATUS_RECEIVED]);
@@ -664,7 +664,7 @@ class TrackingTest extends TestCase
         $this->assertEquals(5, $wh->events_extracted);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_subscription_notification_recording(): void
     {
         $sub = TrackingSubscription::factory()->create([
@@ -677,7 +677,7 @@ class TrackingTest extends TestCase
         $this->assertNotNull($sub->fresh()->last_notified_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exception_from_tracking_event_factory(): void
     {
         $event = TrackingEvent::factory()->exception()->create([

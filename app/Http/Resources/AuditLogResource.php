@@ -9,13 +9,17 @@ class AuditLogResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $action = $this->action ?? $this->event;
+        $entityType = $this->entity_type ?? $this->auditable_type;
+        $entityId = $this->entity_id ?? ($this->auditable_id !== null ? (string) $this->auditable_id : null);
+
         return [
             'id'          => $this->id,
-            'action'      => $this->action,
+            'action'      => $action,
             'severity'    => $this->severity,
             'category'    => $this->category,
-            'entity_type' => $this->entity_type,
-            'entity_id'   => $this->entity_id,
+            'entity_type' => $entityType,
+            'entity_id'   => $entityId,
             'old_values'  => $this->old_values,
             'new_values'  => $this->new_values,
             'metadata'    => $this->metadata,

@@ -167,6 +167,8 @@
 </div>
 
 
+<script src="<?php echo e(asset('js/app.js')); ?>"></script>
+
 <script src="<?php echo e(asset('js/pwa.js')); ?>"></script>
 <?php echo $__env->yieldPushContent('scripts'); ?>
 </body>

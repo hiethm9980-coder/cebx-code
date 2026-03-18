@@ -3,200 +3,290 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Support\Tenancy\WebTenantContext;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\View\View;
 
 class AuthWebController extends Controller
 {
-    /** Route name 'login' and GET /login — show portal selector (or redirect to it). */
-    public function showLogin()
+    public function showLogin(): RedirectResponse|View
     {
         return $this->portalSelector();
     }
 
-    /** POST /login — unified entry; redirects to the correct portal or attempts login. */
-    public function login(Request $request)
+    public function login(Request $request): RedirectResponse
     {
         $credentials = $request->validate([
             'email' => 'required|email',
             'password' => 'required',
         ]);
 
-        if (!Auth::attempt($credentials, $request->boolean('remember'))) {
-            return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة'])->onlyInput('email');
+        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+            return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة. تأكد من البريد وكلمة المرور ثم حاول مرة أخرى.'])->onlyInput('email');
         }
 
+        /** @var User $user */
         $user = Auth::user();
+        if ($inactiveResponse = $this->rejectInactiveUser($request, $user)) {
+            return $inactiveResponse;
+        }
+
         $request->session()->regenerate();
         $user->update(['last_login_at' => now()]);
-        return redirect()->intended(url('/'));
+
+        return $this->postLoginRedirect($user);
     }
 
-    // ── Portal Selector ──
-    public function portalSelector()
-    {
-        if (Auth::check()) return redirect()->route('dashboard');
-        return view('pages.auth.portal-selector');
-    }
-
-    // ════════════════════════════════════════
-    //  B2B LOGIN (يقبل business أو organization)
-    // ════════════════════════════════════════
-    public function showB2bLogin()
+    public function portalSelector(): RedirectResponse|View
     {
         if (Auth::check()) {
-            $user = Auth::user();
-            if ($user->account && in_array($user->account->type, ['business', 'organization'], true)) {
-                return redirect()->to(url('/'));
-            }
-        }
-        return view('pages.auth.login-b2b');
-    }
-
-    public function loginB2b(Request $request)
-    {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
-
-        if (Auth::attempt($credentials, $request->boolean('remember'))) {
-            $user = Auth::user();
-            $isB2b = $user->account && in_array($user->account->type, ['business', 'organization'], true);
-
-            if (!$isB2b) {
-                $type = $user->account->type ?? '';
-                Auth::logout();
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
-                $hint = match($type) {
-                    'individual' => 'يرجى استخدام <a href="' . url('/b2c/login') . '">بوابة الأفراد</a>',
-                    'admin' => 'يرجى استخدام <a href="' . url('/admin/login') . '">بوابة الإدارة</a>',
-                    default => 'يرجى استخدام البوابة المناسبة',
-                };
-                return back()->withErrors(['email' => "هذا الحساب غير مسجّل كحساب أعمال. {$hint}"])->onlyInput('email');
-            }
-
-            $request->session()->regenerate();
-            $user->update(['last_login_at' => now()]);
-            return redirect()->to(url('/'));
-        }
-
-        return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة'])->onlyInput('email');
-    }
-
-    // ════════════════════════════════════════
-    //  B2C LOGIN
-    // ════════════════════════════════════════
-    public function showB2cLogin()
-    {
-        if (Auth::check()) {
-            $user = Auth::user();
-            if ($user->account && $user->account->type === 'individual') {
-                return redirect()->to(url('/'));
-            }
-        }
-        return view('pages.auth.login-b2c');
-    }
-
-    public function loginB2c(Request $request)
-    {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
-
-        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            /** @var User $user */
             $user = Auth::user();
 
-            if (!$user->account || $user->account->type !== 'individual') {
-                $type = $user->account->type ?? '';
-                Auth::logout();
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
-                $hint = match($type) {
-                    'business', 'organization' => 'يرجى استخدام <a href="' . url('/b2b/login') . '">بوابة الأعمال</a>',
-                    'admin' => 'يرجى استخدام <a href="' . url('/admin/login') . '">بوابة الإدارة</a>',
-                    default => 'يرجى استخدام البوابة المناسبة',
-                };
-                return back()->withErrors(['email' => "هذا الحساب غير مسجّل كحساب فردي. {$hint}"])->onlyInput('email');
+            if ($this->isInternal($user)) {
+                return redirect()->route($this->internalHomeRouteName($user));
             }
 
-            $request->session()->regenerate();
-            $user->update(['last_login_at' => now()]);
-            return redirect()->to(url('/'));
-        }
-
-        return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة'])->onlyInput('email');
-    }
-
-    // ════════════════════════════════════════
-    //  ADMIN LOGIN
-    // ════════════════════════════════════════
-    public function showAdminLogin()
-    {
-        if (Auth::check()) return redirect()->route('dashboard');
-        return view('pages.auth.login-admin');
-    }
-
-    public function loginAdmin(Request $request)
-    {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
-
-        if (Auth::attempt($credentials, $request->boolean('remember'))) {
-            $user = Auth::user();
-            $isAdmin = $user->is_super_admin
-                || $user->role === 'admin'
-                || ($user->account && $user->account->type === 'admin');
-
-            if (!$isAdmin) {
-                $type = $user->account->type ?? '';
-                Auth::logout();
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
-                $hint = match($type) {
-                    'business', 'organization' => 'يرجى استخدام <a href="' . url('/b2b/login') . '">بوابة الأعمال</a>',
-                    'individual' => 'يرجى استخدام <a href="' . url('/b2c/login') . '">بوابة الأفراد</a>',
-                    default => 'يرجى استخدام البوابة المناسبة',
-                };
-                return back()->withErrors(['email' => "ليس لديك صلاحيات إدارية. {$hint}"])->onlyInput('email');
-            }
-
-            $request->session()->regenerate();
-            $user->update(['last_login_at' => now()]);
             return redirect()->route('dashboard');
         }
 
-        return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة'])->onlyInput('email');
+        return view('pages.auth.portal-selector');
     }
 
-    // ════════════════════════════════════════
-    //  LOGOUT — returns to correct portal login (استخدام url لتجنب Route not defined)
-    // ════════════════════════════════════════
-    public function logout(Request $request)
+    public function showB2bLogin(): RedirectResponse|View
     {
+        if (Auth::check()) {
+            /** @var User $user */
+            $user = Auth::user();
+
+            if ($this->isInternal($user)) {
+                return redirect()->route($this->internalHomeRouteName($user));
+            }
+
+            if ($user->account && $user->account->type === 'organization') {
+                return redirect()->route('b2b.dashboard');
+            }
+        }
+
+        return view('pages.auth.login-b2b');
+    }
+
+    public function loginB2b(Request $request): RedirectResponse
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+            return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة. تأكد من البريد وكلمة المرور ثم حاول مرة أخرى.'])->onlyInput('email');
+        }
+
+        /** @var User $user */
+        $user = Auth::user();
+        if ($inactiveResponse = $this->rejectInactiveUser($request, $user)) {
+            return $inactiveResponse;
+        }
+
+        if (! $user->account || $user->account->type !== 'organization') {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors([
+                'email' => $this->portalMismatchMessage($user, 'organization'),
+            ])->onlyInput('email');
+        }
+
+        $request->session()->regenerate();
+        $user->update(['last_login_at' => now()]);
+
+        return redirect()->route('b2b.dashboard');
+    }
+
+    public function showB2cLogin(): RedirectResponse|View
+    {
+        if (Auth::check()) {
+            /** @var User $user */
+            $user = Auth::user();
+
+            if ($this->isInternal($user)) {
+                return redirect()->route($this->internalHomeRouteName($user));
+            }
+
+            if ($user->account && $user->account->type === 'individual') {
+                return redirect()->route('b2c.dashboard');
+            }
+        }
+
+        return view('pages.auth.login-b2c');
+    }
+
+    public function loginB2c(Request $request): RedirectResponse
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+            return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة. تأكد من البريد وكلمة المرور ثم حاول مرة أخرى.'])->onlyInput('email');
+        }
+
+        /** @var User $user */
+        $user = Auth::user();
+        if ($inactiveResponse = $this->rejectInactiveUser($request, $user)) {
+            return $inactiveResponse;
+        }
+
+        if (! $user->account || $user->account->type !== 'individual') {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors([
+                'email' => $this->portalMismatchMessage($user, 'individual'),
+            ])->onlyInput('email');
+        }
+
+        $request->session()->regenerate();
+        $user->update(['last_login_at' => now()]);
+
+        return redirect()->route('b2c.dashboard');
+    }
+
+    public function showAdminLogin(): RedirectResponse|View
+    {
+        if (Auth::check()) {
+            /** @var User $user */
+            $user = Auth::user();
+
+            if ($this->isInternal($user)) {
+                return redirect()->route($this->internalHomeRouteName($user));
+            }
+
+            return redirect()->route('dashboard');
+        }
+
+        return view('pages.auth.login-admin');
+    }
+
+    public function loginAdmin(Request $request): RedirectResponse
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+            return back()->withErrors(['email' => 'بيانات الدخول غير صحيحة. تأكد من البريد وكلمة المرور ثم حاول مرة أخرى.'])->onlyInput('email');
+        }
+
+        /** @var User $user */
+        $user = Auth::user();
+        if ($inactiveResponse = $this->rejectInactiveUser($request, $user)) {
+            return $inactiveResponse;
+        }
+
+        if (! $this->isInternal($user)) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors([
+                'email' => 'هذا الحساب لا يملك وصولًا داخليًا. استخدم بوابة الأفراد للحسابات الفردية أو بوابة الأعمال لحسابات المنظمات بحسب نوع حسابك.',
+            ])->onlyInput('email');
+        }
+
+        $request->session()->regenerate();
+        $user->update(['last_login_at' => now()]);
+
+        return $this->postLoginRedirect($user);
+    }
+
+    public function logout(Request $request): RedirectResponse
+    {
+        /** @var User|null $user */
         $user = Auth::user();
         $loginUrl = url('/login');
 
         if ($user) {
-            $isAdmin = $user->is_super_admin || $user->role === 'admin';
-            $type = $user->account->type ?? '';
-
-            $loginUrl = match(true) {
-                $isAdmin, $type === 'admin' => url('/admin/login'),
-                $type === 'individual' => url('/b2c/login'),
-                in_array($type, ['business', 'organization'], true) => url('/b2b/login'),
+            $loginUrl = match (true) {
+                $this->isInternal($user) => url('/admin/login'),
+                optional($user->account)->type === 'individual' => url('/b2c/login'),
+                optional($user->account)->type === 'organization' => url('/b2b/login'),
                 default => url('/login'),
             };
+        }
+
+        Auth::logout();
+        WebTenantContext::clear($request);
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->to($loginUrl);
+    }
+
+    private function postLoginRedirect(User $user): RedirectResponse
+    {
+        if ($this->isInternal($user)) {
+            if (! $user->hasPermission('admin.access')) {
+                return redirect()->route('internal.home');
+            }
+
+            return redirect()->route('admin.index');
+        }
+
+        return redirect()->intended(url('/'));
+    }
+
+    private function internalHomeRouteName(User $user): string
+    {
+        return $user->hasPermission('admin.access') ? 'admin.index' : 'internal.home';
+    }
+
+    private function isInternal(User $user): bool
+    {
+        return ($user->user_type ?? null) === 'internal';
+    }
+
+    private function rejectInactiveUser(Request $request, User $user): ?RedirectResponse
+    {
+        $status = (string) ($user->status ?? '');
+        if (! in_array($status, ['suspended', 'disabled'], true)) {
+            return null;
         }
 
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->to($loginUrl);
+        return back()->withErrors([
+            'email' => $status === 'suspended'
+                ? 'تم تعليق هذا الحساب مؤقتًا. تواصل مع الدعم أو مدير الحساب لمراجعة حالة الوصول.'
+                : 'تم إيقاف هذا الحساب حاليًا. تواصل مع الدعم أو مدير الحساب لإعادة التفعيل.',
+        ])->onlyInput('email');
+    }
+
+    private function portalMismatchMessage(User $user, string $requiredType): string
+    {
+        if ($this->isInternal($user)) {
+            return 'هذا الحساب داخلي. استخدم البوابة الداخلية للمنصة بدل بوابات العملاء.';
+        }
+
+        $actualType = optional($user->account)->type;
+
+        if ($requiredType === 'organization') {
+            return $actualType === 'individual'
+                ? 'هذا الحساب فردي. استخدم بوابة الأفراد المخصصة للحسابات الفردية بدل بوابة الأعمال المخصصة لحسابات المنظمات.'
+                : 'هذا الحساب لا يتبع حساب منظمة. استخدم البوابة المناسبة لنوع الحساب.';
+        }
+
+        return $actualType === 'organization'
+            ? 'هذا الحساب يتبع منظمة. استخدم بوابة الأعمال المخصصة لحسابات المنظمات بدل بوابة الأفراد المخصصة للحسابات الفردية.'
+            : 'هذا الحساب لا يتبع حسابًا فرديًا. استخدم البوابة المناسبة لنوع الحساب.';
     }
 }

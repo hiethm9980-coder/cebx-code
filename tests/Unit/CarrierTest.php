@@ -67,7 +67,7 @@ class CarrierTest extends TestCase
     // FR-CR-001: Create Shipment at Carrier (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_at_carrier_returns_tracking_number(): void
     {
         $shipment = $this->createReadyShipment();
@@ -84,7 +84,7 @@ class CarrierTest extends TestCase
         $this->assertNotNull($carrierShipment->carrier_shipment_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_at_carrier_stores_carrier_reference(): void
     {
         $shipment = $this->createReadyShipment();
@@ -100,7 +100,7 @@ class CarrierTest extends TestCase
         $this->assertNotNull($carrierShipment->correlation_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_at_carrier_updates_shipment_status(): void
     {
         $shipment = $this->createReadyShipment();
@@ -116,7 +116,7 @@ class CarrierTest extends TestCase
         $this->assertEquals('1234567890', $shipment->tracking_number);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_at_carrier_rejects_non_purchased_shipment(): void
     {
         $shipment = Shipment::factory()->create([
@@ -129,7 +129,7 @@ class CarrierTest extends TestCase
         $this->service->createAtCarrier($shipment, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_at_carrier_rejects_missing_parcels(): void
     {
         $shipment = Shipment::factory()->create([
@@ -148,7 +148,7 @@ class CarrierTest extends TestCase
     // FR-CR-002: Receive & Store Label/Docs (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_label_stored_after_carrier_creation(): void
     {
         $shipment = $this->createReadyShipment();
@@ -163,7 +163,7 @@ class CarrierTest extends TestCase
         $this->assertTrue($carrierShipment->documents()->exists());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_label_document_has_correct_metadata(): void
     {
         $shipment = $this->createReadyShipment();
@@ -182,7 +182,7 @@ class CarrierTest extends TestCase
         $this->assertNotNull($label->checksum);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_multiple_documents_stored(): void
     {
         $shipment = $this->createReadyShipment();
@@ -203,7 +203,7 @@ class CarrierTest extends TestCase
         $this->assertEquals(2, $carrierShipment->documents()->count());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_label_pending_when_no_documents_returned(): void
     {
         $shipment = $this->createReadyShipment();
@@ -220,7 +220,7 @@ class CarrierTest extends TestCase
         $this->assertEquals(CarrierShipment::STATUS_LABEL_PENDING, $carrierShipment->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_document_content_decoded_correctly(): void
     {
         $shipment = $this->createReadyShipment();
@@ -241,7 +241,7 @@ class CarrierTest extends TestCase
     // FR-CR-003: Idempotency (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_idempotency_key_generated_consistently(): void
     {
         $shipmentId = 'test-shipment-id';
@@ -251,7 +251,7 @@ class CarrierTest extends TestCase
         $this->assertEquals($key1, $key2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_idempotency_key_differs_for_different_shipments(): void
     {
         $key1 = CarrierShipment::generateIdempotencyKey('shipment-1');
@@ -260,7 +260,7 @@ class CarrierTest extends TestCase
         $this->assertNotEquals($key1, $key2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_duplicate_creation_returns_same_result(): void
     {
         $shipment = $this->createReadyShipment();
@@ -279,7 +279,7 @@ class CarrierTest extends TestCase
         $this->assertEquals($result1->tracking_number, $result2->tracking_number);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_idempotency_key_unique_constraint(): void
     {
         $key = 'test-unique-key';
@@ -296,7 +296,7 @@ class CarrierTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_retry_uses_different_idempotency_flow(): void
     {
         $shipment = $this->createReadyShipment();
@@ -325,7 +325,7 @@ class CarrierTest extends TestCase
     // FR-CR-004: Normalized Error Model (6 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_error_logged_on_creation_failure(): void
     {
         $shipment = $this->createReadyShipment();
@@ -343,7 +343,7 @@ class CarrierTest extends TestCase
         $this->assertEquals(CarrierError::OP_CREATE_SHIPMENT, $errors->first()->operation);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_error_maps_dhl_500_to_internal_code(): void
     {
         $error = CarrierError::fromDhlResponse(
@@ -357,7 +357,7 @@ class CarrierTest extends TestCase
         $this->assertTrue($error->is_retriable);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_error_maps_dhl_401_to_auth_failed(): void
     {
         $error = CarrierError::fromDhlResponse(
@@ -371,7 +371,7 @@ class CarrierTest extends TestCase
         $this->assertFalse($error->is_retriable);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_error_maps_dhl_429_to_rate_limited(): void
     {
         $error = CarrierError::fromDhlResponse(
@@ -385,7 +385,7 @@ class CarrierTest extends TestCase
         $this->assertTrue($error->is_retriable);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_error_retry_backoff_calculation(): void
     {
         $error = CarrierError::factory()->create([
@@ -403,7 +403,7 @@ class CarrierTest extends TestCase
         $this->assertTrue($nextRetry2 > $nextRetry);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_error_marked_resolved(): void
     {
         $error = CarrierError::factory()->create(['was_resolved' => false]);
@@ -418,7 +418,7 @@ class CarrierTest extends TestCase
     // FR-CR-005: Re-fetch Label (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refetch_label_for_label_pending_shipment(): void
     {
         $shipment = Shipment::factory()->create([
@@ -446,7 +446,7 @@ class CarrierTest extends TestCase
         $this->assertEquals(CarrierShipment::STATUS_LABEL_READY, $carrierShipment->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refetch_label_with_different_format(): void
     {
         $shipment = Shipment::factory()->create([
@@ -472,7 +472,7 @@ class CarrierTest extends TestCase
         $this->assertEquals('zpl', $document->format);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refetch_label_fails_for_non_created_shipment(): void
     {
         $shipment = Shipment::factory()->create([
@@ -485,7 +485,7 @@ class CarrierTest extends TestCase
         $this->service->refetchLabel($shipment, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refetch_label_records_fetch_attempt(): void
     {
         $shipment = Shipment::factory()->create([
@@ -515,7 +515,7 @@ class CarrierTest extends TestCase
     // FR-CR-006: Cancel at Carrier (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_at_carrier_succeeds(): void
     {
         $shipment = Shipment::factory()->create([
@@ -539,7 +539,7 @@ class CarrierTest extends TestCase
         $this->assertNotNull($result->cancelled_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_updates_shipment_status(): void
     {
         $shipment = Shipment::factory()->create([
@@ -561,7 +561,7 @@ class CarrierTest extends TestCase
         $this->assertEquals(Shipment::STATUS_CANCELLED, $shipment->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_fails_for_already_cancelled(): void
     {
         $shipment = Shipment::factory()->create([
@@ -577,7 +577,7 @@ class CarrierTest extends TestCase
         $this->service->cancelAtCarrier($shipment, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_fails_after_deadline(): void
     {
         $shipment = Shipment::factory()->create([
@@ -596,7 +596,7 @@ class CarrierTest extends TestCase
         $this->service->cancelAtCarrier($shipment, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cancel_fails_when_carrier_rejects(): void
     {
         $shipment = Shipment::factory()->create([
@@ -621,7 +621,7 @@ class CarrierTest extends TestCase
     // FR-CR-007: Multiple Label Formats (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_with_pdf_format(): void
     {
         $shipment = $this->createReadyShipment();
@@ -635,7 +635,7 @@ class CarrierTest extends TestCase
         $this->assertEquals('pdf', $result->label_format);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_with_zpl_format(): void
     {
         $shipment = $this->createReadyShipment();
@@ -652,7 +652,7 @@ class CarrierTest extends TestCase
         $this->assertEquals('zpl', $result->label_format);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_uses_account_default_format(): void
     {
         $this->account->update(['settings' => ['label_format' => 'zpl', 'label_size' => '4x8']]);
@@ -672,7 +672,7 @@ class CarrierTest extends TestCase
     // FR-CR-008: Secure Document Download (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_download_document_returns_content(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -694,7 +694,7 @@ class CarrierTest extends TestCase
         $this->assertArrayNotHasKey('retail_rate', $result);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_download_increments_counter(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -715,7 +715,7 @@ class CarrierTest extends TestCase
         $this->assertNotNull($document->fresh()->last_downloaded_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_download_unavailable_document_fails(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -733,7 +733,7 @@ class CarrierTest extends TestCase
         $this->service->getDocumentForDownload($document->id, $shipment, $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_documents_returns_metadata_only(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);
@@ -757,7 +757,7 @@ class CarrierTest extends TestCase
         }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_document_print_count_tracking(): void
     {
         $document = CarrierDocument::factory()->create([
@@ -776,7 +776,7 @@ class CarrierTest extends TestCase
     // Model Tests (7 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_carrier_shipment_can_cancel_check(): void
     {
         $cs = CarrierShipment::factory()->labelReady()->create([
@@ -788,7 +788,7 @@ class CarrierTest extends TestCase
         $this->assertTrue($cs->canCancel());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_carrier_shipment_cannot_cancel_when_failed(): void
     {
         $cs = CarrierShipment::factory()->failed()->create([
@@ -798,7 +798,7 @@ class CarrierTest extends TestCase
         $this->assertFalse($cs->canCancel());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_carrier_shipment_retry_eligibility(): void
     {
         $cs = CarrierShipment::factory()->failed()->create([
@@ -812,7 +812,7 @@ class CarrierTest extends TestCase
         $this->assertFalse($cs->canRetry(3));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_document_download_url_validity(): void
     {
         $doc = CarrierDocument::factory()->withDownloadUrl()->create();
@@ -822,7 +822,7 @@ class CarrierTest extends TestCase
         $this->assertFalse($doc->isDownloadUrlValid());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_carrier_error_retriable_scope(): void
     {
         CarrierError::factory()->retriable()->create();
@@ -833,7 +833,7 @@ class CarrierTest extends TestCase
         $this->assertCount(1, $retriable);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_error_get_internal_message(): void
     {
         $msg = CarrierError::getInternalMessage(CarrierError::ERR_NETWORK_TIMEOUT);
@@ -843,7 +843,7 @@ class CarrierTest extends TestCase
         $this->assertStringContainsString('authentication', $msg);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_carrier_errors_list(): void
     {
         $shipment = Shipment::factory()->create(['account_id' => $this->account->id]);

@@ -210,9 +210,9 @@ class DataMaskingService
      */
     public static function filterFinancialData(array $data, ?User $user, bool $replaceWithNull = true): array
     {
-        $canViewFinancial = $user && ($user->is_owner || $user->hasPermission('financial:view'));
-        $canViewProfit    = $user && ($user->is_owner || $user->hasPermission('financial:profit.view'));
-        $canViewCards     = $user && ($user->is_owner || $user->hasPermission('financial:cards.view'));
+        $canViewFinancial = $user && $user->hasPermission('financial.view');
+        $canViewProfit    = $user && $user->hasPermission('financial.profit.view');
+        $canViewCards     = $user && $user->hasPermission('financial.cards.view');
 
         $result = $data;
 
@@ -272,7 +272,7 @@ class DataMaskingService
      */
     public static function canViewProfitData(?User $user): bool
     {
-        return $user && ($user->is_owner || $user->hasPermission('financial:profit.view'));
+        return $user && $user->hasPermission('financial.profit.view');
     }
 
     /**
@@ -280,7 +280,7 @@ class DataMaskingService
      */
     public static function canViewFinancialData(?User $user): bool
     {
-        return $user && ($user->is_owner || $user->hasPermission('financial:view'));
+        return $user && $user->hasPermission('financial.view');
     }
 
     /**
@@ -288,7 +288,7 @@ class DataMaskingService
      */
     public static function canViewCardData(?User $user): bool
     {
-        return $user && ($user->is_owner || $user->hasPermission('financial:cards.view'));
+        return $user && $user->hasPermission('financial.cards.view');
     }
 
     /**

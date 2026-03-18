@@ -201,14 +201,14 @@ class AuditLogController extends Controller
 
     private function assertCanViewAuditLog($user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('audit:view')) {
+        if (!$user->hasPermission('audit.view')) {
             throw \App\Exceptions\BusinessException::permissionDenied();
         }
     }
 
     private function assertCanExportAuditLog($user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('audit:export')) {
+        if (!$user->hasPermission('audit.export')) {
             throw \App\Exceptions\BusinessException::permissionDenied();
         }
     }

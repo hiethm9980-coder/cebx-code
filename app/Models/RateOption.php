@@ -24,7 +24,7 @@ class RateOption extends Model
         'profit_margin', 'currency',
         'estimated_days_min', 'estimated_days_max', 'estimated_delivery_at',
         'is_cheapest', 'is_fastest', 'is_best_value', 'is_recommended',
-        'pricing_rule_id', 'pricing_breakdown', 'rule_evaluation_log',
+        'pricing_rule_id', 'pricing_breakdown_id', 'pricing_breakdown', 'rule_evaluation_log',
         'is_available', 'unavailable_reason',
     ];
 
@@ -55,6 +55,7 @@ class RateOption extends Model
 
     public function rateQuote(): BelongsTo { return $this->belongsTo(RateQuote::class); }
     public function pricingRule(): BelongsTo { return $this->belongsTo(PricingRule::class); }
+    public function pricingBreakdownRecord(): BelongsTo { return $this->belongsTo(PricingBreakdown::class, 'pricing_breakdown_id'); }
 
     public function badges(): array
     {

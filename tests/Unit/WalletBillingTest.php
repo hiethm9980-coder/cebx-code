@@ -14,6 +14,7 @@ use App\Models\AuditLog;
 use App\Services\WalletBillingService;
 use App\Services\AuditService;
 use App\Exceptions\BusinessException;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-017 + FR-IAM-019 + FR-IAM-020: Unit Tests (26 tests)
@@ -21,6 +22,7 @@ use App\Exceptions\BusinessException;
 class WalletBillingTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected WalletBillingService $service;
     protected Account $account;
@@ -42,25 +44,23 @@ class WalletBillingTest extends TestCase
         ]);
 
         // Finance role: full wallet + billing
-        $financeRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['wallet:balance', 'wallet:ledger', 'wallet:topup', 'wallet:configure', 'billing:view', 'billing:manage'],
-        ]);
-        $this->financeUser = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $financeRole->id,
+        $financeRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['wallet.balance', 'wallet.ledger', 'wallet.topup', 'wallet.configure', 'billing.view', 'billing.manage'],
+            'wallet_finance'
+        );
+        $this->financeUser = $this->createUserWithRole((string) $this->account->id, (string) $financeRole->id, [
+            'is_owner' => false,
         ]);
 
         // Viewer: balance only
-        $viewerRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['wallet:balance'],
-        ]);
-        $this->viewer = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $viewerRole->id,
+        $viewerRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['wallet.balance'],
+            'wallet_viewer'
+        );
+        $this->viewer = $this->createUserWithRole((string) $this->account->id, (string) $viewerRole->id, [
+            'is_owner' => false,
         ]);
 
         $this->member = User::factory()->create([
@@ -73,7 +73,7 @@ class WalletBillingTest extends TestCase
     // Wallet: Get/Auto-Create
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function wallet_is_auto_created_on_first_access()
     {
         $wallet = $this->service->getWallet($this->account->id, $this->owner);
@@ -83,7 +83,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals('active', $wallet['status']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_sees_full_balance_details()
     {
         Wallet::factory()->withBalance(500)->create(['account_id' => $this->account->id]);
@@ -94,7 +94,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(500, (float) $wallet['available_balance']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function viewer_with_balance_permission_sees_details()
     {
         Wallet::factory()->withBalance(100)->create(['account_id' => $this->account->id]);
@@ -104,7 +104,7 @@ class WalletBillingTest extends TestCase
         $this->assertArrayHasKey('available_balance', $wallet);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_sees_masked_summary()
     {
         Wallet::factory()->withBalance(100)->create(['account_id' => $this->account->id]);
@@ -120,7 +120,7 @@ class WalletBillingTest extends TestCase
     // Wallet: Top-up
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_topup()
     {
         $entry = $this->service->recordTopUp(
@@ -134,7 +134,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(500, (float) $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function finance_user_can_topup()
     {
         $entry = $this->service->recordTopUp(
@@ -144,21 +144,21 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(200, (float) $entry->amount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_cannot_topup()
     {
         $this->expectException(BusinessException::class);
         $this->service->recordTopUp($this->account->id, 100, 'REF-X', $this->member);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function topup_zero_amount_rejected()
     {
         $this->expectException(BusinessException::class);
         $this->service->recordTopUp($this->account->id, 0, 'REF-Z', $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function topup_creates_ledger_entry()
     {
         $this->service->recordTopUp($this->account->id, 300, 'REF-003', $this->owner);
@@ -169,7 +169,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(300, (float) $entries->first()->running_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function topup_is_audit_logged()
     {
         $this->service->recordTopUp($this->account->id, 100, 'REF-AL', $this->owner);
@@ -185,7 +185,7 @@ class WalletBillingTest extends TestCase
     // Wallet: Debit
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function debit_reduces_balance()
     {
         Wallet::factory()->withBalance(1000)->create(['account_id' => $this->account->id]);
@@ -199,7 +199,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(750, (float) $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function debit_fails_on_insufficient_balance()
     {
         Wallet::factory()->withBalance(50)->create(['account_id' => $this->account->id]);
@@ -208,7 +208,7 @@ class WalletBillingTest extends TestCase
         $this->service->recordDebit($this->account->id, 100, 'shipment', 'SHP-X', $this->owner);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function debit_fails_on_frozen_wallet()
     {
         Wallet::factory()->frozen()->withBalance(1000)->create(['account_id' => $this->account->id]);
@@ -221,7 +221,7 @@ class WalletBillingTest extends TestCase
     // Wallet: Threshold
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_configure_threshold()
     {
         $wallet = $this->service->configureThreshold($this->account->id, 200.00, $this->owner);
@@ -229,7 +229,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(200, (float) $wallet['low_balance_threshold']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function low_balance_alert_triggers_on_debit()
     {
         $w = Wallet::factory()->withBalance(300)->withThreshold(250)->create(['account_id' => $this->account->id]);
@@ -243,7 +243,7 @@ class WalletBillingTest extends TestCase
         $this->assertNotNull($alert);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_cannot_configure_threshold()
     {
         $this->expectException(BusinessException::class);
@@ -254,7 +254,7 @@ class WalletBillingTest extends TestCase
     // Wallet: Ledger
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function finance_user_can_view_ledger()
     {
         Wallet::factory()->withBalance(1000)->create(['account_id' => $this->account->id]);
@@ -266,7 +266,7 @@ class WalletBillingTest extends TestCase
         $this->assertCount(2, $ledger['entries']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_cannot_view_ledger()
     {
         $this->expectException(BusinessException::class);
@@ -277,7 +277,7 @@ class WalletBillingTest extends TestCase
     // Payment Methods (Billing) — FR-IAM-017
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function finance_user_can_add_payment_method()
     {
         $method = $this->service->addPaymentMethod(
@@ -290,14 +290,14 @@ class WalletBillingTest extends TestCase
         $this->assertTrue($method->is_default); // First method is default
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_cannot_add_payment_method()
     {
         $this->expectException(BusinessException::class);
         $this->service->addPaymentMethod($this->account->id, ['provider' => 'visa'], $this->member);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function finance_user_can_list_payment_methods()
     {
         PaymentMethod::factory()->count(2)->create(['account_id' => $this->account->id]);
@@ -307,7 +307,7 @@ class WalletBillingTest extends TestCase
         $this->assertCount(2, $methods);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function finance_user_can_remove_payment_method()
     {
         $method = PaymentMethod::factory()->create(['account_id' => $this->account->id]);
@@ -321,7 +321,7 @@ class WalletBillingTest extends TestCase
     // FR-IAM-020: Disabled Account Masking
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function payment_data_masked_when_account_suspended()
     {
         PaymentMethod::factory()->count(3)->create(['account_id' => $this->account->id]);
@@ -339,7 +339,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(3, $allMasked);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function masked_cards_show_redacted_data()
     {
         $this->account->update(['status' => 'suspended']);
@@ -358,7 +358,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals('account_disabled', $safeData['mask_reason']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function payment_data_restored_on_reactivation()
     {
         PaymentMethod::factory()->masked()->count(2)->create(['account_id' => $this->account->id]);
@@ -375,7 +375,7 @@ class WalletBillingTest extends TestCase
         $this->assertEquals(2, $restored);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_add_payment_method_to_disabled_account()
     {
         $this->account->update(['status' => 'suspended']);
@@ -388,7 +388,7 @@ class WalletBillingTest extends TestCase
     // Permission List
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function permissions_list_contains_six_permissions()
     {
         $perms = WalletBillingService::walletPermissions();

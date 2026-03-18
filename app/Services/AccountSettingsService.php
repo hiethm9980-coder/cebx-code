@@ -233,7 +233,7 @@ class AccountSettingsService
 
     private function assertCanManageSettings(User $user): void
     {
-        if (!$user->is_owner && !$user->hasPermission('account:manage')) {
+        if (!$user->hasPermission('account.manage')) {
             $this->auditService->warning(
                 $user->account_id, $user->id,
                 'account.settings_access_denied', AuditLog::CATEGORY_SETTINGS,

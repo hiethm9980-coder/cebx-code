@@ -9,8 +9,10 @@ use App\Http\Requests\ListInvitationsRequest;
 use App\Http\Resources\InvitationResource;
 use App\Http\Resources\InvitationPreviewResource;
 use App\Http\Resources\UserResource;
+use App\Models\Invitation;
 use App\Services\InvitationService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class InvitationController extends Controller
 {
@@ -26,6 +28,8 @@ class InvitationController extends Controller
      */
     public function store(CreateInvitationRequest $request): JsonResponse
     {
+        $this->authorize('create', Invitation::class);
+
         $invitation = $this->invitationService->createInvitation(
             $request->validated(),
             $request->user()
@@ -34,7 +38,7 @@ class InvitationController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'تم إرسال الدعوة بنجاح.',
-            'data'    => new InvitationResource($invitation->load(['role', 'inviter'])),
+            'data'    => new InvitationResource($invitation),
         ], 201);
     }
 
@@ -44,8 +48,10 @@ class InvitationController extends Controller
      */
     public function index(ListInvitationsRequest $request): JsonResponse
     {
+        $this->authorize('viewAny', Invitation::class);
+
         $invitations = $this->invitationService->listInvitations(
-            $request->user()->account_id,
+            $this->currentAccountId($request),
             $request->validated()
         );
 
@@ -65,16 +71,19 @@ class InvitationController extends Controller
      * GET /api/v1/invitations/{id}
      * Show a single invitation.
      */
-    public function show(string $id): JsonResponse
+    public function show(Request $request, string $invitationId): JsonResponse
     {
+        $invitation = $this->findInvitationForCurrentTenant($request, $invitationId);
+        $this->authorize('view', $invitation);
+
         $invitation = $this->invitationService->getInvitation(
-            $id,
-            request()->user()->account_id
+            $invitationId,
+            $this->currentAccountId($request)
         );
 
         return response()->json([
             'success' => true,
-            'data'    => new InvitationResource($invitation->load(['role', 'inviter'])),
+            'data'    => new InvitationResource($invitation),
         ]);
     }
 
@@ -82,11 +91,14 @@ class InvitationController extends Controller
      * PATCH /api/v1/invitations/{id}/cancel
      * Cancel a pending invitation.
      */
-    public function cancel(string $id): JsonResponse
+    public function cancel(Request $request, string $invitationId): JsonResponse
     {
+        $invitation = $this->findInvitationForCurrentTenant($request, $invitationId);
+        $this->authorize('cancel', $invitation);
+
         $invitation = $this->invitationService->cancelInvitation(
-            $id,
-            request()->user()
+            $invitationId,
+            $request->user()
         );
 
         return response()->json([
@@ -100,17 +112,20 @@ class InvitationController extends Controller
      * POST /api/v1/invitations/{id}/resend
      * Resend a pending invitation (new token + reset TTL).
      */
-    public function resend(string $id): JsonResponse
+    public function resend(Request $request, string $invitationId): JsonResponse
     {
+        $invitation = $this->findInvitationForCurrentTenant($request, $invitationId);
+        $this->authorize('resend', $invitation);
+
         $invitation = $this->invitationService->resendInvitation(
-            $id,
-            request()->user()
+            $invitationId,
+            $request->user()
         );
 
         return response()->json([
             'success' => true,
             'message' => 'تم إعادة إرسال الدعوة بنجاح.',
-            'data'    => new InvitationResource($invitation->load(['role', 'inviter'])),
+            'data'    => new InvitationResource($invitation),
         ]);
     }
 
@@ -149,5 +164,26 @@ class InvitationController extends Controller
                 'invitation' => new InvitationResource($result['invitation']),
             ],
         ], 201);
+    }
+
+    private function currentAccountId(Request $request): string
+    {
+        $currentAccountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($currentAccountId !== '') {
+            return $currentAccountId;
+        }
+
+        return trim((string) $request->user()->account_id);
+    }
+
+    private function findInvitationForCurrentTenant(Request $request, string $id): Invitation
+    {
+        return Invitation::withoutGlobalScopes()
+            ->where('account_id', $this->currentAccountId($request))
+            ->where('id', $id)
+            ->firstOrFail();
     }
 }

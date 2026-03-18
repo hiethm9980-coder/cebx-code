@@ -27,17 +27,19 @@ class KycComplianceApiTest extends TestCase
         parent::setUp();
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
-    /** @test FR-KYC-001 */
+    // FR-KYC-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_case(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/kyc/cases', ['account_type' => 'individual']);
         $response->assertStatus(201)->assertJsonPath('data.status', 'unverified');
     }
 
-    /** @test FR-KYC-001 */
+    // FR-KYC-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_case(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -45,7 +47,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.id', $case->id);
     }
 
-    /** @test FR-KYC-001 */
+    // FR-KYC-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_status(): void
     {
         VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -53,7 +56,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonStructure(['data' => ['status', 'is_verified']]);
     }
 
-    /** @test FR-KYC-002 */
+    // FR-KYC-002
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_upload_document(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -64,7 +68,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('data.document_type', 'national_id');
     }
 
-    /** @test FR-KYC-003 */
+    // FR-KYC-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_submit_for_review(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id, 'required_documents' => ['national_id']]);
@@ -74,7 +79,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.status', 'pending_review');
     }
 
-    /** @test FR-KYC-003 */
+    // FR-KYC-003
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_submit_fails_without_docs(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id, 'required_documents' => ['national_id']]);
@@ -82,7 +88,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertStatus(500); // RuntimeException
     }
 
-    /** @test FR-KYC-004 */
+    // FR-KYC-004
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_check_restriction(): void
     {
         VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -90,7 +97,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonStructure(['data' => ['allowed']]);
     }
 
-    /** @test FR-KYC-004 */
+    // FR-KYC-004
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_restrictions(): void
     {
         VerificationRestriction::create([
@@ -101,7 +109,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-KYC-004 */
+    // FR-KYC-004
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_restriction(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/kyc/restrictions', [
@@ -112,7 +121,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test FR-KYC-005 */
+    // FR-KYC-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_pending(): void
     {
         VerificationCase::factory()->pending()->count(2)->create(['account_id' => $this->account->id]);
@@ -120,7 +130,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-KYC-005 */
+    // FR-KYC-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_approve_case(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);
@@ -128,7 +139,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.status', 'verified');
     }
 
-    /** @test FR-KYC-005 */
+    // FR-KYC-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_reject_case(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);
@@ -138,7 +150,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.status', 'rejected');
     }
 
-    /** @test FR-KYC-006 */
+    // FR-KYC-006
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_status_display(): void
     {
         VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -146,7 +159,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonStructure(['data' => ['status', 'banner_message', 'restrictions']]);
     }
 
-    /** @test FR-KYC-007 */
+    // FR-KYC-007
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_document_download(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -156,7 +170,8 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk()->assertJsonStructure(['data' => ['url']]);
     }
 
-    /** @test FR-KYC-008 */
+    // FR-KYC-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_audit_log(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);
@@ -166,21 +181,24 @@ class KycComplianceApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test FR-KYC-008 */
+    // FR-KYC-008
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_export_audit_log(): void
     {
         $response = $this->actingAs($this->user)->getJson('/api/v1/kyc/audit-log/export');
         $response->assertOk();
     }
 
-    /** @test FR-KYC-001 */
+    // FR-KYC-001
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_org_case(): void
     {
         $response = $this->actingAs($this->user)->postJson('/api/v1/kyc/cases', ['account_type' => 'organization']);
         $response->assertStatus(201)->assertJsonPath('data.account_type', 'organization');
     }
 
-    /** @test FR-KYC-005 */
+    // FR-KYC-005
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_needs_more_info(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);

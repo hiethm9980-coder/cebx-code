@@ -20,6 +20,7 @@ class Role extends Model
     protected $fillable = [
         'account_id',
         'name',
+        'slug',
         'display_name',
         'description',
         'is_system',

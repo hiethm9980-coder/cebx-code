@@ -33,7 +33,7 @@ class PricingEngineTest extends TestCase
         $this->engine = $this->app->make(PricingEngineService::class);
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
     private function baseContext(array $overrides = []): array
@@ -61,7 +61,7 @@ class PricingEngineTest extends TestCase
     // FR-BRP-001: Explainable Pricing (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_pricing_is_deterministic(): void
     {
         PricingRule::factory()->create([
@@ -76,7 +76,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals($b1->retail_rate, $b2->retail_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_breakdown_has_correlation_id(): void
     {
         $b = $this->engine->calculatePrice($this->account->id, 50, $this->baseContext());
@@ -84,7 +84,7 @@ class PricingEngineTest extends TestCase
         $this->assertStringStartsWith('PRC-', $b->correlation_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_breakdown_records_applied_rules(): void
     {
         PricingRule::factory()->create([
@@ -96,7 +96,7 @@ class PricingEngineTest extends TestCase
         $this->assertIsArray($b->applied_rules);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_breakdown_stores_inputs(): void
     {
         $b = $this->engine->calculatePrice($this->account->id, 75, $this->baseContext(['weight' => 10]));
@@ -105,7 +105,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(75, $b->net_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_no_rules_returns_net_rate(): void
     {
         $b = $this->engine->calculatePrice($this->account->id, 100, $this->baseContext());
@@ -117,7 +117,7 @@ class PricingEngineTest extends TestCase
     // FR-BRP-002: Conditional Rules (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rule_matches_carrier(): void
     {
         PricingRule::factory()->create([
@@ -133,7 +133,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(25, $b->markup_amount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rule_matches_weight_range(): void
     {
         PricingRule::factory()->create([
@@ -152,7 +152,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(10, $b->markup_amount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rule_matches_destination(): void
     {
         PricingRule::factory()->create([
@@ -164,7 +164,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(30, $b->markup_amount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_fallback_rule(): void
     {
         PricingRule::factory()->create([
@@ -181,7 +181,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(10, $b->markup_amount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_shipment_type_domestic_vs_international(): void
     {
         PricingRule::factory()->create([
@@ -200,7 +200,7 @@ class PricingEngineTest extends TestCase
     // FR-BRP-003: Service Fee (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_fixed_service_fee(): void
     {
         PricingRule::factory()->create([
@@ -213,7 +213,7 @@ class PricingEngineTest extends TestCase
         $this->assertGreaterThanOrEqual(100, $b->retail_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_percentage_service_fee(): void
     {
         PricingRule::factory()->create([
@@ -225,7 +225,7 @@ class PricingEngineTest extends TestCase
         $this->assertGreaterThanOrEqual(100, $b->retail_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_service_fee_separate_from_markup(): void
     {
         PricingRule::factory()->create([
@@ -241,7 +241,7 @@ class PricingEngineTest extends TestCase
     // FR-BRP-004: Guardrails (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_min_price_guardrail(): void
     {
         PricingRule::factory()->create([
@@ -254,7 +254,7 @@ class PricingEngineTest extends TestCase
         $this->assertGreaterThanOrEqual(80, (float) $b->retail_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_min_profit_guardrail(): void
     {
         PricingRule::factory()->create([
@@ -268,7 +268,7 @@ class PricingEngineTest extends TestCase
         $this->assertGreaterThanOrEqual(20, $profit);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_guardrail_adjustments_recorded(): void
     {
         PricingRule::factory()->create([
@@ -280,7 +280,7 @@ class PricingEngineTest extends TestCase
         $this->assertNotNull($b->guardrail_adjustments);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_no_guardrail_when_price_sufficient(): void
     {
         PricingRule::factory()->create([
@@ -296,34 +296,39 @@ class PricingEngineTest extends TestCase
     // FR-BRP-005: Rounding (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_round_up(): void
     {
         $policy = RoundingPolicy::create(['currency' => 'SAR', 'method' => 'up', 'precision' => 0, 'step' => 1]);
         $this->assertEquals(51, $policy->apply(50.1));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_round_down(): void
     {
         $policy = RoundingPolicy::create(['currency' => 'USD', 'method' => 'down', 'precision' => 0, 'step' => 1]);
         $this->assertEquals(50, $policy->apply(50.9));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_round_nearest(): void
     {
         $policy = RoundingPolicy::create(['currency' => 'AED', 'method' => 'nearest', 'precision' => 1, 'step' => 0.5]);
         $this->assertEquals(50.5, $policy->apply(50.3));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rounding_in_pricing_engine(): void
     {
         RoundingPolicy::create(['currency' => 'SAR', 'method' => 'up', 'precision' => 0, 'step' => 1]);
         PricingRule::factory()->create([
             'account_id' => $this->account->id,
-            'markup_percentage' => 15, 'is_active' => true,
+            'markup_percentage' => 15,
+            'service_fee_fixed' => 0,
+            'service_fee_percentage' => 0,
+            'min_profit' => 0,
+            'min_retail_price' => 0,
+            'is_active' => true,
         ]);
 
         $b = $this->engine->calculatePrice($this->account->id, 33.33, $this->baseContext());
@@ -336,14 +341,14 @@ class PricingEngineTest extends TestCase
     // FR-BRP-006: Store Breakdown (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_breakdown_stored(): void
     {
         $b = $this->engine->calculatePrice($this->account->id, 100, $this->baseContext(), 'rate_quote', 'RQ-123');
         $this->assertDatabaseHas('pricing_breakdowns', ['entity_type' => 'rate_quote', 'entity_id' => 'RQ-123']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_retrieve_breakdown_by_entity(): void
     {
         $this->engine->calculatePrice($this->account->id, 100, $this->baseContext(), 'shipment', 'SH-456');
@@ -352,7 +357,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(100, $found->net_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_retrieve_breakdown_by_correlation(): void
     {
         $b = $this->engine->calculatePrice($this->account->id, 100, $this->baseContext());
@@ -365,7 +370,7 @@ class PricingEngineTest extends TestCase
     // FR-BRP-007: Expired Plan Surcharge (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_expired_surcharge_applied(): void
     {
         $this->engine->setExpiredPlanPolicy(null, 'surcharge_percent', 25, 'Expired plan +25%');
@@ -382,7 +387,7 @@ class PricingEngineTest extends TestCase
         $this->assertGreaterThan(120, (float) $b->retail_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_active_plan_no_surcharge(): void
     {
         $this->engine->setExpiredPlanPolicy(null, 'surcharge_percent', 25);
@@ -391,7 +396,7 @@ class PricingEngineTest extends TestCase
         $this->assertFalse($b->expired_plan_surcharge);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_fixed_expired_surcharge(): void
     {
         $this->engine->setExpiredPlanPolicy(null, 'surcharge_fixed', 15, 'Flat penalty');
@@ -403,7 +408,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(115, (float) $b->retail_rate);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_plan_specific_surcharge(): void
     {
         $this->engine->setExpiredPlanPolicy('free', 'surcharge_percent', 50);
@@ -420,7 +425,7 @@ class PricingEngineTest extends TestCase
     // FR-BRP-008: Rule Priority (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_higher_priority_rule_wins(): void
     {
         PricingRule::factory()->create([
@@ -436,7 +441,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(10, $b->markup_amount); // Priority 1 wins
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rule_set_versioning(): void
     {
         $set = PricingRuleSet::factory()->create(['account_id' => $this->account->id]);
@@ -447,7 +452,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(PricingRuleSet::STATUS_DRAFT, $v2->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_activate_deactivates_previous(): void
     {
         $set1 = PricingRuleSet::factory()->create(['account_id' => $this->account->id]);
@@ -458,7 +463,7 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(PricingRuleSet::STATUS_ACTIVE, $set2->fresh()->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_rule_set(): void
     {
         $set = $this->engine->createRuleSet($this->account->id, 'Test Rules', $this->user->id);

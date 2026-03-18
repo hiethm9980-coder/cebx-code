@@ -10,6 +10,20 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             DemoSeeder::class,
+            RolesAndPermissionsSeeder::class,
+            NotificationTemplateSeeder::class,
+            WaiverVersionSeeder::class,
         ]);
+
+        if ($this->shouldSeedE2EMatrix()) {
+            $this->call([
+                E2EUserMatrixSeeder::class,
+            ]);
+        }
+    }
+
+    private function shouldSeedE2EMatrix(): bool
+    {
+        return filter_var((string) env('SEED_E2E_MATRIX', false), FILTER_VALIDATE_BOOLEAN);
     }
 }

@@ -2,15 +2,14 @@
 
 namespace App\Exceptions;
 
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
-/**
- * FIX H-08: التمييز بين طلبات API وطلبات الويب
- */
 class Handler extends ExceptionHandler
 {
     protected $dontFlash = [
@@ -19,22 +18,44 @@ class Handler extends ExceptionHandler
         'password_confirmation',
     ];
 
+    public function render($request, Throwable $exception): Response
+    {
+        $isBrowserRequest = ! $request->expectsJson() && ! $request->is('api/*');
+        $isHandledClientException = $exception instanceof ValidationException
+            || $exception instanceof AuthenticationException
+            || $exception instanceof AuthorizationException
+            || $exception instanceof NotFoundHttpException;
+
+        if ($isBrowserRequest && ! $isHandledClientException) {
+            $statusCode = method_exists($exception, 'getStatusCode')
+                ? (int) $exception->getStatusCode()
+                : 500;
+
+            if ($statusCode >= 500) {
+                return response()->view('errors.500', [
+                    'exception' => $exception,
+                ], 500);
+            }
+        }
+
+        return parent::render($request, $exception);
+    }
+
     public function register(): void
     {
-        $this->renderable(function (ValidationException $e) {
+        $this->renderable(function (ValidationException $exception) {
             $request = request();
 
-            // FIX H-08: إرجاع JSON فقط لطلبات API
-            if (!$request->expectsJson() && !$request->is('api/*')) {
-                return null; // السماح لـ Laravel بالتعامل الافتراضي (redirect مع errors)
+            if (! $request->expectsJson() && ! $request->is('api/*')) {
+                return null;
             }
 
-            $errors = $e->errors();
+            $errors = $exception->errors();
             $errorCode = 'ERR_INVALID_INPUT';
 
             if (isset($errors['email'])) {
-                foreach ($errors['email'] as $msg) {
-                    if (str_contains($msg, 'ERR_DUPLICATE_EMAIL')) {
+                foreach ($errors['email'] as $message) {
+                    if (str_contains($message, 'ERR_DUPLICATE_EMAIL')) {
                         $errorCode = 'ERR_DUPLICATE_EMAIL';
                         break;
                     }
@@ -42,57 +63,98 @@ class Handler extends ExceptionHandler
             }
 
             return response()->json([
-                'success'    => false,
+                'success' => false,
                 'error_code' => $errorCode,
-                'message'    => 'فشل التحقق من صحة البيانات.',
-                'errors'     => $errors,
+                'message' => 'فشل التحقق من صحة البيانات.',
+                'errors' => $errors,
             ], 422);
         });
 
-        $this->renderable(function (AuthenticationException $e) {
+        $this->renderable(function (AuthenticationException $exception) {
             $request = request();
+
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
-                    'success'    => false,
+                    'success' => false,
                     'error_code' => 'ERR_UNAUTHENTICATED',
-                    'message'    => 'يرجى تسجيل الدخول.',
+                    'message' => 'يرجى تسجيل الدخول.',
                 ], 401);
             }
-            return null; // السماح بإعادة التوجيه لصفحة الدخول
+
+            return null;
         });
 
-        $this->renderable(function (NotFoundHttpException $e) {
+        $this->renderable(function (AuthorizationException $exception) {
             $request = request();
 
-            // FIX H-08: إرجاع JSON فقط لطلبات API
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
-                    'success'    => false,
+                    'success' => false,
+                    'error_code' => 'ERR_PERMISSION',
+                    'message' => $exception->getMessage() !== ''
+                        ? $exception->getMessage()
+                        : 'غير مصرح لك بتنفيذ هذا الإجراء.',
+                ], 403);
+            }
+
+            return null;
+        });
+
+        $this->renderable(function (NotFoundHttpException $exception) {
+            $request = request();
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
                     'error_code' => 'ERR_NOT_FOUND',
-                    'message'    => 'المورد المطلوب غير موجود.',
+                    'message' => 'المورد المطلوب غير موجود.',
                 ], 404);
             }
 
-            // لطلبات الويب — عرض صفحة 404
             return null;
         });
 
-        // معالجة BusinessException
-        $this->renderable(function (BusinessException $e) {
+        $this->renderable(function (BusinessException $exception) {
             $request = request();
+
             if ($request->expectsJson() || $request->is('api/*')) {
-                return response()->json([
-                    'success'    => false,
-                    'error_code' => $e->getErrorCode(),
-                    'message'    => $e->getMessage(),
-                ], $e->getStatusCode());
+                $payload = [
+                    'success' => false,
+                    'error_code' => $exception->getErrorCode(),
+                    'message' => $exception->getMessage(),
+                ];
+
+                if ($exception->getContext() !== []) {
+                    $payload['context'] = $exception->getContext();
+                }
+
+                return response()->json($payload, $exception->getStatusCode());
             }
+
             return null;
         });
 
-        // عدم كشف تفاصيل الأخطاء في الإنتاج
-        $this->reportable(function (Throwable $e) {
-            // Log all exceptions for monitoring
+        $this->renderable(function (Throwable $exception) {
+            $request = request();
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return null;
+            }
+
+            if ($exception instanceof ValidationException
+                || $exception instanceof AuthenticationException
+                || $exception instanceof AuthorizationException
+                || $exception instanceof NotFoundHttpException) {
+                return null;
+            }
+
+            return response()->view('errors.500', [
+                'exception' => $exception,
+            ], 500);
+        });
+
+        $this->reportable(function (Throwable $exception) {
+            // Keep Laravel default reporting pipeline active for observability.
         });
     }
 }

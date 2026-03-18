@@ -3,66 +3,56 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\PaymentMethod;
+use App\Models\Wallet;
 use App\Services\WalletBillingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * WalletBillingController — FR-IAM-017 + FR-IAM-019 + FR-IAM-020
- *
- * Wallet: balance, ledger, top-up, threshold
- * Billing: payment methods CRUD, masking for disabled accounts
- */
 class WalletBillingController extends Controller
 {
     public function __construct(
         protected WalletBillingService $service
     ) {}
 
-    // ─── Wallet ──────────────────────────────────────────────────
-
-    /**
-     * GET /api/v1/wallet
-     */
     public function wallet(Request $request): JsonResponse
     {
-        $wallet = $this->service->getWallet(
-            $request->user()->account_id,
-            $request->user()
-        );
+        $accountId = $this->currentAccountId();
+
+        $this->authorize('view', $this->policyWallet($accountId));
+
+        $wallet = $this->service->getWallet($accountId, $request->user());
 
         return response()->json(['success' => true, 'data' => $wallet]);
     }
 
-    /**
-     * GET /api/v1/wallet/ledger
-     */
     public function ledger(Request $request): JsonResponse
     {
+        $accountId = $this->currentAccountId();
+
+        $this->authorize('viewLedger', $this->policyWallet($accountId));
+
         $filters = $request->only(['type', 'from', 'to', 'limit']);
 
-        $data = $this->service->getLedger(
-            $request->user()->account_id,
-            $request->user(),
-            $filters
-        );
+        $data = $this->service->getLedger($accountId, $request->user(), $filters);
 
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    /**
-     * POST /api/v1/wallet/topup
-     */
     public function topUp(Request $request): JsonResponse
     {
+        $accountId = $this->currentAccountId();
+
+        $this->authorize('topup', $this->policyWallet($accountId));
+
         $request->validate([
-            'amount'       => 'required|numeric|min:1|max:999999',
+            'amount' => 'required|numeric|min:1|max:999999',
             'reference_id' => 'required|string|max:100',
-            'description'  => 'sometimes|string|max:500',
+            'description' => 'sometimes|string|max:500',
         ]);
 
         $entry = $this->service->recordTopUp(
-            $request->user()->account_id,
+            $accountId,
             (float) $request->amount,
             $request->reference_id,
             $request->user(),
@@ -71,112 +61,129 @@ class WalletBillingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'تم شحن الرصيد بنجاح.',
-            'data'    => [
-                'entry_id'        => $entry->id,
-                'amount'          => $entry->amount,
+            'message' => 'Wallet topped up successfully.',
+            'data' => [
+                'entry_id' => $entry->id,
+                'amount' => $entry->amount,
                 'running_balance' => $entry->running_balance,
             ],
         ], 201);
     }
 
-    /**
-     * PUT /api/v1/wallet/threshold
-     */
     public function configureThreshold(Request $request): JsonResponse
     {
+        $accountId = $this->currentAccountId();
+
+        $this->authorize('configure', $this->policyWallet($accountId));
+
         $request->validate([
             'threshold' => 'nullable|numeric|min:0|max:999999',
         ]);
 
         $wallet = $this->service->configureThreshold(
-            $request->user()->account_id,
+            $accountId,
             $request->threshold !== null ? (float) $request->threshold : null,
             $request->user()
         );
 
         return response()->json([
             'success' => true,
-            'message' => 'تم تحديث حد التنبيه.',
-            'data'    => $wallet,
+            'message' => 'Wallet threshold updated.',
+            'data' => $wallet,
         ]);
     }
 
-    // ─── Billing / Payment Methods ───────────────────────────────
-
-    /**
-     * GET /api/v1/billing/methods
-     */
     public function paymentMethods(Request $request): JsonResponse
     {
-        $methods = $this->service->listPaymentMethods(
-            $request->user()->account_id,
-            $request->user()
-        );
+        $accountId = $this->currentAccountId();
+
+        $this->authorize('viewPaymentMethods', $this->policyWallet($accountId));
+
+        $methods = $this->service->listPaymentMethods($accountId, $request->user());
 
         return response()->json([
             'success' => true,
-            'data'    => $methods,
-            'meta'    => ['count' => count($methods)],
+            'data' => $methods,
+            'meta' => ['count' => count($methods)],
         ]);
     }
 
-    /**
-     * POST /api/v1/billing/methods
-     */
     public function addPaymentMethod(Request $request): JsonResponse
     {
-        $request->validate([
-            'type'               => 'sometimes|in:card,bank_transfer,wallet_gateway',
-            'label'              => 'sometimes|string|max:100',
-            'provider'           => 'sometimes|string|max:50',
-            'last_four'          => 'sometimes|string|size:4',
-            'expiry_month'       => 'sometimes|string|size:2',
-            'expiry_year'        => 'sometimes|string|size:4',
-            'cardholder_name'    => 'sometimes|string|max:150',
-            'gateway_token'      => 'sometimes|string|max:500',
+        $accountId = $this->currentAccountId();
+
+        $this->authorize('managePaymentMethods', $this->policyWallet($accountId));
+
+        $payload = $request->validate([
+            'type' => 'sometimes|in:card,bank_transfer,wallet_gateway',
+            'label' => 'sometimes|string|max:100',
+            'provider' => 'sometimes|string|max:50',
+            'last_four' => 'sometimes|string|size:4',
+            'expiry_month' => 'sometimes|string|size:2',
+            'expiry_year' => 'sometimes|string|size:4',
+            'cardholder_name' => 'sometimes|string|max:150',
+            'gateway_token' => 'sometimes|string|max:500',
             'gateway_customer_id' => 'sometimes|string|max:255',
         ]);
 
         $method = $this->service->addPaymentMethod(
-            $request->user()->account_id,
-            $request->validated(),
+            $accountId,
+            $payload,
             $request->user()
         );
 
         return response()->json([
             'success' => true,
-            'message' => 'تم إضافة وسيلة الدفع.',
-            'data'    => $method->toSafeArray(),
+            'message' => 'Payment method added.',
+            'data' => $method->toSafeArray(),
         ], 201);
     }
 
-    /**
-     * DELETE /api/v1/billing/methods/{id}
-     */
     public function removePaymentMethod(Request $request, string $id): JsonResponse
     {
-        $this->service->removePaymentMethod(
-            $request->user()->account_id,
-            $id,
-            $request->user()
-        );
+        $accountId = $this->currentAccountId();
+
+        $method = PaymentMethod::withoutGlobalScopes()
+            ->where('account_id', $accountId)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $this->authorize('managePaymentMethods', $this->policyWallet((string) $method->account_id));
+
+        $this->service->removePaymentMethod($accountId, $id, $request->user());
 
         return response()->json([
             'success' => true,
-            'message' => 'تم إزالة وسيلة الدفع.',
+            'message' => 'Payment method removed.',
         ]);
     }
 
-    /**
-     * GET /api/v1/wallet/permissions
-     * Returns available wallet/billing permissions for RBAC setup.
-     */
     public function permissions(): JsonResponse
     {
         return response()->json([
             'success' => true,
-            'data'    => WalletBillingService::walletPermissions(),
+            'data' => WalletBillingService::walletPermissions(),
         ]);
+    }
+
+    private function currentAccountId(): string
+    {
+        $accountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($accountId !== '') {
+            return $accountId;
+        }
+
+        return trim((string) request()->user()?->account_id);
+    }
+
+    private function policyWallet(string $accountId): Wallet
+    {
+        $wallet = new Wallet();
+        $wallet->forceFill(['account_id' => $accountId]);
+
+        return $wallet;
     }
 }

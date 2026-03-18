@@ -23,6 +23,8 @@ class WalletLedgerEntry extends Model
         'wallet_id', 'type', 'amount', 'running_balance',
         'reference_type', 'reference_id', 'actor_user_id',
         'description', 'metadata', 'created_at',
+        'sequence', 'correlation_id', 'transaction_type', 'direction',
+        'reversal_of', 'created_by', 'notes',
     ];
 
     protected $casts = [

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\Account;
 use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\User;
@@ -12,6 +13,7 @@ use App\Events\InvitationAccepted;
 use App\Events\InvitationCancelled;
 use App\Events\InvitationResent;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class InvitationService
@@ -70,19 +72,35 @@ class InvitationService
         // 4. Create the invitation
         return DB::transaction(function () use ($data, $performer, $accountId, $email) {
             $ttlHours = $data['ttl_hours'] ?? self::DEFAULT_TTL_HOURS;
-
-            $invitation = Invitation::withoutGlobalScopes()->create([
+            $invitationPayload = [
                 'account_id' => $accountId,
-                'email'      => $email,
-                'name'       => $data['name'] ?? null,
-                'role_id'    => $data['role_id'] ?? null,
-                'token'      => $this->generateSecureToken(),
-                'status'     => Invitation::STATUS_PENDING,
-                'invited_by' => $performer->id,
+                'email' => $email,
+                'name' => $data['name'] ?? null,
+                'token' => $this->generateSecureToken(),
+                'status' => Invitation::STATUS_PENDING,
                 'expires_at' => now()->addHours($ttlHours),
-                'last_sent_at' => now(),
-                'send_count' => 1,
-            ]);
+            ];
+
+            if (Schema::hasColumn('invitations', 'role_id')) {
+                $invitationPayload['role_id'] = $data['role_id'] ?? null;
+            } elseif (Schema::hasColumn('invitations', 'role_name') && !empty($data['role_id'])) {
+                $role = Role::withoutGlobalScopes()->find($data['role_id']);
+                $invitationPayload['role_name'] = $role?->name ?? $role?->slug ?? $role?->display_name ?? null;
+            }
+
+            if (Schema::hasColumn('invitations', 'invited_by')) {
+                $invitationPayload['invited_by'] = $performer->id;
+            }
+
+            if (Schema::hasColumn('invitations', 'last_sent_at')) {
+                $invitationPayload['last_sent_at'] = now();
+            }
+
+            if (Schema::hasColumn('invitations', 'send_count')) {
+                $invitationPayload['send_count'] = 1;
+            }
+
+            $invitation = Invitation::withoutGlobalScopes()->create($invitationPayload);
 
             $this->logAction(
                 $accountId,
@@ -93,7 +111,7 @@ class InvitationService
                 null,
                 [
                     'email'      => $email,
-                    'role_id'    => $invitation->role_id,
+                    'role_id'    => $data['role_id'] ?? null,
                     'expires_at' => $invitation->expires_at->toISOString(),
                 ]
             );
@@ -149,6 +167,8 @@ class InvitationService
             throw BusinessException::emailAlreadyInAccount();
         }
 
+        $this->assertAccountAllowsTeamManagement((string) $invitation->account_id);
+
         return DB::transaction(function () use ($invitation, $userData) {
             // 1. Create the user
             $user = User::withoutGlobalScopes()->create([
@@ -164,22 +184,26 @@ class InvitationService
             ]);
 
             // 2. Assign role if specified
-            if ($invitation->role_id) {
-                $role = Role::withoutGlobalScopes()->find($invitation->role_id);
-                if ($role) {
-                    $user->roles()->attach($role->id, [
-                        'assigned_by' => $invitation->invited_by,
-                        'assigned_at' => now(),
-                    ]);
+            $role = $invitation->resolvedRole();
+            if ($role) {
+                $roleAssignment = ['assigned_at' => now()];
+
+                if (Schema::hasColumn('user_role', 'assigned_by')) {
+                    $roleAssignment['assigned_by'] = $invitation->invited_by;
                 }
+
+                $user->roles()->attach($role->id, $roleAssignment);
             }
 
             // 3. Update invitation status
-            $invitation->update([
-                'status'      => Invitation::STATUS_ACCEPTED,
-                'accepted_by' => $user->id,
-                'accepted_at' => now(),
-            ]);
+            $acceptedPayload = ['status' => Invitation::STATUS_ACCEPTED];
+            if (Schema::hasColumn('invitations', 'accepted_by')) {
+                $acceptedPayload['accepted_by'] = $user->id;
+            }
+            if (Schema::hasColumn('invitations', 'accepted_at')) {
+                $acceptedPayload['accepted_at'] = now();
+            }
+            $invitation->update($acceptedPayload);
 
             // 4. Audit log
             $this->logAction(
@@ -193,7 +217,7 @@ class InvitationService
                     'status'      => Invitation::STATUS_ACCEPTED,
                     'accepted_by' => $user->id,
                     'user_name'   => $user->name,
-                    'role_id'     => $invitation->role_id,
+                    'role_id'     => $role?->id,
                 ]
             );
 
@@ -224,10 +248,11 @@ class InvitationService
         }
 
         return DB::transaction(function () use ($invitation, $performer) {
-            $invitation->update([
-                'status'       => Invitation::STATUS_CANCELLED,
-                'cancelled_at' => now(),
-            ]);
+            $cancelPayload = ['status' => Invitation::STATUS_CANCELLED];
+            if (Schema::hasColumn('invitations', 'cancelled_at')) {
+                $cancelPayload['cancelled_at'] = now();
+            }
+            $invitation->update($cancelPayload);
 
             $this->logAction(
                 $performer->account_id,
@@ -272,12 +297,17 @@ class InvitationService
 
         return DB::transaction(function () use ($invitation, $performer) {
             // Generate new token and reset TTL
-            $invitation->update([
-                'token'       => $this->generateSecureToken(),
-                'expires_at'  => now()->addHours(self::DEFAULT_TTL_HOURS),
-                'last_sent_at' => now(),
-                'send_count'  => $invitation->send_count + 1,
-            ]);
+            $resendPayload = [
+                'token' => $this->generateSecureToken(),
+                'expires_at' => now()->addHours(self::DEFAULT_TTL_HOURS),
+            ];
+            if (Schema::hasColumn('invitations', 'last_sent_at')) {
+                $resendPayload['last_sent_at'] = now();
+            }
+            if (Schema::hasColumn('invitations', 'send_count')) {
+                $resendPayload['send_count'] = (int) $invitation->send_count + 1;
+            }
+            $invitation->update($resendPayload);
 
             $this->logAction(
                 $performer->account_id,
@@ -307,9 +337,10 @@ class InvitationService
         string $accountId,
         array $filters = []
     ): \Illuminate\Pagination\LengthAwarePaginator {
+        $this->assertAccountAllowsTeamManagement($accountId);
+
         $query = Invitation::withoutGlobalScopes()
-            ->where('account_id', $accountId)
-            ->with(['role', 'inviter']);
+            ->where('account_id', $accountId);
 
         // Auto-expire stale pending invitations
         $this->expireStaleInvitations($accountId);
@@ -321,8 +352,9 @@ class InvitationService
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
-                $q->where('email', 'ILIKE', "%{$search}%")
-                  ->orWhere('name', 'ILIKE', "%{$search}%");
+                $operator = DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+                $q->where('email', $operator, "%{$search}%")
+                  ->orWhere('name', $operator, "%{$search}%");
             });
         }
 
@@ -354,7 +386,6 @@ class InvitationService
     public function getInvitationByToken(string $token): Invitation
     {
         $invitation = Invitation::withoutGlobalScopes()
-            ->with(['account:id,name', 'role:id,display_name'])
             ->where('token', $token)
             ->first();
 
@@ -398,10 +429,11 @@ class InvitationService
      */
     private function assertCanInvite(User $performer): void
     {
-        // Owner always can; otherwise check users:invite permission
-        if (!$performer->is_owner && !$performer->hasPermission('users:invite')) {
+        if (!$performer->hasPermission('users.invite')) {
             throw BusinessException::permissionDenied();
         }
+
+        $this->assertAccountAllowsTeamManagement((string) $performer->account_id);
     }
 
     /**
@@ -445,6 +477,19 @@ class InvitationService
     }
 
     /**
+     * @throws BusinessException
+     */
+    private function assertAccountAllowsTeamManagement(string $accountId): void
+    {
+        /** @var Account|null $account */
+        $account = Account::withoutGlobalScopes()->find($accountId);
+
+        if ($account instanceof Account && !$account->allowsTeamManagement()) {
+            throw BusinessException::accountUpgradeRequired();
+        }
+    }
+
+    /**
      * Generate a cryptographically secure token for the invitation.
      */
     private function generateSecureToken(): string
@@ -464,16 +509,56 @@ class InvitationService
         ?array $oldValues,
         ?array $newValues
     ): void {
-        AuditLog::withoutGlobalScopes()->create([
-            'account_id'  => $accountId,
-            'user_id'     => $userId,
-            'action'      => $action,
-            'entity_type' => $entityType,
-            'entity_id'   => $entityId,
-            'old_values'  => $oldValues,
-            'new_values'  => $newValues,
-            'ip_address'  => request()->ip(),
-            'user_agent'  => request()->userAgent(),
-        ]);
+        $payload = [];
+
+        if (Schema::hasColumn('audit_logs', 'account_id')) {
+            $payload['account_id'] = $accountId;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'user_id')) {
+            $payload['user_id'] = $userId;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'action')) {
+            $payload['action'] = $action;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'event')) {
+            $payload['event'] = $action;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'entity_type')) {
+            $payload['entity_type'] = $entityType;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'auditable_type')) {
+            $payload['auditable_type'] = $entityType;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'entity_id')) {
+            $payload['entity_id'] = $entityId;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'auditable_id') && ctype_digit($entityId)) {
+            $payload['auditable_id'] = $entityId;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'old_values')) {
+            $payload['old_values'] = $oldValues;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'new_values')) {
+            $payload['new_values'] = $newValues;
+        }
+
+        if (Schema::hasColumn('audit_logs', 'ip_address')) {
+            $payload['ip_address'] = request()->ip();
+        }
+
+        if (Schema::hasColumn('audit_logs', 'user_agent')) {
+            $payload['user_agent'] = request()->userAgent();
+        }
+
+        AuditLog::withoutGlobalScopes()->create($payload);
     }
 }

@@ -31,35 +31,35 @@ class KycComplianceTest extends TestCase
         $this->service = $this->app->make(KycComplianceService::class);
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
     // ═══════════════════════════════════════════════════════════
     // FR-KYC-001: Default Unverified (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_new_case_defaults_to_unverified(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
         $this->assertEquals(VerificationCase::STATUS_UNVERIFIED, $case->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_case_has_case_number(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
         $this->assertStringStartsWith('KYC-', $case->case_number);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_individual_requires_national_id(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
         $this->assertContains('national_id', $case->required_documents);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_organization_requires_business_docs(): void
     {
         $case = $this->service->createCase($this->account->id, 'organization');
@@ -71,7 +71,7 @@ class KycComplianceTest extends TestCase
     // FR-KYC-002: Upload Documents (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_upload_document(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
@@ -84,7 +84,7 @@ class KycComplianceTest extends TestCase
         $this->assertEquals('uploaded', $doc->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_upload_creates_audit_log(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
@@ -96,7 +96,7 @@ class KycComplianceTest extends TestCase
         $this->assertDatabaseHas('kyc_audit_logs', ['case_id' => $case->id, 'action' => KycAuditLog::ACTION_DOCUMENT_UPLOAD]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cannot_upload_to_verified_case(): void
     {
         $case = VerificationCase::factory()->verified()->create(['account_id' => $this->account->id]);
@@ -107,7 +107,7 @@ class KycComplianceTest extends TestCase
         ], $this->user->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_document_is_encrypted_by_default(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
@@ -123,7 +123,7 @@ class KycComplianceTest extends TestCase
     // FR-KYC-003: Status Management (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_submit_changes_status(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
@@ -133,7 +133,7 @@ class KycComplianceTest extends TestCase
         $this->assertEquals(VerificationCase::STATUS_PENDING_REVIEW, $submitted->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_submit_fails_without_required_docs(): void
     {
         $case = $this->service->createCase($this->account->id, 'individual');
@@ -142,7 +142,7 @@ class KycComplianceTest extends TestCase
         $this->service->submitForReview($case->id, $this->user->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_resubmit_after_rejection(): void
     {
         $case = VerificationCase::factory()->rejected()->create(['account_id' => $this->account->id, 'required_documents' => ['national_id']]);
@@ -152,7 +152,7 @@ class KycComplianceTest extends TestCase
         $this->assertEquals(VerificationCase::STATUS_PENDING_REVIEW, $resubmitted->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_cannot_submit_verified_case(): void
     {
         $case = VerificationCase::factory()->verified()->create(['account_id' => $this->account->id]);
@@ -161,7 +161,7 @@ class KycComplianceTest extends TestCase
         $this->service->submitForReview($case->id, $this->user->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_verification_status(): void
     {
         $this->service->createCase($this->account->id, 'individual');
@@ -174,7 +174,7 @@ class KycComplianceTest extends TestCase
     // FR-KYC-004: Restrictions (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_restriction(): void
     {
         $r = $this->service->createRestriction([
@@ -186,7 +186,7 @@ class KycComplianceTest extends TestCase
         $this->assertFalse($r->appliesTo('verified'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_check_blocked_feature(): void
     {
         $this->service->createRestriction([
@@ -201,7 +201,7 @@ class KycComplianceTest extends TestCase
         $this->assertEquals('KYC_REQUIRED', $result['reason']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_verified_account_no_restrictions(): void
     {
         $this->service->createRestriction([
@@ -215,7 +215,7 @@ class KycComplianceTest extends TestCase
         $this->assertTrue($result['allowed']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_quota_restriction(): void
     {
         $this->service->createRestriction([
@@ -234,7 +234,7 @@ class KycComplianceTest extends TestCase
     // FR-KYC-005: Admin Review (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_approve_case(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);
@@ -243,7 +243,7 @@ class KycComplianceTest extends TestCase
         $this->assertNotNull($reviewed->verified_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_reject_case_with_reason(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);
@@ -252,7 +252,7 @@ class KycComplianceTest extends TestCase
         $this->assertEquals('Documents blurry', $reviewed->rejection_reason);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_review_creates_record(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);
@@ -260,7 +260,7 @@ class KycComplianceTest extends TestCase
         $this->assertDatabaseHas('verification_reviews', ['case_id' => $case->id, 'decision' => 'approved']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_pending_cases(): void
     {
         VerificationCase::factory()->pending()->count(3)->create(['account_id' => $this->account->id]);
@@ -274,7 +274,7 @@ class KycComplianceTest extends TestCase
     // FR-KYC-006: Status Display (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_unverified_shows_banner(): void
     {
         $this->service->createCase($this->account->id, 'individual');
@@ -283,7 +283,7 @@ class KycComplianceTest extends TestCase
         $this->assertStringContainsString('غير موثق', $display['banner_message']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_verified_no_banner(): void
     {
         VerificationCase::factory()->verified()->create(['account_id' => $this->account->id]);
@@ -291,7 +291,7 @@ class KycComplianceTest extends TestCase
         $this->assertNull($display['banner_message']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rejected_shows_reason(): void
     {
         VerificationCase::factory()->rejected()->create(['account_id' => $this->account->id]);
@@ -303,7 +303,7 @@ class KycComplianceTest extends TestCase
     // FR-KYC-007: Secure Document Access (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_temporary_download_url(): void
     {
         $doc = VerificationDocument::factory()->create();
@@ -312,7 +312,7 @@ class KycComplianceTest extends TestCase
         $this->assertStringContainsString('expires', $url);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_download_creates_audit(): void
     {
         $doc = VerificationDocument::factory()->create();
@@ -320,7 +320,7 @@ class KycComplianceTest extends TestCase
         $this->assertDatabaseHas('kyc_audit_logs', ['document_id' => $doc->id, 'action' => KycAuditLog::ACTION_DOCUMENT_DOWNLOAD]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_document_hash_stored(): void
     {
         $doc = VerificationDocument::factory()->create();
@@ -332,7 +332,7 @@ class KycComplianceTest extends TestCase
     // FR-KYC-008: Audit Log (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_decision_logged(): void
     {
         $case = VerificationCase::factory()->pending()->create(['account_id' => $this->account->id]);
@@ -340,7 +340,7 @@ class KycComplianceTest extends TestCase
         $this->assertDatabaseHas('kyc_audit_logs', ['case_id' => $case->id, 'action' => KycAuditLog::ACTION_DECISION]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_audit_log(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -350,7 +350,7 @@ class KycComplianceTest extends TestCase
         $this->assertCount(1, $logs);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_export_audit_log(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id]);
@@ -361,7 +361,7 @@ class KycComplianceTest extends TestCase
         $this->assertCount(2, $export);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_audit_log_no_document_content(): void
     {
         $case = VerificationCase::factory()->create(['account_id' => $this->account->id]);

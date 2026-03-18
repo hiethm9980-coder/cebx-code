@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Models\AuditLog;
 use App\Services\AuditService;
 use Illuminate\Support\Str;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * FR-IAM-006: Audit Log — Integration Tests (22 tests)
@@ -18,6 +19,7 @@ use Illuminate\Support\Str;
 class AuditLogApiTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected Account $account;
     protected User $owner;
@@ -51,7 +53,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── List / Search ───────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_list_audit_logs()
     {
         $response = $this->actingAs($this->owner)
@@ -67,7 +69,7 @@ class AuditLogApiTest extends TestCase
         $this->assertEquals(5, $response->json('meta.total'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_filter_by_category()
     {
         $response = $this->actingAs($this->owner)
@@ -79,7 +81,7 @@ class AuditLogApiTest extends TestCase
         }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_filter_by_severity()
     {
         $response = $this->actingAs($this->owner)
@@ -90,7 +92,7 @@ class AuditLogApiTest extends TestCase
         $this->assertEquals('critical', $response->json('data.0.severity'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_filter_by_actor()
     {
         $response = $this->actingAs($this->owner)
@@ -100,7 +102,7 @@ class AuditLogApiTest extends TestCase
         $this->assertEquals(1, $response->json('meta.total'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_filter_by_date_range()
     {
         $response = $this->actingAs($this->owner)
@@ -110,7 +112,7 @@ class AuditLogApiTest extends TestCase
         $this->assertEquals(5, $response->json('meta.total'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_filter_by_action()
     {
         $response = $this->actingAs($this->owner)
@@ -120,7 +122,7 @@ class AuditLogApiTest extends TestCase
         $this->assertEquals(1, $response->json('meta.total'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_paginate_results()
     {
         $response = $this->actingAs($this->owner)
@@ -132,7 +134,7 @@ class AuditLogApiTest extends TestCase
         $this->assertEquals(3, $response->json('meta.last_page'));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_sort_by_severity()
     {
         $response = $this->actingAs($this->owner)
@@ -143,7 +145,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Show Single Entry ───────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_single_audit_log()
     {
         $logId = AuditLog::withoutGlobalScopes()
@@ -160,7 +162,7 @@ class AuditLogApiTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_view_audit_log_from_another_account()
     {
         $otherAccount = Account::factory()->create();
@@ -178,7 +180,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Entity Trail ────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_entity_trail()
     {
         $response = $this->actingAs($this->owner)
@@ -191,7 +193,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Request Trace ───────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_request_trace()
     {
         AuditService::resetRequestId();
@@ -210,7 +212,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Statistics ──────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_statistics()
     {
         $response = $this->actingAs($this->owner)
@@ -226,7 +228,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Categories Metadata ─────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_list_audit_categories()
     {
         $response = $this->actingAs($this->owner)
@@ -241,7 +243,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Export ──────────────────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_export_as_json()
     {
         $response = $this->actingAs($this->owner)
@@ -254,7 +256,7 @@ class AuditLogApiTest extends TestCase
             ]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_export_as_csv()
     {
         $response = $this->actingAs($this->owner)
@@ -264,7 +266,7 @@ class AuditLogApiTest extends TestCase
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function export_with_filters()
     {
         $response = $this->actingAs($this->owner)
@@ -281,7 +283,7 @@ class AuditLogApiTest extends TestCase
         }
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function export_action_is_logged()
     {
         $this->actingAs($this->owner)
@@ -297,7 +299,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Permission Checks ───────────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_permission_cannot_view_audit_logs()
     {
         $response = $this->actingAs($this->member)
@@ -306,15 +308,21 @@ class AuditLogApiTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_with_audit_view_permission_can_view()
     {
         // Create role with audit:view permission
-        $role = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['audit:view'],
+        $role = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['audit.view'],
+            'audit_viewer'
+        );
+        $this->member->roles()->syncWithoutDetaching([
+            (string) $role->id => [
+                'assigned_by' => null,
+                'assigned_at' => now(),
+            ],
         ]);
-        $this->member->update(['role_id' => $role->id]);
 
         $response = $this->actingAs($this->member)
             ->getJson('/api/v1/audit-logs');
@@ -322,15 +330,21 @@ class AuditLogApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_without_export_permission_cannot_export()
     {
         // Give view but not export
-        $role = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['audit:view'],
+        $role = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['audit.view'],
+            'audit_viewer_no_export'
+        );
+        $this->member->roles()->syncWithoutDetaching([
+            (string) $role->id => [
+                'assigned_by' => null,
+                'assigned_at' => now(),
+            ],
         ]);
-        $this->member->update(['role_id' => $role->id]);
 
         $response = $this->actingAs($this->member)
             ->postJson('/api/v1/audit-logs/export', ['format' => 'json']);
@@ -340,7 +354,7 @@ class AuditLogApiTest extends TestCase
 
     // ─── Immutability via HTTP ───────────────────────────────────
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function no_delete_or_patch_endpoints_exist()
     {
         $logId = AuditLog::withoutGlobalScopes()

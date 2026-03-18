@@ -94,6 +94,7 @@ class AuthController extends Controller
                     'phone'      => $user->phone,
                     'is_owner'   => $user->is_owner,
                     'status'     => $user->status,
+                    'user_type'  => $user->user_type,
                     'locale'     => $user->locale ?? 'ar',
                     'role'       => $user->roles()->first()?->name ?? 'user',
                     'account'    => [
@@ -163,6 +164,7 @@ class AuthController extends Controller
                 'phone'               => $user->phone,
                 'is_owner'            => $user->is_owner,
                 'status'              => $user->status,
+                'user_type'           => $user->user_type,
                 'locale'              => $user->locale ?? 'ar',
                 'timezone'            => $user->timezone ?? 'Asia/Riyadh',
                 'two_factor_enabled'  => $user->two_factor_secret !== null,

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateRoleRequest;
 use App\Http\Requests\UpdateRoleRequest;
 use App\Http\Resources\RoleResource;
+use App\Models\Role;
+use App\Models\User;
 use App\Services\RbacService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +25,9 @@ class RoleController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $roles = $this->rbacService->listRoles($request->user()->account_id);
+        $this->authorize('viewAny', Role::class);
+
+        $roles = $this->rbacService->listRoles($this->currentAccountId($request));
 
         return response()->json([
             'success' => true,
@@ -37,12 +41,10 @@ class RoleController extends Controller
      */
     public function show(Request $request, string $id): JsonResponse
     {
-        $role = \App\Models\Role::withoutGlobalScopes()
-            ->where('account_id', $request->user()->account_id)
-            ->where('id', $id)
-            ->with(['permissions', 'users'])
-            ->withCount('users')
-            ->firstOrFail();
+        $role = $this->findRoleForCurrentTenant($request, $id);
+        $this->authorize('view', $role);
+
+        $role->load(['permissions', 'users'])->loadCount('users');
 
         return response()->json([
             'success' => true,
@@ -56,6 +58,8 @@ class RoleController extends Controller
      */
     public function store(CreateRoleRequest $request): JsonResponse
     {
+        $this->authorize('create', Role::class);
+
         $role = $this->rbacService->createRole(
             $request->validated(),
             $request->user()
@@ -74,6 +78,8 @@ class RoleController extends Controller
      */
     public function createFromTemplate(Request $request): JsonResponse
     {
+        $this->authorize('createFromTemplate', Role::class);
+
         $request->validate([
             'template' => ['required', 'string', 'max:50'],
             'name'     => ['nullable', 'string', 'max:100', 'regex:/^[a-z0-9_-]+$/'],
@@ -98,6 +104,9 @@ class RoleController extends Controller
      */
     public function update(UpdateRoleRequest $request, string $id): JsonResponse
     {
+        $role = $this->findRoleForCurrentTenant($request, $id);
+        $this->authorize('update', $role);
+
         $role = $this->rbacService->updateRole(
             $id,
             $request->validated(),
@@ -117,6 +126,9 @@ class RoleController extends Controller
      */
     public function destroy(Request $request, string $id): JsonResponse
     {
+        $role = $this->findRoleForCurrentTenant($request, $id);
+        $this->authorize('delete', $role);
+
         $this->rbacService->deleteRole($id, $request->user());
 
         return response()->json([
@@ -131,6 +143,10 @@ class RoleController extends Controller
      */
     public function assignToUser(Request $request, string $roleId, string $userId): JsonResponse
     {
+        $role = $this->findRoleForCurrentTenant($request, $roleId);
+        $this->findUserForCurrentTenant($request, $userId);
+        $this->authorize('assign', $role);
+
         $user = $this->rbacService->assignRoleToUser($userId, $roleId, $request->user());
 
         return response()->json([
@@ -149,6 +165,10 @@ class RoleController extends Controller
      */
     public function revokeFromUser(Request $request, string $roleId, string $userId): JsonResponse
     {
+        $role = $this->findRoleForCurrentTenant($request, $roleId);
+        $this->findUserForCurrentTenant($request, $userId);
+        $this->authorize('revoke', $role);
+
         $user = $this->rbacService->revokeRoleFromUser($userId, $roleId, $request->user());
 
         return response()->json([
@@ -167,6 +187,8 @@ class RoleController extends Controller
      */
     public function permissionsCatalog(): JsonResponse
     {
+        $this->authorize('catalog', Role::class);
+
         return response()->json([
             'success' => true,
             'data'    => $this->rbacService->getPermissionsCatalog(),
@@ -179,6 +201,8 @@ class RoleController extends Controller
      */
     public function templates(): JsonResponse
     {
+        $this->authorize('templates', Role::class);
+
         return response()->json([
             'success' => true,
             'data'    => $this->rbacService->getTemplates(),
@@ -191,10 +215,8 @@ class RoleController extends Controller
      */
     public function userPermissions(Request $request, string $userId): JsonResponse
     {
-        $user = \App\Models\User::withoutGlobalScopes()
-            ->where('account_id', $request->user()->account_id)
-            ->where('id', $userId)
-            ->firstOrFail();
+        $user = $this->findUserForCurrentTenant($request, $userId);
+        $this->authorize('view', $user);
 
         return response()->json([
             'success' => true,
@@ -204,5 +226,34 @@ class RoleController extends Controller
                 'permissions' => $user->allPermissions(),
             ],
         ]);
+    }
+
+    private function currentAccountId(Request $request): string
+    {
+        $currentAccountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($currentAccountId !== '') {
+            return $currentAccountId;
+        }
+
+        return trim((string) $request->user()->account_id);
+    }
+
+    private function findRoleForCurrentTenant(Request $request, string $id): Role
+    {
+        return Role::withoutGlobalScopes()
+            ->where('account_id', $this->currentAccountId($request))
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    private function findUserForCurrentTenant(Request $request, string $id): User
+    {
+        return User::withoutGlobalScopes()
+            ->where('account_id', $this->currentAccountId($request))
+            ->where('id', $id)
+            ->firstOrFail();
     }
 }

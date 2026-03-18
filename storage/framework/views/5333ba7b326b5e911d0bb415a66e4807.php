@@ -125,16 +125,17 @@
             <tbody>
                 <?php $__empty_1 = true; $__currentLoopData = $containers ?? []; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $container): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                     <?php
-                        $stMap = ['available' => ['متاحة', 'badge-ac'], 'loaded' => ['محملة', 'badge-in'], 'in_transit' => ['في الطريق', 'badge-pp'], 'at_port' => ['في الميناء', 'badge-wn'], 'customs_hold' => ['احتجاز جمركي', 'badge-dg']];
-                        $st = $stMap[$container->status] ?? ['—', 'badge-td'];
+                        $stMap = ['empty' => ['فارغة', 'badge-td'], 'loading' => ['قيد التحميل', 'badge-wn'], 'loaded' => ['محملة', 'badge-in'], 'in_transit' => ['في الطريق', 'badge-pp'], 'at_port' => ['في الميناء', 'badge-wn'], 'delivered' => ['تم التسليم', 'badge-ac'], 'returned' => ['مرتجعة', 'badge-dg'], 'available' => ['متاحة', 'badge-ac']];
+                        $st = $stMap[$container->status ?? ''] ?? ['—', 'badge-td'];
+                        $vesselName = $container->vesselSchedule?->vessel?->vessel_name ?? $container->vessel?->vessel_name ?? $container->vessel?->name ?? '—';
                     ?>
                     <tr>
                         <td class="td-mono" style="font-weight:600"><?php echo e($container->container_number); ?></td>
-                        <td><?php echo e($container->type); ?></td>
-                        <td><?php echo e($container->size); ?></td>
-                        <td><?php echo e($container->vessel->name ?? '—'); ?></td>
-                        <td><?php echo e($container->origin_port ?? '—'); ?></td>
-                        <td><?php echo e($container->destination_port ?? '—'); ?></td>
+                        <td><?php echo e($container->type ?? '—'); ?></td>
+                        <td><?php echo e($container->size ?? '—'); ?></td>
+                        <td><?php echo e($vesselName); ?></td>
+                        <td><?php echo e($container->location ?? '—'); ?></td>
+                        <td><?php echo e($container->location ?? '—'); ?></td>
                         <td><span class="badge <?php echo e($st[1]); ?>"><?php echo e($st[0]); ?></span></td>
                         <td><button class="btn btn-s" style="font-size:12px">تفاصيل</button></td>
                     </tr>
@@ -168,7 +169,7 @@
 <?php $attributes = $attributes->except(\Illuminate\View\AnonymousComponent::ignoredParameterNames()); ?>
 <?php endif; ?>
 <?php $component->withAttributes(['id' => 'add-container','title' => 'إضافة حاوية']); ?>
-    <form method="POST" action="<?php echo e(route('containers.index')); ?>">
+    <form method="POST" action="<?php echo e(route('containers.store')); ?>">
         <?php echo csrf_field(); ?>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
             <div><label class="form-label">رقم الحاوية</label><input type="text" name="container_number" class="form-input" placeholder="ABCD1234567" required></div>

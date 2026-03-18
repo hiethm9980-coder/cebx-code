@@ -22,6 +22,8 @@ class IntegrationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', IntegrationHealthLog::class);
+
         $integrations = [
             [
                 'id' => 'aramex',
@@ -103,6 +105,8 @@ class IntegrationController extends Controller
      */
     public function health(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', IntegrationHealthLog::class);
+
         $logs = IntegrationHealthLog::where('account_id', $request->user()->account_id)
             ->where('checked_at', '>=', now()->subHours(24))
             ->orderBy('checked_at', 'desc')
@@ -133,6 +137,8 @@ class IntegrationController extends Controller
      */
     public function test(Request $request, string $integrationId): JsonResponse
     {
+        $this->authorize('manage', IntegrationHealthLog::class);
+
         // Simulate connectivity test
         $startTime = microtime(true);
 
@@ -164,6 +170,8 @@ class IntegrationController extends Controller
      */
     public function logs(Request $request, string $integrationId): JsonResponse
     {
+        $this->authorize('view', IntegrationHealthLog::class);
+
         $logs = IntegrationHealthLog::where('account_id', $request->user()->account_id)
             ->where('integration_id', $integrationId)
             ->orderBy('checked_at', 'desc')
@@ -177,6 +185,8 @@ class IntegrationController extends Controller
      */
     public function webhookConfig(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', IntegrationHealthLog::class);
+
         $baseUrl = config('app.url') . '/api/v1/webhooks';
 
         return response()->json(['data' => [

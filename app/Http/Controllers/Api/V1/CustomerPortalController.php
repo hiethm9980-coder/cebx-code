@@ -2,6 +2,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ApiKey;
+use App\Models\CustomerApiKey;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -147,8 +149,10 @@ class CustomerPortalController extends Controller
     // ── Customer API Keys ────────────────────────────────────
     public function apiKeys(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', ApiKey::class);
+
         $keys = DB::table('customer_api_keys')
-            ->where('account_id', $request->user()->account_id)
+            ->where('account_id', $this->currentAccountId($request))
             ->where('user_id', $request->user()->id)
             ->select('id', 'name', 'key_prefix', 'permissions', 'rate_limit_per_minute', 'last_used_at', 'expires_at', 'is_active', 'created_at')
             ->orderByDesc('created_at')->get();
@@ -157,6 +161,8 @@ class CustomerPortalController extends Controller
 
     public function createApiKey(Request $request): JsonResponse
     {
+        $this->authorize('create', ApiKey::class);
+
         $data = $request->validate([
             'name' => 'required|string|max:100',
             'permissions' => 'required|array|min:1',
@@ -167,7 +173,7 @@ class CustomerPortalController extends Controller
 
         $rawKey = 'cbex_' . Str::random(40);
         $record = [
-            'id' => Str::uuid(), 'account_id' => $request->user()->account_id,
+            'id' => Str::uuid(), 'account_id' => $this->currentAccountId($request),
             'user_id' => $request->user()->id, 'name' => $data['name'],
             'key_hash' => hash('sha256', $rawKey), 'key_prefix' => substr($rawKey, 0, 12),
             'permissions' => json_encode($data['permissions']),
@@ -183,10 +189,19 @@ class CustomerPortalController extends Controller
 
     public function revokeApiKey(Request $request, string $id): JsonResponse
     {
-        DB::table('customer_api_keys')
-            ->where('account_id', $request->user()->account_id)
+        $apiKey = CustomerApiKey::withoutGlobalScopes()
+            ->where('account_id', $this->currentAccountId($request))
             ->where('user_id', $request->user()->id)
-            ->where('id', $id)->update(['is_active' => false, 'updated_at' => now()]);
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $this->authorize('revoke', $apiKey);
+
+        $apiKey->update([
+            'is_active' => false,
+            'updated_at' => now(),
+        ]);
+
         return response()->json(['data' => ['id' => $id, 'revoked' => true]]);
     }
 
@@ -206,5 +221,18 @@ class CustomerPortalController extends Controller
             'api_keys' => DB::table('customer_api_keys')
                 ->where('account_id', $accountId)->where('user_id', $userId)->where('is_active', true)->count(),
         ]]);
+    }
+
+    private function currentAccountId(Request $request): string
+    {
+        $currentAccountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($currentAccountId !== '') {
+            return $currentAccountId;
+        }
+
+        return trim((string) $request->user()->account_id);
     }
 }

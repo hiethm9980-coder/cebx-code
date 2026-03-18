@@ -16,8 +16,8 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('name_en')->nullable();
-            $table->enum('type', ['individual', 'business', 'admin'])->default('business');
-            $table->string('email')->unique();
+            $table->enum('type', ['individual', 'organization'])->default('individual');
+            $table->string('email')->nullable()->unique();
             $table->string('phone')->nullable();
             $table->string('cr_number')->nullable()->comment('السجل التجاري');
             $table->string('vat_number')->nullable()->comment('الرقم الضريبي');

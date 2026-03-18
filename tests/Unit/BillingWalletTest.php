@@ -32,14 +32,14 @@ class BillingWalletTest extends TestCase
         $this->service = $this->app->make(BillingWalletService::class);
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id]);
-        $this->user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->user = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
     // ═══════════════════════════════════════════════════════════
     // FR-BW-001: Auto-create Wallet (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_wallet(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -48,7 +48,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals('SAR', $wallet->currency);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_starts_with_zero_balance(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -58,21 +58,21 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(0, $wallet->total_debited);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_default_currency_sar(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
         $this->assertEquals('SAR', $wallet->currency);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_active_by_default(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
         $this->assertEquals('active', $wallet->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_wallet(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -84,7 +84,7 @@ class BillingWalletTest extends TestCase
     // FR-BW-002: Top-up via Payment Gateway (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_initiate_topup(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -93,7 +93,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(500, $topup->amount);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_confirm_topup_credits_wallet(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -105,7 +105,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(500, $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_fail_topup_no_credit(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -117,7 +117,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(0, $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_topup_has_idempotency_key(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -125,7 +125,7 @@ class BillingWalletTest extends TestCase
         $this->assertNotNull($topup->idempotency_key);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_topup_updates_total_credited(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -142,7 +142,7 @@ class BillingWalletTest extends TestCase
     // FR-BW-003: Debit for Shipment (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_charge_for_shipment(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -154,7 +154,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(850, $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_charge_insufficient_balance(): void
     {
         $wallet = BillingWallet::factory()->funded(50)->create(['account_id' => $this->account->id]);
@@ -163,7 +163,7 @@ class BillingWalletTest extends TestCase
         $this->service->chargeForShipment($wallet->id, 'SH-002', 100);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_charge_updates_total_debited(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -177,7 +177,7 @@ class BillingWalletTest extends TestCase
     // FR-BW-004: Immutable Ledger (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_ledger_entry_created_on_topup(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -189,7 +189,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals('credit', $entries[0]->direction);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_ledger_entry_created_on_charge(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -199,7 +199,7 @@ class BillingWalletTest extends TestCase
         $this->assertGreaterThanOrEqual(1, $entries->count());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_ledger_has_correlation_id(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -210,7 +210,7 @@ class BillingWalletTest extends TestCase
         $this->assertNotNull($entry->correlation_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_reversal_creates_opposite_entry(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -224,7 +224,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(1000, $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_ledger_entry_has_reference(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -238,7 +238,7 @@ class BillingWalletTest extends TestCase
     // FR-BW-005: Running Balance & Statement (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_running_balance_tracked(): void
     {
         $wallet = $this->service->createWallet($this->account->id);
@@ -249,7 +249,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(500, $entry->running_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_statement_returns_entries(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -260,7 +260,7 @@ class BillingWalletTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $statement->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_get_balance(): void
     {
         $wallet = BillingWallet::factory()->funded(750)->create(['account_id' => $this->account->id]);
@@ -269,7 +269,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(750, $balance['available_balance']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_statement_ordered_chronologically(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -288,7 +288,7 @@ class BillingWalletTest extends TestCase
     // FR-BW-006: Refunds (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refund_credits_wallet(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -301,7 +301,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(1000, $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refund_has_reason(): void
     {
         $wallet = BillingWallet::factory()->funded(500)->create(['account_id' => $this->account->id]);
@@ -311,7 +311,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals('Label void', $refund->refund_reason);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refund_linked_to_shipment(): void
     {
         $wallet = BillingWallet::factory()->funded(500)->create(['account_id' => $this->account->id]);
@@ -321,7 +321,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals('SH-062', $refund->shipment_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_refund_creates_ledger_credit(): void
     {
         $wallet = BillingWallet::factory()->funded(500)->create(['account_id' => $this->account->id]);
@@ -333,7 +333,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals('credit', $refundEntry->direction);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_partial_refund(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -348,7 +348,7 @@ class BillingWalletTest extends TestCase
     // FR-BW-007: Reservation/Hold (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_hold(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -361,7 +361,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(200, $wallet->reserved_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_capture_hold(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -374,7 +374,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(800, $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_release_hold(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -387,7 +387,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(1000, $wallet->available_balance);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_hold_insufficient_balance(): void
     {
         $wallet = BillingWallet::factory()->funded(100)->create(['account_id' => $this->account->id]);
@@ -396,7 +396,7 @@ class BillingWalletTest extends TestCase
         $this->service->createHold($wallet->id, 'SH-073', 500);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_hold_prevents_double_booking(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -411,7 +411,7 @@ class BillingWalletTest extends TestCase
     // FR-BW-008: Low Balance Alert (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_set_threshold(): void
     {
         $wallet = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -419,7 +419,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(200, $updated->low_balance_threshold);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_configure_auto_topup(): void
     {
         $wallet = BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -430,7 +430,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals(100, $updated->auto_topup_trigger);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_disable_auto_topup(): void
     {
         $wallet = BillingWallet::factory()->withAutoTopup()->create(['account_id' => $this->account->id]);
@@ -438,7 +438,7 @@ class BillingWalletTest extends TestCase
         $this->assertFalse($updated->auto_topup_enabled);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_summary(): void
     {
         $wallet = BillingWallet::factory()->funded(1000)->create(['account_id' => $this->account->id]);
@@ -452,14 +452,14 @@ class BillingWalletTest extends TestCase
     // FR-BW-009: Access Control (3 tests — logic in controller/middleware)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_belongs_to_account(): void
     {
         $wallet = BillingWallet::factory()->create(['account_id' => $this->account->id]);
         $this->assertEquals($this->account->id, $wallet->account_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_for_account(): void
     {
         $wallet = BillingWallet::factory()->create(['account_id' => $this->account->id, 'currency' => 'SAR']);
@@ -467,7 +467,7 @@ class BillingWalletTest extends TestCase
         $this->assertEquals($wallet->id, $found->id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_wallet_not_found_for_other_account(): void
     {
         BillingWallet::factory()->create(['account_id' => $this->account->id]);
@@ -480,14 +480,14 @@ class BillingWalletTest extends TestCase
     // FR-BW-010: Reconciliation (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_reconciliation_report_created(): void
     {
         $report = $this->service->runReconciliation(date('Y-m-d'), 'tap');
         $this->assertNotNull($report);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_reconciliation_reports(): void
     {
         $this->service->runReconciliation(date('Y-m-d'), 'tap');
@@ -495,7 +495,7 @@ class BillingWalletTest extends TestCase
         $this->assertGreaterThanOrEqual(1, $reports->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_my_wallet(): void
     {
         BillingWallet::factory()->funded(500)->create(['account_id' => $this->account->id]);

@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Exceptions\BusinessException;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * AuditService — Centralized audit logging for the entire system.
@@ -50,21 +51,67 @@ class AuditService
         ?array  $newValues = null,
         ?array  $metadata = null
     ): AuditLog {
-        return AuditLog::withoutGlobalScopes()->create([
-            'account_id'  => $accountId,
-            'user_id'     => $userId,
-            'action'      => $action,
-            'severity'    => $severity,
-            'category'    => $category,
-            'entity_type' => $entityType,
-            'entity_id'   => $entityId,
-            'old_values'  => $oldValues,
-            'new_values'  => $newValues,
-            'metadata'    => $metadata,
-            'ip_address'  => request()->ip(),
-            'user_agent'  => request()->userAgent(),
-            'request_id'  => self::getRequestId(),
-        ]);
+        $payload = [];
+
+        if ($this->auditColumnExists('account_id')) {
+            $payload['account_id'] = $accountId;
+        }
+
+        if ($this->auditColumnExists('user_id')) {
+            $payload['user_id'] = $userId;
+        }
+
+        if ($this->auditColumnExists('action')) {
+            $payload['action'] = $action;
+        } elseif ($this->auditColumnExists('event')) {
+            $payload['event'] = $action;
+        }
+
+        if ($this->auditColumnExists('severity')) {
+            $payload['severity'] = $severity;
+        }
+
+        if ($this->auditColumnExists('category')) {
+            $payload['category'] = $category;
+        }
+
+        if ($this->auditColumnExists('entity_type')) {
+            $payload['entity_type'] = $entityType;
+        } elseif ($this->auditColumnExists('auditable_type')) {
+            $payload['auditable_type'] = $entityType;
+        }
+
+        if ($this->auditColumnExists('entity_id')) {
+            $payload['entity_id'] = $entityId;
+        } elseif ($this->auditColumnExists('auditable_id')) {
+            $payload['auditable_id'] = $this->normalizeAuditableId($entityId);
+        }
+
+        if ($this->auditColumnExists('old_values')) {
+            $payload['old_values'] = $oldValues;
+        }
+
+        if ($this->auditColumnExists('new_values')) {
+            $payload['new_values'] = $newValues;
+        }
+
+        if ($this->auditColumnExists('metadata')) {
+            $payload['metadata'] = $metadata;
+        }
+
+        if ($this->auditColumnExists('ip_address')) {
+            $payload['ip_address'] = request()->ip();
+        }
+
+        if ($this->auditColumnExists('user_agent')) {
+            $payload['user_agent'] = request()->userAgent();
+        }
+
+        if ($this->auditColumnExists('request_id')) {
+            $payload['request_id'] = self::getRequestId();
+        }
+
+        return AuditLog::withoutGlobalScopes()->create($payload);
     }
 
     // ─── Convenience Methods (semantic shortcuts) ────────────────
@@ -573,5 +620,32 @@ class AuditService
             'audit.exported'            => ['category' => 'export', 'severity' => 'info'],
             'data.exported'             => ['category' => 'export', 'severity' => 'info'],
         ];
+    }
+
+    private function auditColumnExists(string $column): bool
+    {
+        static $cache = [];
+
+        if (array_key_exists($column, $cache)) {
+            return $cache[$column];
+        }
+
+        $cache[$column] = Schema::hasTable('audit_logs') && Schema::hasColumn('audit_logs', $column);
+
+        return $cache[$column];
+    }
+
+    private function normalizeAuditableId(?string $entityId): ?int
+    {
+        if ($entityId === null) {
+            return null;
+        }
+
+        $value = trim($entityId);
+        if ($value === '' || !ctype_digit($value)) {
+            return null;
+        }
+
+        return (int) $value;
     }
 }

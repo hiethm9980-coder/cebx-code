@@ -3,9 +3,16 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Account;
+use App\Models\Notification;
+use App\Models\NotificationChannel;
+use App\Models\NotificationPreference;
+use App\Models\NotificationSchedule;
+use App\Models\NotificationTemplate;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * NotificationController — FR-NTF-001→009
@@ -36,16 +43,23 @@ class NotificationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', Notification::class);
+
         $request->validate([
             'user_id'  => 'nullable|uuid',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
 
-        $data = $this->service->getLog(
-            $request->user()->account,
-            $request->input('user_id'),
-            $request->input('per_page', 20)
-        );
+        $query = Notification::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request));
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->input('user_id'));
+        }
+
+        $data = $query
+            ->orderBy('created_at', 'desc')
+            ->paginate((int) $request->input('per_page', 20));
 
         return response()->json(['status' => 'success', 'data' => $data]);
     }
@@ -55,7 +69,18 @@ class NotificationController extends Controller
      */
     public function inApp(Request $request): JsonResponse
     {
-        $data = $this->service->getInAppNotifications($request->user());
+        $this->authorize('viewAny', Notification::class);
+
+        $data = Notification::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('user_id', $request->user()->id)
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->when(
+                $this->notificationHasColumn('channel'),
+                static fn ($query) => $query->where('channel', 'in_app')
+            )
+            ->get();
 
         return response()->json(['status' => 'success', 'data' => $data]);
     }
@@ -65,9 +90,21 @@ class NotificationController extends Controller
      */
     public function unreadCount(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', Notification::class);
+
+        $count = Notification::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('user_id', $request->user()->id)
+            ->whereNull('read_at')
+            ->when(
+                $this->notificationHasColumn('channel'),
+                static fn ($query) => $query->where('channel', 'in_app')
+            )
+            ->count();
+
         return response()->json([
             'status' => 'success',
-            'data'   => ['unread_count' => $this->service->getUnreadCount($request->user())],
+            'data'   => ['unread_count' => $count],
         ]);
     }
 
@@ -76,7 +113,16 @@ class NotificationController extends Controller
      */
     public function markRead(Request $request, string $notificationId): JsonResponse
     {
-        $this->service->markAsRead($notificationId, $request->user());
+        $notification = Notification::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('user_id', $request->user()->id)
+            ->where('id', $notificationId)
+            ->firstOrFail();
+
+        $this->authorize('manage', $notification);
+
+        $notification->update(['read_at' => now()]);
+
         return response()->json(['status' => 'success']);
     }
 
@@ -85,7 +131,18 @@ class NotificationController extends Controller
      */
     public function markAllRead(Request $request): JsonResponse
     {
-        $count = $this->service->markAllAsRead($request->user());
+        $this->authorize('manage', Notification::class);
+
+        $count = Notification::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('user_id', $request->user()->id)
+            ->whereNull('read_at')
+            ->when(
+                $this->notificationHasColumn('channel'),
+                static fn ($query) => $query->where('channel', 'in_app')
+            )
+            ->update(['read_at' => now()]);
+
         return response()->json(['status' => 'success', 'data' => ['marked' => $count]]);
     }
 
@@ -94,9 +151,14 @@ class NotificationController extends Controller
      */
     public function getPreferences(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', Notification::class);
+
         return response()->json([
             'status' => 'success',
-            'data'   => $this->service->getPreferences($request->user()),
+            'data'   => NotificationPreference::query()
+                ->where('account_id', $this->resolveCurrentAccountId($request))
+                ->where('user_id', $request->user()->id)
+                ->get(),
         ]);
     }
 
@@ -105,6 +167,8 @@ class NotificationController extends Controller
      */
     public function updatePreferences(Request $request): JsonResponse
     {
+        $this->authorize('manage', Notification::class);
+
         $data = $request->validate([
             'preferences'              => 'required|array|min:1',
             'preferences.*.event_type' => 'required|string',
@@ -114,7 +178,11 @@ class NotificationController extends Controller
             'preferences.*.destination' => 'nullable|string|max:500',
         ]);
 
-        $this->service->updatePreferences($request->user(), $data['preferences']);
+        NotificationPreference::bulkUpdate(
+            (string) $request->user()->id,
+            $this->resolveCurrentAccountId($request),
+            $data['preferences']
+        );
 
         return response()->json(['status' => 'success', 'message' => 'Preferences updated']);
     }
@@ -124,10 +192,14 @@ class NotificationController extends Controller
      */
     public function listTemplates(Request $request): JsonResponse
     {
-        $templates = $this->service->listTemplates(
-            $request->user()->account_id,
-            $request->input('event_type')
-        );
+        $this->authorize('manageTemplates', NotificationTemplate::class);
+
+        $templates = NotificationTemplate::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->when($request->filled('event_type'), function ($query) use ($request): void {
+                $query->where('event_type', $request->input('event_type'));
+            })
+            ->get();
 
         return response()->json(['status' => 'success', 'data' => $templates]);
     }
@@ -137,6 +209,8 @@ class NotificationController extends Controller
      */
     public function createTemplate(Request $request): JsonResponse
     {
+        $this->authorize('manageTemplates', NotificationTemplate::class);
+
         $data = $request->validate([
             'event_type'   => 'required|string|max:100',
             'channel'      => 'required|string|max:50',
@@ -149,7 +223,7 @@ class NotificationController extends Controller
             'variables'    => 'nullable|array',
         ]);
 
-        $template = $this->service->createTemplate($data, $request->user()->account_id);
+        $template = $this->service->createTemplate($data, $this->resolveCurrentAccountId($request));
 
         return response()->json(['status' => 'success', 'data' => $template], 201);
     }
@@ -159,6 +233,13 @@ class NotificationController extends Controller
      */
     public function updateTemplate(Request $request, string $templateId): JsonResponse
     {
+        $template = NotificationTemplate::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('id', $templateId)
+            ->firstOrFail();
+
+        $this->authorize('manageTemplates', $template);
+
         $data = $request->validate([
             'subject'   => 'nullable|string|max:500',
             'body'      => 'nullable|string',
@@ -166,7 +247,7 @@ class NotificationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
-        $template = $this->service->updateTemplate($templateId, $data);
+        $template = $this->service->updateTemplate((string) $template->id, $data);
 
         return response()->json(['status' => 'success', 'data' => $template]);
     }
@@ -176,8 +257,15 @@ class NotificationController extends Controller
      */
     public function previewTemplate(Request $request, string $templateId): JsonResponse
     {
+        $template = NotificationTemplate::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('id', $templateId)
+            ->firstOrFail();
+
+        $this->authorize('manageTemplates', $template);
+
         $data = $request->validate(['sample_data' => 'required|array']);
-        $rendered = $this->service->previewTemplate($templateId, $data['sample_data']);
+        $rendered = $this->service->previewTemplate((string) $template->id, $data['sample_data']);
 
         return response()->json(['status' => 'success', 'data' => $rendered]);
     }
@@ -187,9 +275,13 @@ class NotificationController extends Controller
      */
     public function listChannels(Request $request): JsonResponse
     {
+        $this->authorize('manageChannels', NotificationChannel::class);
+
         return response()->json([
             'status' => 'success',
-            'data'   => $this->service->listChannels($request->user()->account),
+            'data'   => NotificationChannel::query()
+                ->where('account_id', $this->resolveCurrentAccountId($request))
+                ->get(),
         ]);
     }
 
@@ -198,6 +290,8 @@ class NotificationController extends Controller
      */
     public function configureChannel(Request $request): JsonResponse
     {
+        $this->authorize('manageChannels', NotificationChannel::class);
+
         $data = $request->validate([
             'channel'        => 'required|string|max:50',
             'provider'       => 'required|string|max:100',
@@ -208,7 +302,11 @@ class NotificationController extends Controller
             'is_active'      => 'nullable|boolean',
         ]);
 
-        $channel = $this->service->configureChannel($request->user()->account, $data);
+        $account = Account::withoutGlobalScopes()
+            ->where('id', $this->resolveCurrentAccountId($request))
+            ->firstOrFail();
+
+        $channel = $this->service->configureChannel($account, $data);
 
         return response()->json(['status' => 'success', 'data' => $channel], 201);
     }
@@ -218,15 +316,21 @@ class NotificationController extends Controller
      */
     public function testSend(Request $request): JsonResponse
     {
+        $this->authorize('manage', Notification::class);
+
         $data = $request->validate([
             'event_type'  => 'required|string',
             'channel'     => 'required|string',
             'destination' => 'required|string',
         ]);
 
+        $account = Account::withoutGlobalScopes()
+            ->where('id', $this->resolveCurrentAccountId($request))
+            ->firstOrFail();
+
         $results = $this->service->dispatch(
             $data['event_type'],
-            $request->user()->account,
+            $account,
             ['test' => true, 'timestamp' => now()->toIso8601String()],
             'test', 'test-001',
             [$request->user()->id]
@@ -243,6 +347,8 @@ class NotificationController extends Controller
      */
     public function createSchedule(Request $request): JsonResponse
     {
+        $this->authorize('manageSchedules', NotificationSchedule::class);
+
         $data = $request->validate([
             'frequency'   => 'required|in:immediate,hourly,daily,weekly',
             'time_of_day' => 'nullable|date_format:H:i',
@@ -252,8 +358,8 @@ class NotificationController extends Controller
             'channel'     => 'required|string|max:50',
         ]);
 
-        $schedule = \App\Models\NotificationSchedule::create(array_merge($data, [
-            'account_id' => $request->user()->account_id,
+        $schedule = NotificationSchedule::create(array_merge($data, [
+            'account_id' => $this->resolveCurrentAccountId($request),
             'user_id'    => $request->user()->id,
             'is_active'  => true,
         ]));
@@ -270,7 +376,37 @@ class NotificationController extends Controller
      */
     public function listSchedules(Request $request): JsonResponse
     {
-        $schedules = \App\Models\NotificationSchedule::where('user_id', $request->user()->id)->get();
+        $this->authorize('manageSchedules', NotificationSchedule::class);
+
+        $schedules = NotificationSchedule::query()
+            ->where('account_id', $this->resolveCurrentAccountId($request))
+            ->where('user_id', $request->user()->id)
+            ->get();
+
         return response()->json(['status' => 'success', 'data' => $schedules]);
+    }
+
+    private function resolveCurrentAccountId(Request $request): string
+    {
+        $currentAccountId = app()->bound('current_account_id')
+            ? trim((string) app('current_account_id'))
+            : '';
+
+        if ($currentAccountId !== '') {
+            return $currentAccountId;
+        }
+
+        return trim((string) ($request->user()->account_id ?? ''));
+    }
+
+    private function notificationHasColumn(string $column): bool
+    {
+        static $cache = [];
+
+        if (!array_key_exists($column, $cache)) {
+            $cache[$column] = Schema::hasColumn('notifications', $column);
+        }
+
+        return $cache[$column];
     }
 }

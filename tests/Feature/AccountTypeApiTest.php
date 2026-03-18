@@ -18,7 +18,7 @@ class AccountTypeApiTest extends TestCase
     //  Registration — Organization
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function registering_organization_account_creates_org_profile_and_kyc(): void
     {
         $response = $this->postJson('/api/v1/register', [
@@ -42,7 +42,7 @@ class AccountTypeApiTest extends TestCase
         $this->assertEquals('organization', $account->kycVerification->verification_type);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function registering_individual_account_does_not_create_org_profile(): void
     {
         $response = $this->postJson('/api/v1/register', [
@@ -67,7 +67,7 @@ class AccountTypeApiTest extends TestCase
     //  GET /api/v1/account/type
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_get_account_type_info_for_organization(): void
     {
         [$account, $owner] = $this->createOrgAccount();
@@ -81,7 +81,7 @@ class AccountTypeApiTest extends TestCase
                  ->assertJsonStructure(['data' => ['organization', 'kyc']]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_get_account_type_info_for_individual(): void
     {
         [$account, $owner] = $this->createIndividualAccount();
@@ -98,7 +98,7 @@ class AccountTypeApiTest extends TestCase
     //  GET/PUT /api/v1/account/organization
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_get_organization_profile(): void
     {
         [$account, $owner] = $this->createOrgAccount();
@@ -113,7 +113,7 @@ class AccountTypeApiTest extends TestCase
                  ]]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function individual_account_cannot_access_org_profile(): void
     {
         [$account, $owner] = $this->createIndividualAccount();
@@ -125,7 +125,7 @@ class AccountTypeApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_NOT_ORGANIZATION');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_organization_profile(): void
     {
         [$account, $owner] = $this->createOrgAccount();
@@ -144,7 +144,7 @@ class AccountTypeApiTest extends TestCase
                  ->assertJsonPath('data.country', 'SA');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function org_profile_update_is_audit_logged(): void
     {
         [$account, $owner] = $this->createOrgAccount();
@@ -164,7 +164,7 @@ class AccountTypeApiTest extends TestCase
     //  POST /api/v1/account/type-change
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_change_type_from_individual_to_organization(): void
     {
         [$account, $owner] = $this->createIndividualAccount();
@@ -182,7 +182,7 @@ class AccountTypeApiTest extends TestCase
         $this->assertEquals('unverified', $account->kyc_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_change_type_after_adding_users(): void
     {
         [$account, $owner] = $this->createIndividualAccount();
@@ -207,7 +207,7 @@ class AccountTypeApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_TYPE_CHANGE_NOT_ALLOWED');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_change_to_same_type(): void
     {
         [$account, $owner] = $this->createIndividualAccount();
@@ -225,7 +225,7 @@ class AccountTypeApiTest extends TestCase
     //  KYC — GET /api/v1/account/kyc + POST /api/v1/account/kyc/submit
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function can_get_kyc_status(): void
     {
         [$account, $owner] = $this->createOrgAccount();
@@ -239,7 +239,7 @@ class AccountTypeApiTest extends TestCase
                  ->assertJsonStructure(['data' => ['required_documents']]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function submitting_all_required_kyc_documents_sets_pending(): void
     {
         [$account, $owner] = $this->createOrgAccount();
@@ -260,7 +260,7 @@ class AccountTypeApiTest extends TestCase
         $this->assertEquals('pending', $account->fresh()->kyc_status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function submitting_incomplete_kyc_documents_returns_error(): void
     {
         [$account, $owner] = $this->createOrgAccount();
@@ -277,7 +277,7 @@ class AccountTypeApiTest extends TestCase
                  ->assertJsonPath('error_code', 'ERR_MISSING_DOCUMENTS');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function individual_kyc_requires_different_documents(): void
     {
         [$account, $owner] = $this->createIndividualAccount();
@@ -295,7 +295,7 @@ class AccountTypeApiTest extends TestCase
     //  Tenant Isolation
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_access_other_accounts_org_profile(): void
     {
         [$account1, $owner1] = $this->createOrgAccount('org1@test.com');

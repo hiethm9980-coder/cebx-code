@@ -3,35 +3,63 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Models\Branch;
+use App\Models\CustomsBroker;
 use App\Models\CustomsDeclaration;
 use App\Models\CustomsDocument;
-use App\Models\CustomsBroker;
-use App\Models\ShipmentItem;
 use App\Models\HsCode;
-use App\Models\AuditLog;
-use Illuminate\Http\Request;
+use App\Models\Shipment;
+use App\Models\ShipmentItem;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class CustomsController extends Controller
 {
-    // ══════════════════════════════════════════════════════════════
-    // CUSTOMS DECLARATIONS
-    // ══════════════════════════════════════════════════════════════
-
-    public function index(Request $r): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $q = CustomsDeclaration::where('account_id', $r->user()->account_id)->with(['shipment:id,tracking_number,status', 'broker:id,name']);
-        if ($r->customs_status) $q->where('customs_status', $r->customs_status);
-        if ($r->declaration_type) $q->where('declaration_type', $r->declaration_type);
-        if ($r->shipment_id) $q->where('shipment_id', $r->shipment_id);
-        if ($r->broker_id) $q->where('broker_id', $r->broker_id);
-        if ($r->search) $q->where(fn($q) => $q->where('declaration_number', 'like', "%{$r->search}%"));
-        return response()->json(['data' => $q->orderByDesc('created_at')->paginate($r->per_page ?? 25)]);
+        $this->authorize('viewAny', CustomsDeclaration::class);
+
+        $query = $this->scopedDeclarationQuery()
+            ->with(['shipment:id,tracking_number,status', 'broker:id,name']);
+
+        if ($request->customs_status) {
+            $query->where('customs_status', $request->customs_status);
+        }
+
+        if ($request->declaration_type) {
+            $query->where('declaration_type', $request->declaration_type);
+        }
+
+        if ($request->shipment_id) {
+            $query->where('shipment_id', $request->shipment_id);
+        }
+
+        if ($request->broker_id) {
+            $query->where('broker_id', $request->broker_id);
+        }
+
+        if ($request->search) {
+            $query->where('declaration_number', 'like', '%' . $request->search . '%');
+        }
+
+        return response()->json([
+            'data' => $query->orderByDesc('created_at')->paginate($request->per_page ?? 25),
+        ]);
     }
 
-    public function store(Request $r): JsonResponse
+    public function declarations(Request $request): JsonResponse
     {
-        $v = $r->validate([
+        return $this->index($request);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $this->authorize('create', CustomsDeclaration::class);
+
+        $validated = $request->validate([
             'shipment_id' => 'required|uuid|exists:shipments,id',
             'broker_id' => 'nullable|uuid|exists:customs_brokers,id',
             'branch_id' => 'nullable|uuid|exists:branches,id',
@@ -51,84 +79,183 @@ class CustomsController extends Controller
             'items.*.unit_value' => 'required_with:items|numeric|min:0',
         ]);
 
-        $v['account_id'] = $r->user()->account_id;
-        $v['customs_status'] = 'draft';
-        $decl = CustomsDeclaration::create($v);
+        $shipment = $this->findShipmentForCurrentAccount($validated['shipment_id']);
 
-        // Create items with HS code lookup
-        if ($r->items) {
-            foreach ($r->items as $item) {
-                $item['shipment_id'] = $v['shipment_id'];
-                $item['declaration_id'] = $decl->id;
-                $item['total_value'] = ($item['quantity'] ?? 1) * ($item['unit_value'] ?? 0);
-                ShipmentItem::create($item);
-            }
+        if (!empty($validated['broker_id'])) {
+            $validated['broker_id'] = $this->findBrokerForCurrentAccount($validated['broker_id'])->id;
         }
 
-        // Auto-calculate duties based on HS codes
-        $this->calculateDuties($decl);
+        if (!empty($validated['branch_id'])) {
+            $validated['branch_id'] = $this->findBranchForCurrentAccount($validated['branch_id'])->id;
+        }
 
-        return response()->json(['data' => $decl->load(['items', 'documents']), 'message' => 'تم إنشاء البيان الجمركي'], 201);
+        $validated['account_id'] = $this->currentAccountId();
+        $validated['shipment_id'] = $shipment->id;
+        $validated['customs_status'] = 'draft';
+
+        $declaration = CustomsDeclaration::create($validated);
+
+        foreach ($request->input('items', []) as $item) {
+            $item['shipment_id'] = $shipment->id;
+            $item['declaration_id'] = $declaration->id;
+            $item['total_value'] = ($item['quantity'] ?? 1) * ($item['unit_value'] ?? 0);
+            ShipmentItem::create($item);
+        }
+
+        $this->calculateDuties($declaration->fresh());
+
+        return response()->json([
+            'data' => $declaration->fresh()->load(['items', 'documents']),
+            'message' => 'طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ط¨ظٹط§ظ† ط§ظ„ط¬ظ…ط±ظƒظٹ',
+        ], 201);
+    }
+
+    public function createDeclaration(Request $request): JsonResponse
+    {
+        return $this->store($request);
     }
 
     public function show(string $id): JsonResponse
     {
-        $d = CustomsDeclaration::with(['shipment', 'broker', 'documents', 'items', 'branch', 'inspector'])->findOrFail($id);
-        return response()->json(['data' => $d]);
+        $declaration = $this->findDeclarationForCurrentAccount($id, [
+            'shipment',
+            'broker',
+            'documents',
+            'items',
+            'branch',
+            'inspector',
+        ]);
+        $this->authorize('view', $declaration);
+
+        return response()->json(['data' => $declaration]);
     }
 
-    public function update(Request $r, string $id): JsonResponse
+    public function showDeclaration(string $id): JsonResponse
     {
-        $d = CustomsDeclaration::findOrFail($id);
-        if (!in_array($d->customs_status, ['draft', 'documents_pending'])) {
-            return response()->json(['message' => 'لا يمكن التعديل في هذه المرحلة'], 422);
-        }
-        $d->update($r->only(['broker_id', 'branch_id', 'customs_office', 'incoterm_code', 'declared_value', 'declared_currency', 'notes']));
-        $this->calculateDuties($d);
-        return response()->json(['data' => $d, 'message' => 'تم تحديث البيان']);
+        return $this->show($id);
     }
 
-    // ── Status Transitions ───────────────────────────────────────
-    public function updateStatus(Request $r, string $id): JsonResponse
+    public function update(Request $request, string $id): JsonResponse
     {
-        $r->validate(['status' => 'required|string', 'notes' => 'nullable|string']);
-        $d = CustomsDeclaration::findOrFail($id);
+        $declaration = $this->findDeclarationForCurrentAccount($id);
+        $this->authorize('update', $declaration);
+        $statusColumn = $this->declarationStatusColumn();
 
-        if (!$d->canTransitionTo($r->status)) {
-            return response()->json(['message' => "لا يمكن الانتقال من {$d->customs_status} إلى {$r->status}"], 422);
+        if (!in_array((string) ($declaration->{$statusColumn} ?? ''), ['draft', 'documents_pending'], true)) {
+            return response()->json(['message' => 'ظ„ط§ ظٹظ…ظƒظ† ط§ظ„طھط¹ط¯ظٹظ„ ظپظٹ ظ‡ط°ظ‡ ط§ظ„ظ…ط±ط­ظ„ط©'], 422);
         }
 
-        $oldStatus = $d->customs_status;
-        $updates = ['customs_status' => $r->status];
+        $payload = $request->only([
+            'broker_id',
+            'branch_id',
+            'customs_office',
+            'incoterm_code',
+            'declared_value',
+            'declared_currency',
+            'notes',
+        ]);
 
-        // Auto-set timestamps
-        match ($r->status) {
+        if (!empty($payload['broker_id'])) {
+            $payload['broker_id'] = $this->findBrokerForCurrentAccount((string) $payload['broker_id'])->id;
+        }
+
+        if (!empty($payload['branch_id'])) {
+            $payload['branch_id'] = $this->findBranchForCurrentAccount((string) $payload['branch_id'])->id;
+        }
+
+        $declaration->update($payload);
+        $this->calculateDuties($declaration->fresh());
+
+        return response()->json([
+            'data' => $declaration->fresh(),
+            'message' => 'طھظ… طھط­ط¯ظٹط« ط§ظ„ط¨ظٹط§ظ†',
+        ]);
+    }
+
+    public function updateDeclaration(Request $request, string $id): JsonResponse
+    {
+        return $this->update($request, $id);
+    }
+
+    public function updateStatus(Request $request, string $id): JsonResponse
+    {
+        $request->validate(['status' => 'required|string', 'notes' => 'nullable|string']);
+
+        $declaration = $this->findDeclarationForCurrentAccount($id);
+        $this->authorize('updateStatus', $declaration);
+        $statusColumn = $this->declarationStatusColumn();
+
+        if (!$declaration->canTransitionTo((string) $request->status)) {
+            return response()->json([
+                'message' => 'ظ„ط§ ظٹظ…ظƒظ† ط§ظ„ط§ظ†طھظ‚ط§ظ„ ظ…ظ† ' . ($declaration->{$statusColumn} ?? '') . ' ط¥ظ„ظ‰ ' . $request->status,
+            ], 422);
+        }
+
+        $oldStatus = (string) ($declaration->{$statusColumn} ?? '');
+        $updates = [$statusColumn => $request->status];
+
+        match ($request->status) {
             'submitted' => $updates['submitted_at'] = now(),
             'cleared' => $updates['cleared_at'] = now(),
-            'duty_paid' => array_merge($updates, ['duty_paid_at' => now(), 'duty_payment_ref' => $r->payment_ref ?? null]),
-            'inspecting' => array_merge($updates, ['inspection_flag' => true, 'inspection_date' => now(), 'inspector_user_id' => $r->user()->id]),
+            'duty_paid' => $updates = array_merge($updates, [
+                'duty_paid_at' => now(),
+                'duty_payment_ref' => $request->payment_ref,
+            ]),
+            'inspecting' => $updates = array_merge($updates, [
+                'inspection_flag' => true,
+                'inspection_date' => now(),
+                'inspector_user_id' => $request->user()->id,
+            ]),
             default => null,
         };
 
-        if ($r->inspection_result) $updates['inspection_result'] = $r->inspection_result;
-        if ($r->inspection_notes) $updates['inspection_notes'] = $r->inspection_notes;
+        if ($request->filled('inspection_result')) {
+            $updates['inspection_result'] = $request->inspection_result;
+        }
 
-        $d->update($updates);
+        if ($request->filled('inspection_notes')) {
+            $updates['inspection_notes'] = $request->inspection_notes;
+        }
+
+        $declaration->update($updates);
 
         AuditLog::create([
-            'account_id' => $d->account_id, 'user_id' => $r->user()->id,
-            'action' => 'customs_status_change', 'entity_type' => 'customs_declaration', 'entity_id' => $id,
-            'old_values' => ['status' => $oldStatus], 'new_values' => ['status' => $r->status],
-            'description' => "تغيير حالة الجمارك: {$oldStatus} → {$r->status}",
+            'account_id' => $declaration->account_id,
+            'user_id' => $request->user()->id,
+            'action' => 'customs_status_change',
+            'entity_type' => 'customs_declaration',
+            'entity_id' => $declaration->id,
+            'old_values' => ['status' => $oldStatus],
+            'new_values' => ['status' => $request->status],
+            'description' => 'طھط؛ظٹظٹط± ط­ط§ظ„ط© ط§ظ„ط¬ظ…ط§ط±ظƒ: ' . $oldStatus . ' â†’ ' . $request->status,
         ]);
 
-        return response()->json(['data' => $d, 'message' => 'تم تحديث حالة البيان الجمركي']);
+        return response()->json([
+            'data' => $declaration,
+            'message' => 'طھظ… طھط­ط¯ظٹط« ط­ط§ظ„ط© ط§ظ„ط¨ظٹط§ظ† ط§ظ„ط¬ظ…ط±ظƒظٹ',
+        ]);
     }
 
-    // ── Document Upload ──────────────────────────────────────────
-    public function uploadDocument(Request $r, string $id): JsonResponse
+    public function inspect(Request $request, string $id): JsonResponse
     {
-        $r->validate([
+        $request->merge(['status' => 'inspecting']);
+
+        return $this->updateStatus($request, $id);
+    }
+
+    public function issueClearance(Request $request, string $id): JsonResponse
+    {
+        $request->merge(['status' => 'cleared']);
+
+        return $this->updateStatus($request, $id);
+    }
+
+    public function uploadDocument(Request $request, string $id): JsonResponse
+    {
+        $declaration = $this->resolveDeclarationForDocumentUpload($id);
+        $this->authorize('uploadDocument', $declaration);
+
+        $request->validate([
             'document_type' => 'required|string',
             'document_name' => 'required|string|max:200',
             'document_number' => 'nullable|string|max:100',
@@ -136,56 +263,134 @@ class CustomsController extends Controller
             'is_required' => 'nullable|boolean',
         ]);
 
-        $decl = CustomsDeclaration::findOrFail($id);
-        $file = $r->file('file');
-        $path = $file->store("customs/{$id}", 'public');
+        $file = $request->file('file');
+        $path = $file->store('customs/' . $declaration->id, 'public');
 
-        $doc = CustomsDocument::create([
-            'declaration_id' => $id,
-            'shipment_id' => $decl->shipment_id,
-            'document_type' => $r->document_type,
-            'document_name' => $r->document_name,
-            'document_number' => $r->document_number,
+        $document = CustomsDocument::create([
+            'declaration_id' => $declaration->id,
+            'shipment_id' => $declaration->shipment_id,
+            'document_type' => $request->document_type,
+            'document_name' => $request->document_name,
+            'document_number' => $request->document_number,
             'file_path' => $path,
             'file_type' => $file->getClientOriginalExtension(),
             'file_size' => $file->getSize(),
-            'uploaded_by' => $r->user()->id,
-            'is_required' => $r->is_required ?? true,
+            'uploaded_by' => $request->user()->id,
+            'is_required' => $request->boolean('is_required', true),
         ]);
 
-        return response()->json(['data' => $doc, 'message' => 'تم رفع المستند'], 201);
+        return response()->json([
+            'data' => $document,
+            'message' => 'طھظ… ط±ظپط¹ ط§ظ„ظ…ط³طھظ†ط¯',
+        ], 201);
     }
 
-    public function verifyDocument(Request $r, string $id, string $docId): JsonResponse
+    public function documents(string $shipmentId): JsonResponse
     {
-        $doc = CustomsDocument::where('declaration_id', $id)->findOrFail($docId);
-        $action = $r->input('action', 'approve');
+        $shipment = $this->findShipmentForCurrentAccount($shipmentId);
+        $this->authorize('viewAny', CustomsDeclaration::class);
+
+        return response()->json([
+            'data' => CustomsDocument::query()
+                ->where('shipment_id', $shipment->id)
+                ->with('declaration')
+                ->orderByDesc('created_at')
+                ->get(),
+        ]);
+    }
+
+    public function verifyDocument(Request $request, string $id): JsonResponse
+    {
+        $document = CustomsDocument::query()
+            ->where('id', $id)
+            ->whereHas('declaration', function ($builder): void {
+                $builder->where('account_id', $this->currentAccountId());
+            })
+            ->with('declaration')
+            ->firstOrFail();
+        $this->authorize('verifyDocument', $document);
+
+        $action = (string) $request->input('action', 'approve');
 
         if ($action === 'approve') {
-            $doc->update(['is_verified' => true, 'verified_by' => $r->user()->id, 'verified_at' => now(), 'rejection_reason' => null]);
+            $document->update([
+                'is_verified' => true,
+                'verified_by' => $request->user()->id,
+                'verified_at' => now(),
+                'rejection_reason' => null,
+            ]);
         } else {
-            $doc->update(['is_verified' => false, 'rejection_reason' => $r->rejection_reason]);
+            $document->update([
+                'is_verified' => false,
+                'rejection_reason' => $request->input('rejection_reason'),
+            ]);
         }
 
-        return response()->json(['data' => $doc, 'message' => $action === 'approve' ? 'تم التحقق من المستند' : 'تم رفض المستند']);
+        return response()->json([
+            'data' => $document,
+            'message' => $action === 'approve' ? 'طھظ… ط§ظ„طھط­ظ‚ظ‚ ظ…ظ† ط§ظ„ظ…ط³طھظ†ط¯' : 'طھظ… ط±ظپط¶ ط§ظ„ظ…ط³طھظ†ط¯',
+        ]);
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // CUSTOMS BROKERS
-    // ══════════════════════════════════════════════════════════════
-
-    public function brokersIndex(Request $r): JsonResponse
+    public function duties(string $shipmentId): JsonResponse
     {
-        $q = CustomsBroker::where('account_id', $r->user()->account_id);
-        if ($r->country) $q->where('country', $r->country);
-        if ($r->status) $q->where('status', $r->status);
-        if ($r->search) $q->where(fn($q) => $q->where('name', 'like', "%{$r->search}%")->orWhere('license_number', 'like', "%{$r->search}%"));
-        return response()->json(['data' => $q->orderBy('rating', 'desc')->paginate($r->per_page ?? 25)]);
+        $shipment = $this->findShipmentForCurrentAccount($shipmentId);
+        $this->authorize('viewAny', CustomsDeclaration::class);
+
+        $declaration = $this->scopedDeclarationQuery()
+            ->where('shipment_id', $shipment->id)
+            ->latest()
+            ->first();
+
+        return response()->json([
+            'data' => [
+                'declaration_id' => $declaration?->id,
+                'duty_amount' => $declaration?->duty_amount ?? 0,
+                'vat_amount' => $declaration?->vat_amount ?? 0,
+                'excise_amount' => $declaration?->excise_amount ?? 0,
+                'broker_fee' => $declaration?->broker_fee ?? 0,
+                'total_customs_charges' => $declaration?->total_customs_charges ?? 0,
+            ],
+        ]);
     }
 
-    public function brokersStore(Request $r): JsonResponse
+    public function brokersIndex(Request $request): JsonResponse
     {
-        $v = $r->validate([
+        $this->authorize('viewAny', CustomsBroker::class);
+
+        $query = CustomsBroker::query()->where('account_id', $this->currentAccountId());
+
+        if ($request->country) {
+            $query->where('country', $request->country);
+        }
+
+        if ($request->status) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->search) {
+            $query->where(function ($builder) use ($request): void {
+                $builder
+                    ->where('name', 'like', '%' . $request->search . '%')
+                    ->orWhere('license_number', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        return response()->json([
+            'data' => $query->orderBy('rating', 'desc')->paginate($request->per_page ?? 25),
+        ]);
+    }
+
+    public function brokers(Request $request): JsonResponse
+    {
+        return $this->brokersIndex($request);
+    }
+
+    public function brokersStore(Request $request): JsonResponse
+    {
+        $this->authorize('create', CustomsBroker::class);
+
+        $validated = $request->validate([
             'name' => 'required|string|max:200',
             'license_number' => 'required|string|max:100',
             'country' => 'required|string|size:2',
@@ -197,68 +402,261 @@ class CustomsController extends Controller
             'fixed_fee' => 'nullable|numeric|min:0',
             'specializations' => 'nullable|array',
         ]);
-        $v['account_id'] = $r->user()->account_id;
-        return response()->json(['data' => CustomsBroker::create($v), 'message' => 'تم إضافة المخلص الجمركي'], 201);
+
+        $validated['account_id'] = $this->currentAccountId();
+
+        return response()->json([
+            'data' => CustomsBroker::create($validated),
+            'message' => 'طھظ… ط¥ط¶ط§ظپط© ط§ظ„ظ…ط®ظ„طµ ط§ظ„ط¬ظ…ط±ظƒظٹ',
+        ], 201);
+    }
+
+    public function createBroker(Request $request): JsonResponse
+    {
+        return $this->brokersStore($request);
     }
 
     public function brokersShow(string $id): JsonResponse
     {
-        return response()->json(['data' => CustomsBroker::with('declarations')->findOrFail($id)]);
+        $broker = $this->findBrokerForCurrentAccount($id, ['declarations']);
+        $this->authorize('view', $broker);
+
+        return response()->json(['data' => $broker]);
     }
 
-    public function brokersUpdate(Request $r, string $id): JsonResponse
+    public function brokersUpdate(Request $request, string $id): JsonResponse
     {
-        $b = CustomsBroker::findOrFail($id);
-        $b->update($r->only(['name', 'license_number', 'country', 'city', 'phone', 'email', 'company_name', 'commission_rate', 'fixed_fee', 'status', 'specializations']));
-        return response()->json(['data' => $b, 'message' => 'تم تحديث المخلص']);
+        $broker = $this->findBrokerForCurrentAccount($id);
+        $this->authorize('update', $broker);
+
+        $broker->update($request->only([
+            'name',
+            'license_number',
+            'country',
+            'city',
+            'phone',
+            'email',
+            'company_name',
+            'commission_rate',
+            'fixed_fee',
+            'status',
+            'specializations',
+        ]));
+
+        return response()->json([
+            'data' => $broker,
+            'message' => 'طھظ… طھط­ط¯ظٹط« ط§ظ„ظ…ط®ظ„طµ',
+        ]);
     }
 
-    // ── Stats ────────────────────────────────────────────────────
-    public function stats(Request $r): JsonResponse
+    public function updateBroker(Request $request, string $id): JsonResponse
     {
-        $aid = $r->user()->account_id;
+        return $this->brokersUpdate($request, $id);
+    }
+
+    public function stats(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', CustomsDeclaration::class);
+
+        $accountId = $this->currentAccountId();
+
         return response()->json(['data' => [
-            'total_declarations' => CustomsDeclaration::where('account_id', $aid)->count(),
-            'by_status' => CustomsDeclaration::where('account_id', $aid)->selectRaw('customs_status, count(*) as count')->groupBy('customs_status')->pluck('count', 'customs_status'),
-            'pending_clearance' => CustomsDeclaration::where('account_id', $aid)->whereNotIn('customs_status', ['cleared', 'cancelled', 'rejected'])->count(),
-            'cleared_this_month' => CustomsDeclaration::where('account_id', $aid)->where('customs_status', 'cleared')->whereMonth('cleared_at', now()->month)->count(),
-            'total_duties' => CustomsDeclaration::where('account_id', $aid)->where('customs_status', 'cleared')->sum('total_customs_charges'),
-            'active_brokers' => CustomsBroker::where('account_id', $aid)->where('status', 'active')->count(),
+            'total_declarations' => $this->scopedDeclarationQuery()->count(),
+            'by_status' => $this->declarationStatusAggregate(),
+            'pending_clearance' => $this->pendingDeclarationCount(),
+            'cleared_this_month' => $this->clearedDeclarationCountForCurrentMonth(),
+            'total_duties' => $this->clearedDeclarationDutyTotal(),
+            'active_brokers' => CustomsBroker::query()->where('account_id', $accountId)->where('status', 'active')->count(),
         ]]);
     }
 
-    // ── Duty Calculator ──────────────────────────────────────────
-    private function calculateDuties(CustomsDeclaration $decl): void
+    /**
+     * @param array<int, string> $with
+     */
+    private function findDeclarationForCurrentAccount(string $id, array $with = []): CustomsDeclaration
     {
-        $items = ShipmentItem::where('declaration_id', $decl->id)->get();
-        $totalDuty = 0; $totalVat = 0; $totalExcise = 0;
+        $query = $this->scopedDeclarationQuery();
+
+        if ($with !== []) {
+            $query->with($with);
+        }
+
+        return $query->where('id', $id)->firstOrFail();
+    }
+
+    /**
+     * @param array<int, string> $with
+     */
+    private function findBrokerForCurrentAccount(string $id, array $with = []): CustomsBroker
+    {
+        $query = CustomsBroker::query()->where('account_id', $this->currentAccountId());
+
+        if ($with !== []) {
+            $query->with($with);
+        }
+
+        return $query->where('id', $id)->firstOrFail();
+    }
+
+    private function findShipmentForCurrentAccount(string $id): Shipment
+    {
+        return Shipment::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    private function findBranchForCurrentAccount(string $id): Branch
+    {
+        return Branch::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    private function calculateDuties(CustomsDeclaration $declaration): void
+    {
+        $items = ShipmentItem::query()->where('declaration_id', $declaration->id)->get();
+        $totalDuty = 0;
+        $totalVat = 0;
+        $totalExcise = 0;
 
         foreach ($items as $item) {
-            if (!$item->hs_code) continue;
-            $hs = HsCode::where('code', $item->hs_code)->where(fn($q) => $q->where('country', $decl->destination_country)->orWhere('country', '*'))->first();
-            if (!$hs) continue;
+            if (!$item->hs_code) {
+                continue;
+            }
 
-            $duties = $hs->calculateDuty($item->total_value);
+            $hsCode = HsCode::query()
+                ->where('code', $item->hs_code)
+                ->where(function ($builder) use ($declaration): void {
+                    $builder
+                        ->where('country', $declaration->destination_country)
+                        ->orWhere('country', '*');
+                })
+                ->first();
+
+            if (!$hsCode) {
+                continue;
+            }
+
+            $duties = $hsCode->calculateDuty($item->total_value);
             $totalDuty += $duties['duty'];
             $totalVat += $duties['vat'];
             $totalExcise += $duties['excise'];
         }
 
-        // Broker fee
         $brokerFee = 0;
-        if ($decl->broker_id) {
-            $broker = CustomsBroker::find($decl->broker_id);
+        if ($declaration->broker_id) {
+            $broker = CustomsBroker::query()->find($declaration->broker_id);
             if ($broker) {
-                $brokerFee = $broker->fixed_fee + ($decl->declared_value * $broker->commission_rate / 100);
+                $brokerFee = $broker->fixed_fee + ($declaration->declared_value * $broker->commission_rate / 100);
             }
         }
 
-        $decl->update([
+        $updates = [];
+
+        foreach ([
             'duty_amount' => $totalDuty,
             'vat_amount' => $totalVat,
             'excise_amount' => $totalExcise,
             'broker_fee' => round($brokerFee, 2),
             'total_customs_charges' => $totalDuty + $totalVat + $totalExcise + $brokerFee,
-        ]);
+        ] as $column => $value) {
+            if (Schema::hasColumn('customs_declarations', $column)) {
+                $updates[$column] = $value;
+            }
+        }
+
+        if ($updates !== []) {
+            $declaration->update($updates);
+        }
+    }
+
+    private function resolveDeclarationForDocumentUpload(string $identifier): CustomsDeclaration
+    {
+        $declaration = $this->scopedDeclarationQuery()
+            ->where('id', $identifier)
+            ->first();
+
+        if ($declaration) {
+            return $declaration;
+        }
+
+        $shipment = $this->findShipmentForCurrentAccount($identifier);
+
+        return $this->scopedDeclarationQuery()
+            ->where('shipment_id', $shipment->id)
+            ->latest()
+            ->firstOrFail();
+    }
+
+    private function scopedDeclarationQuery(): Builder
+    {
+        if (Schema::hasColumn('customs_declarations', 'account_id')) {
+            return CustomsDeclaration::query()->where('account_id', $this->currentAccountId());
+        }
+
+        return CustomsDeclaration::query()->whereHas('shipment', function (Builder $builder): void {
+            $builder->where('account_id', $this->currentAccountId());
+        });
+    }
+
+    private function declarationStatusColumn(): string
+    {
+        return Schema::hasColumn('customs_declarations', 'customs_status') ? 'customs_status' : 'status';
+    }
+
+    private function declarationAmountColumn(): string
+    {
+        return Schema::hasColumn('customs_declarations', 'total_customs_charges') ? 'total_customs_charges' : 'duty_amount';
+    }
+
+    private function declarationStatusAggregate(): mixed
+    {
+        $statusColumn = $this->declarationStatusColumn();
+
+        return $this->scopedDeclarationQuery()
+            ->selectRaw($statusColumn . ', count(*) as count')
+            ->groupBy($statusColumn)
+            ->pluck('count', $statusColumn);
+    }
+
+    private function pendingDeclarationCount(): int
+    {
+        $statusColumn = $this->declarationStatusColumn();
+
+        return $this->scopedDeclarationQuery()
+            ->whereNotIn($statusColumn, ['cleared', 'cancelled', 'rejected'])
+            ->count();
+    }
+
+    private function clearedDeclarationCountForCurrentMonth(): int
+    {
+        $statusColumn = $this->declarationStatusColumn();
+
+        $query = $this->scopedDeclarationQuery()->where($statusColumn, 'cleared');
+
+        if (Schema::hasColumn('customs_declarations', 'cleared_at')) {
+            $query->whereMonth('cleared_at', now()->month);
+        } else {
+            $query->whereMonth('updated_at', now()->month);
+        }
+
+        return $query->count();
+    }
+
+    private function clearedDeclarationDutyTotal(): int|float
+    {
+        $statusColumn = $this->declarationStatusColumn();
+        $amountColumn = $this->declarationAmountColumn();
+
+        return $this->scopedDeclarationQuery()
+            ->where($statusColumn, 'cleared')
+            ->sum($amountColumn);
+    }
+
+    private function currentAccountId(): string
+    {
+        return trim((string) app('current_account_id'));
     }
 }

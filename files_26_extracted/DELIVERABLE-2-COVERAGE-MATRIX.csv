@@ -1,0 +1,78 @@
+screen,route,http_method,ui_trigger,controller_method,permission_required,db_table,db_effect,tenant_isolated,status,bug_or_note
+Dashboard,/,GET,Sidebar link,DashboardController@index,none,shipments+orders+wallets+notifications,read counts,YES,WARN,"BUG-08: wallet->balance should be available_balance"
+Shipments List,/shipments,GET,Sidebar link,ShipmentWebController@index,none,shipments,read+paginate+filter,YES,OK,
+Shipments Tab: All,/shipments,GET,Tab button,ShipmentWebController@index,none,shipments,no filter,YES,OK,
+Shipments Tab: Payment Pending,/shipments?status=payment_pending,GET,Tab button,ShipmentWebController@index,none,shipments,filter by status,YES,OK,
+Shipments Tab: In Transit,/shipments?status=in_transit,GET,Tab button,ShipmentWebController@index,none,shipments,filter by status,YES,OK,
+Shipments Tab: Delivered,/shipments?status=delivered,GET,Tab button,ShipmentWebController@index,none,shipments,filter by status,YES,OK,
+Shipments Tab: Cancelled,/shipments?status=cancelled,GET,Tab button,ShipmentWebController@index,none,shipments,filter by status,YES,OK,
+Shipments Search,/shipments?search=X,GET,Search input,ShipmentWebController@index,none,shipments,LIKE search,YES,OK,
+Shipments Create,/shipments,POST,Modal: إنشاء شحنة,ShipmentWebController@store,none,shipments,INSERT row,YES,OK,"Uses correct columns: created_by source tracking_number"
+Shipments Export,/shipments/export,GET,Button: تصدير,ShipmentWebController@export,none,shipments,READ → CSV download,YES,OK,
+Shipment Show,/shipments/{id},GET,Table row click,ShipmentWebController@show,none,shipments,READ single + timeline,YES,OK,
+Shipment Cancel,/shipments/{id}/cancel,PATCH,Button: إلغاء,ShipmentWebController@cancel,none,shipments,UPDATE status→cancelled,YES,OK,
+Shipment Return,/shipments/{id}/return,POST,Button: مرتجع,ShipmentWebController@createReturn,none,shipments,INSERT return shipment,YES,OK,
+Shipment Label,/shipments/{id}/label,GET,Button: طباعة,ShipmentWebController@label,none,shipments,READ view,YES,OK,
+Orders List,/orders,GET,Sidebar link,OrderWebController@index,none,orders,read+paginate,YES,OK,
+Orders Create,/orders,POST,Modal: إنشاء طلب,OrderWebController@store,none,orders,INSERT row,YES,OK,
+Orders Ship,/orders/{id}/ship,POST,Button: شحن,OrderWebController@ship,none,orders,UPDATE status→shipped,YES,OK,SEC-06: no permission check
+Orders Cancel,/orders/{id}/cancel,PATCH,Button: إلغاء,OrderWebController@cancel,none,orders,UPDATE status→cancelled,YES,OK,
+Orders Sync,MISSING,—,Button: مزامنة الطلبات,MISSING,—,NONE,NONE,—,DEAD,"WARN-03: no route exists"
+Stores List,/stores,GET,Sidebar link,StoreWebController@index,none,stores,read + count orders,YES,OK,
+Stores Create,/stores,POST,Modal: ربط متجر,StoreWebController@store,none,stores,INSERT row,YES,OK,
+Stores Sync,/stores/{id}/sync,POST,Button: مزامنة,StoreWebController@sync,none,NONE,STUB — no real effect,YES,DEAD,"WARN-01: returns fake success"
+Stores Test,/stores/{id}/test,POST,Button: اختبار,StoreWebController@test,none,NONE,STUB — no real effect,YES,DEAD,"WARN-02: returns fake success"
+Stores Delete,/stores/{id},DELETE,Button: حذف,StoreWebController@destroy,none,stores,HARD DELETE,YES,OK,SEC-05: no permission
+Tracking,/tracking,GET,Sidebar link,PageController@tracking,none,shipments,READ active shipments,YES,FAIL,"BUG-09: carrier_tracking_number column does not exist"
+Tracking Search,/tracking?q=X,GET,Search input,PageController@tracking,none,shipments,LIKE on wrong column,YES,FAIL,"BUG-09: SQL Error 1054"
+Pricing List,/pricing,GET,Sidebar link,PageController@pricing,none,pricing_rule_sets,read+paginate,YES,OK,
+Pricing Create,/pricing,POST,Modal: إنشاء قاعدة,PageController@pricingStore,none,pricing_rule_sets,INSERT row,YES,OK,
+Financial,/financial,GET,Sidebar link,PageController@financial,none,shipments,read aggregates,YES,OK,
+Wallet List,/wallet,GET,Sidebar link,WalletWebController@index,none,wallets+wallet_ledger_entries+payment_methods,read,YES,OK,
+Wallet Topup,/wallet/topup,POST,Button: شحن الرصيد,WalletWebController@topup,none,wallets+wallet_ledger_entries,INCREMENT balance + INSERT ledger,YES,OK,
+Wallet Hold,/wallet/hold,POST,Button: حجز مبلغ,WalletWebController@hold,none,wallets,DECREMENT available + INCREMENT locked,YES,WARN,"WARN-06: no ledger entry created"
+Users List,/users,GET,Sidebar link,UserWebController@index,none,users,read scoped by account_id,MANUAL,OK,
+Users Create,/users,POST,Modal: إضافة مستخدم,UserWebController@store,none,users+user_role,INSERT user + ATTACH role,MANUAL,OK,
+Users Toggle,/users/{id}/toggle,PATCH,Button: تعطيل/تفعيل,UserWebController@toggle,none,users,UPDATE status,NO SCOPE,FAIL,"SEC-02: can target other account's users"
+Users Delete,/users/{id},DELETE,Button: حذف,UserWebController@destroy,none,users,SOFT DELETE,NO SCOPE,FAIL,"SEC-02: can target other account's users"
+Support List,/support,GET,Sidebar link,SupportWebController@index,none,support_tickets,read+paginate,YES,OK,
+Support Create,/support,POST,Modal: إنشاء تذكرة,SupportWebController@store,none,support_tickets,INSERT row,YES,OK,
+Support Show,/support/{id},GET,Table row click,SupportWebController@show,none,support_tickets+replies,READ,YES,OK,
+Support Reply,/support/{id}/reply,POST,Button: إرسال رد,SupportWebController@reply,none,support_ticket_replies,INSERT row,YES,OK,
+Support Resolve,/support/{id}/resolve,PATCH,Button: حل التذكرة,SupportWebController@resolve,none,support_tickets,UPDATE status→resolved,YES,OK,
+Roles List,/roles,GET,Sidebar link,PageController@roles,none,roles,read,YES,OK,
+Roles Create,/roles,POST,Modal: إنشاء دور,PageController@rolesStore,none,roles,INSERT row,YES,OK,
+Invitations List,/invitations,GET,Sidebar link,PageController@invitations,none,invitations,read,YES,OK,
+Invitations Create,/invitations,POST,Modal: إرسال دعوة,PageController@invitationsStore,none,invitations,INSERT row,YES,OK,
+Notifications List,/notifications,GET,Sidebar link,PageController@notifications,none,notifications,read,YES,OK,
+Notifications Read,/notifications/{id}/read,PATCH,Button: قراءة,PageController@notificationsRead,none,notifications,UPDATE read_at,YES,OK,
+Notifications ReadAll,/notifications/read-all,POST,Button: قراءة الكل,PageController@notificationsReadAll,none,notifications,UPDATE all read_at,YES,OK,
+Addresses List,/addresses,GET,Sidebar link,PageController@addresses,none,addresses,read,YES,OK,
+Addresses Create,/addresses,POST,Modal: إنشاء عنوان,PageController@addressesStore,none,addresses,INSERT row,YES,OK,
+Addresses Default,/addresses/{id}/default,PATCH,Button: تعيين افتراضي,PageController@addressesDefault,none,addresses,UPDATE is_default,YES,OK,
+Addresses Delete,/addresses/{id},DELETE,Button: حذف,PageController@addressesDestroy,none,addresses,DELETE row,YES,OK,
+Settings,/settings,GET,Sidebar link,PageController@settings,none,account_settings,read,YES,OK,
+Settings Update,/settings,PUT,Button: حفظ,PageController@settingsUpdate,none,account_settings,UPSERT,YES,OK,
+Audit Log,/audit,GET,Sidebar link,PageController@audit,none,audit_logs,read+paginate,YES,OK,
+Audit Export,/audit/export,GET,Button: تصدير,PageController@auditExport,none,audit_logs,READ → CSV,YES,OK,
+Admin Panel,/admin,GET,Sidebar link,PageController@admin,none,various,read stats,YES,OK,
+Reports,/reports,GET,Sidebar link,PageController@reports,none,various,read stats,YES,OK,
+Reports Export,/reports/export/{type},GET,Button: تصدير,PageController@reportsExport,none,various,READ → CSV,YES,OK,
+KYC,/kyc,GET,Sidebar link,PageController@kyc,none,kyc_documents,read counts,YES,OK,
+Organizations List,/organizations,GET,Sidebar link,PageController@organizations,none,organizations,read,YES,OK,
+Organizations Create,/organizations,POST,Modal: إنشاء منظمة,PageController@organizationsStore,none,organizations,INSERT row,YES,OK,
+DG,/dg,GET,Sidebar link,PageController@dg,none,shipments,read flagged,YES,OK,
+Risk,/risk,GET,Sidebar link,PageController@risk,none,risk_assessments,read,YES,OK,
+Containers List,/containers,GET,Sidebar link,PageController@containers,none,containers,read+paginate,YES,FAIL,"BUG-01: iso_code/port/vessel.name don't exist. Correct: size/location/vesselSchedule.vessel.vessel_name"
+Containers Create,/containers,POST,Modal: إنشاء حاوية,PageController@containersStore,none,containers,INSERT row,YES,FAIL,"BUG-02: POST route missing (405). Also containersStore uses iso_code/port instead of size/location"
+Customs List,/customs,GET,Sidebar link,PageController@customs,none,customs_declarations,read+paginate,YES,FAIL,"BUG-03: SQL Error — status column doesn't exist. Correct: customs_status"
+Customs Create,/customs,POST,Modal: إنشاء إقرار,PageController@customsStore,none,customs_declarations,INSERT row,YES,FAIL,"BUG-04: type→declaration_type, status→customs_status, currency→declared_currency"
+Drivers List,/drivers,GET,Sidebar link,PageController@drivers,none,drivers,read+paginate,YES,WARN,"BUG-10: plate_number→vehicle_plate, deliveries_count→total_deliveries, zone→zones"
+Claims List,/claims,GET,Sidebar link,PageController@claims,none,claims,read+paginate,YES,WARN,"BUG-11: type→claim_type, amount→claimed_amount, customer_name doesn't exist"
+Claims Create,/claims,POST,Modal: إنشاء مطالبة,PageController@claimsStore,none,claims,INSERT row,YES,FAIL,"BUG-11: wrong column names in store method"
+Vessels List,/vessels,GET,Sidebar link,PageController@vessels,none,vessels,read all,YES,FAIL,"BUG-05: name→vessel_name, capacity→capacity_teu, route→operator"
+Vessels Create,/vessels,POST,Modal: إنشاء سفينة,MISSING,none,vessels,—,—,FAIL,"BUG-06: POST route missing + no vesselsStore method"
+Schedules,/schedules,GET,Sidebar link,PageController@schedules,none,vessel_schedules,read+paginate,YES,FAIL,"BUG-07: vessel.name→vessel.vessel_name, route→service_route, departure_date→etd, arrival_date→eta"
+Branches,/branches,GET,Sidebar link,PageController@branches,none,branches,read,YES,OK,
+Companies,/companies,GET,Sidebar link,PageController@companies,none,companies,read,YES,OK,
+HS Codes,/hscodes,GET,Sidebar link,PageController@hscodes,none,hs_codes,read,YES,OK,

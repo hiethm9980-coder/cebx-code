@@ -45,7 +45,7 @@ class NotificationTest extends TestCase
     // FR-NTF-001: Send Notifications for Core Events (6 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dispatch_sends_notification(): void
     {
         $results = $this->service->dispatch(
@@ -60,7 +60,7 @@ class NotificationTest extends TestCase
         $this->assertDatabaseHas('notifications', ['event_type' => Notification::EVENT_SHIPMENT_DELIVERED]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_dispatch_creates_log_entry(): void
     {
         $this->service->dispatch(
@@ -77,7 +77,7 @@ class NotificationTest extends TestCase
         $this->assertEquals(Notification::CHANNEL_EMAIL, $notification->channel);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_core_events_constant_defined(): void
     {
         $this->assertContains(Notification::EVENT_SHIPMENT_DELIVERED, Notification::CORE_EVENTS);
@@ -85,7 +85,7 @@ class NotificationTest extends TestCase
         $this->assertContains(Notification::EVENT_LABEL_CREATED, Notification::CORE_EVENTS);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_in_app_notifications_fetched(): void
     {
         Notification::factory()->inApp()->count(3)->create([
@@ -97,7 +97,7 @@ class NotificationTest extends TestCase
         $this->assertCount(3, $notifications);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_mark_as_read(): void
     {
         $n = Notification::factory()->inApp()->create([
@@ -110,7 +110,7 @@ class NotificationTest extends TestCase
         $this->assertNotNull($n->fresh()->read_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_unread_count(): void
     {
         Notification::factory()->inApp()->count(5)->create([
@@ -127,7 +127,7 @@ class NotificationTest extends TestCase
     // FR-NTF-002: Multi-Channel Support (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_channel_constants_defined(): void
     {
         $this->assertEquals('email', Notification::CHANNEL_EMAIL);
@@ -137,7 +137,7 @@ class NotificationTest extends TestCase
         $this->assertEquals('slack', Notification::CHANNEL_SLACK);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_notification_defaults_to_email_and_in_app(): void
     {
         $results = $this->service->dispatch(
@@ -153,7 +153,7 @@ class NotificationTest extends TestCase
         $this->assertContains('in_app', $channels);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_notification_sent_status(): void
     {
         $n = Notification::factory()->create([
@@ -167,7 +167,7 @@ class NotificationTest extends TestCase
         $this->assertNotNull($n->sent_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_notification_delivered_status(): void
     {
         $n = Notification::factory()->create(['account_id' => $this->account->id]);
@@ -180,7 +180,7 @@ class NotificationTest extends TestCase
     // FR-NTF-003: Retry & Delivery Status (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_failed_notification_retries(): void
     {
         $n = Notification::factory()->create([
@@ -196,7 +196,7 @@ class NotificationTest extends TestCase
         $this->assertNotNull($n->next_retry_at);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_max_retries_moves_to_dlq(): void
     {
         $n = Notification::factory()->create([
@@ -211,7 +211,7 @@ class NotificationTest extends TestCase
         $this->assertEquals(Notification::STATUS_DLQ, $n->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_can_retry_check(): void
     {
         $retryable = Notification::factory()->make([
@@ -229,7 +229,7 @@ class NotificationTest extends TestCase
         $this->assertFalse($maxed->canRetry());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_retry_queue_processes(): void
     {
         Notification::factory()->retrying()->count(2)->create([
@@ -240,7 +240,7 @@ class NotificationTest extends TestCase
         $this->assertEquals(2, $results['retried']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_exponential_backoff(): void
     {
         $n = Notification::factory()->create([
@@ -262,7 +262,7 @@ class NotificationTest extends TestCase
     // FR-NTF-004: User Preferences (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_user_can_set_preferences(): void
     {
         $this->service->updatePreferences($this->owner, [
@@ -274,7 +274,7 @@ class NotificationTest extends TestCase
         $this->assertCount(2, $prefs);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_preference_disables_channel(): void
     {
         NotificationPreference::create([
@@ -294,14 +294,14 @@ class NotificationTest extends TestCase
         $this->assertFalse($enabled);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_no_preference_returns_null(): void
     {
         $enabled = NotificationPreference::isEnabled($this->owner->id, 'unknown.event', 'email');
         $this->assertNull($enabled); // No preference = use default
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_disabled_preference_skips_send(): void
     {
         NotificationPreference::create([
@@ -332,7 +332,7 @@ class NotificationTest extends TestCase
         $this->assertEquals(0, $sentNonThrottled);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_bulk_update_preferences(): void
     {
         NotificationPreference::bulkUpdate($this->owner->id, $this->account->id, [
@@ -352,7 +352,7 @@ class NotificationTest extends TestCase
     // FR-NTF-004/002: Template Management (5 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_create_template(): void
     {
         $template = $this->service->createTemplate([
@@ -367,7 +367,7 @@ class NotificationTest extends TestCase
         $this->assertEquals($this->account->id, $template->account_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_template_rendering(): void
     {
         $template = NotificationTemplate::factory()->create();
@@ -381,7 +381,7 @@ class NotificationTest extends TestCase
         $this->assertStringContainsString('TRK-999', $rendered['subject']);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_template_resolution_account_first(): void
     {
         // System default
@@ -405,7 +405,7 @@ class NotificationTest extends TestCase
         $this->assertStringContainsString('Account template', $resolved->body);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_template_fallback_to_system(): void
     {
         NotificationTemplate::factory()->system()->create([
@@ -419,7 +419,7 @@ class NotificationTest extends TestCase
         $this->assertStringContainsString('System fallback', $resolved->body);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_preview_template(): void
     {
         $template = NotificationTemplate::factory()->create();
@@ -432,7 +432,7 @@ class NotificationTest extends TestCase
     // FR-NTF-005: Rate Limiting (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_throttled_notification_logged(): void
     {
         $n = Notification::factory()->throttled()->create([
@@ -444,7 +444,7 @@ class NotificationTest extends TestCase
         $this->assertEquals(Notification::STATUS_PENDING, $n->status);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_notification_batched_flag(): void
     {
         $n = Notification::factory()->batched()->create([
@@ -455,7 +455,7 @@ class NotificationTest extends TestCase
         $this->assertNotNull($n->batch_id);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_rate_limit_scopes(): void
     {
         Notification::factory()->count(3)->create([
@@ -476,21 +476,21 @@ class NotificationTest extends TestCase
     // FR-NTF-006: Multi-Language (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_arabic_template(): void
     {
         $template = NotificationTemplate::factory()->create(['language' => 'ar']);
         $this->assertEquals('ar', $template->language);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_english_template(): void
     {
         $template = NotificationTemplate::factory()->english()->create();
         $this->assertEquals('en', $template->language);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_language_resolution_from_preference(): void
     {
         NotificationPreference::create([
@@ -513,7 +513,7 @@ class NotificationTest extends TestCase
     // FR-NTF-007: Scheduled/Digest (4 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_schedule_creation(): void
     {
         $schedule = NotificationSchedule::create([
@@ -529,7 +529,7 @@ class NotificationTest extends TestCase
         $this->assertEquals('daily', $schedule->frequency);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_schedule_calculate_next_send(): void
     {
         $schedule = NotificationSchedule::create([
@@ -546,7 +546,7 @@ class NotificationTest extends TestCase
         $this->assertTrue($schedule->next_send_at->gt(now()));
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_schedule_is_due(): void
     {
         $due = NotificationSchedule::create([
@@ -561,7 +561,7 @@ class NotificationTest extends TestCase
         $this->assertTrue($due->isDue());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_immediate_schedule_not_due(): void
     {
         $immediate = NotificationSchedule::create([
@@ -579,7 +579,7 @@ class NotificationTest extends TestCase
     // FR-NTF-008: Notification Log (3 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_notification_log_paginated(): void
     {
         Notification::factory()->count(5)->create(['account_id' => $this->account->id]);
@@ -589,7 +589,7 @@ class NotificationTest extends TestCase
         $this->assertCount(3, $log->items());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_log_filtered_by_user(): void
     {
         Notification::factory()->count(3)->create(['account_id' => $this->account->id, 'user_id' => $this->owner->id]);
@@ -599,7 +599,7 @@ class NotificationTest extends TestCase
         $this->assertEquals(3, $log->total());
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_mark_all_as_read(): void
     {
         Notification::factory()->inApp()->count(4)->create([
@@ -617,7 +617,7 @@ class NotificationTest extends TestCase
     // FR-NTF-009: Third-Party Integration (2 tests)
     // ═══════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_configure_channel(): void
     {
         $channel = $this->service->configureChannel($this->account, [
@@ -632,7 +632,7 @@ class NotificationTest extends TestCase
         $this->assertEquals('slack', $channel->channel);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_list_channels(): void
     {
         NotificationChannel::create([

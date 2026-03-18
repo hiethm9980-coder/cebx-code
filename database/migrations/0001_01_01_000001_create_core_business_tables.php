@@ -106,7 +106,7 @@ return new class extends Migration
 
         // ── Wallets ──
         Schema::create('wallets', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->foreignId('account_id')->constrained()->cascadeOnDelete();
             $table->decimal('available_balance', 12, 2)->default(0);
             $table->decimal('pending_balance', 12, 2)->default(0);
@@ -115,8 +115,8 @@ return new class extends Migration
 
         // ── Wallet Transactions ──
         Schema::create('wallet_transactions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('wallet_id')->constrained()->cascadeOnDelete();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('wallet_id')->constrained('wallets')->cascadeOnDelete();
             $table->foreignId('account_id')->constrained()->cascadeOnDelete();
             $table->string('reference_number')->nullable()->index();
             $table->enum('type', ['credit', 'debit', 'refund', 'payout'])->index();

@@ -3,29 +3,41 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Company;
 use App\Models\Branch;
 use App\Models\BranchStaff;
-use Illuminate\Http\Request;
+use App\Models\Company;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class BranchController extends Controller
 {
-    // ══════════════════════════════════════════════════════════════
-    // COMPANIES
-    // ══════════════════════════════════════════════════════════════
-
-    public function companiesIndex(Request $r): JsonResponse
+    public function companiesIndex(Request $request): JsonResponse
     {
-        $q = Company::where('account_id', $r->user()->account_id);
-        if ($r->status) $q->where('status', $r->status);
-        if ($r->search) $q->where(fn($q) => $q->where('name', 'like', "%{$r->search}%")->orWhere('legal_name', 'like', "%{$r->search}%"));
-        return response()->json(['data' => $q->orderBy('name')->paginate($r->per_page ?? 25)]);
+        $query = Company::query()->where('account_id', $this->currentAccountId());
+
+        if ($request->status) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->search) {
+            $query->where(function ($builder) use ($request): void {
+                $builder
+                    ->where('name', 'like', '%' . $request->search . '%')
+                    ->orWhere('legal_name', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        return response()->json([
+            'data' => $query->orderBy('name')->paginate($request->per_page ?? 25),
+        ]);
     }
 
-    public function companiesStore(Request $r): JsonResponse
+    public function companiesStore(Request $request): JsonResponse
     {
-        $v = $r->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:200',
             'legal_name' => 'nullable|string|max:300',
             'registration_number' => 'nullable|string|max:100',
@@ -39,48 +51,109 @@ class BranchController extends Controller
             'address' => 'nullable|string',
             'website' => 'nullable|url',
         ]);
-        $v['account_id'] = $r->user()->account_id;
-        $company = Company::create($v);
-        return response()->json(['data' => $company, 'message' => 'تم إنشاء الشركة بنجاح'], 201);
+
+        $validated['account_id'] = $this->currentAccountId();
+        $company = Company::create($validated);
+
+        return response()->json([
+            'data' => $company,
+            'message' => 'طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ط´ط±ظƒط© ط¨ظ†ط¬ط§ط­',
+        ], 201);
     }
 
     public function companiesShow(string $id): JsonResponse
     {
-        $c = Company::with('branches')->findOrFail($id);
-        return response()->json(['data' => $c]);
+        $company = Company::query()
+            ->where('account_id', $this->currentAccountId())
+            ->with('branches')
+            ->where('id', $id)
+            ->firstOrFail();
+
+        return response()->json(['data' => $company]);
     }
 
-    public function companiesUpdate(Request $r, string $id): JsonResponse
+    public function companiesUpdate(Request $request, string $id): JsonResponse
     {
-        $c = Company::findOrFail($id);
-        $c->update($r->only(['name', 'legal_name', 'registration_number', 'tax_id', 'country', 'base_currency', 'timezone', 'industry', 'phone', 'email', 'address', 'website', 'status']));
-        return response()->json(['data' => $c, 'message' => 'تم تحديث الشركة']);
+        $company = Company::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $company->update($request->only([
+            'name',
+            'legal_name',
+            'registration_number',
+            'tax_id',
+            'country',
+            'base_currency',
+            'timezone',
+            'industry',
+            'phone',
+            'email',
+            'address',
+            'website',
+            'status',
+        ]));
+
+        return response()->json([
+            'data' => $company,
+            'message' => 'طھظ… طھط­ط¯ظٹط« ط§ظ„ط´ط±ظƒط©',
+        ]);
     }
 
     public function companiesDestroy(string $id): JsonResponse
     {
-        Company::findOrFail($id)->delete();
-        return response()->json(['message' => 'تم حذف الشركة']);
+        Company::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $id)
+            ->firstOrFail()
+            ->delete();
+
+        return response()->json(['message' => 'طھظ… ط­ط°ظپ ط§ظ„ط´ط±ظƒط©']);
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // BRANCHES
-    // ══════════════════════════════════════════════════════════════
-
-    public function index(Request $r): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $q = Branch::where('account_id', $r->user()->account_id)->with('company:id,name');
-        if ($r->company_id) $q->where('company_id', $r->company_id);
-        if ($r->branch_type) $q->where('branch_type', $r->branch_type);
-        if ($r->country) $q->where('country', $r->country);
-        if ($r->status) $q->where('status', $r->status);
-        if ($r->search) $q->where(fn($q) => $q->where('name', 'like', "%{$r->search}%")->orWhere('code', 'like', "%{$r->search}%")->orWhere('city', 'like', "%{$r->search}%"));
-        return response()->json(['data' => $q->orderBy('name')->paginate($r->per_page ?? 25)]);
+        $this->authorize('viewAny', Branch::class);
+
+        $query = $this->scopedBranchQuery()
+            ->with('company:id,name');
+
+        if ($request->company_id) {
+            $query->where('company_id', $request->company_id);
+        }
+
+        if ($request->branch_type) {
+            $query->where('branch_type', $request->branch_type);
+        }
+
+        if ($request->country) {
+            $query->where('country', $request->country);
+        }
+
+        if ($request->status) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->search) {
+            $query->where(function ($builder) use ($request): void {
+                $builder
+                    ->where('name', 'like', '%' . $request->search . '%')
+                    ->orWhere('code', 'like', '%' . $request->search . '%')
+                    ->orWhere('city', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        return response()->json([
+            'data' => $query->orderBy('name')->paginate($request->per_page ?? 25),
+        ]);
     }
 
-    public function store(Request $r): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        $v = $r->validate([
+        $this->authorize('create', Branch::class);
+
+        $validated = $request->validate([
             'company_id' => 'required|uuid|exists:companies,id',
             'name' => 'required|string|max:200',
             'code' => 'required|string|max:20|unique:branches,code',
@@ -96,56 +169,168 @@ class BranchController extends Controller
             'capabilities' => 'nullable|array',
             'operating_hours' => 'nullable|array',
         ]);
-        $v['account_id'] = $r->user()->account_id;
-        $branch = Branch::create($v);
-        return response()->json(['data' => $branch, 'message' => 'تم إنشاء الفرع بنجاح'], 201);
+
+        Company::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $validated['company_id'])
+            ->firstOrFail();
+
+        $validated['account_id'] = $this->currentAccountId();
+        $branch = Branch::create($validated);
+
+        return response()->json([
+            'data' => $branch,
+            'message' => 'طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ظپط±ط¹ ط¨ظ†ط¬ط§ط­',
+        ], 201);
     }
 
     public function show(string $id): JsonResponse
     {
-        $b = Branch::with(['company', 'staff.user', 'drivers'])->findOrFail($id);
-        return response()->json(['data' => $b]);
+        $relations = ['staff.user'];
+        if (Schema::hasColumn('branches', 'company_id')) {
+            $relations[] = 'company';
+        }
+        if (Schema::hasColumn('drivers', 'branch_id')) {
+            $relations[] = 'drivers';
+        }
+
+        $branch = $this->findBranchForCurrentAccount($id, $relations);
+        $this->authorize('view', $branch);
+
+        return response()->json(['data' => $branch]);
     }
 
-    public function update(Request $r, string $id): JsonResponse
+    public function update(Request $request, string $id): JsonResponse
     {
-        $b = Branch::findOrFail($id);
-        $b->update($r->only(['name', 'city', 'address', 'branch_type', 'phone', 'email', 'manager_name', 'manager_user_id', 'latitude', 'longitude', 'status', 'capabilities', 'operating_hours']));
-        return response()->json(['data' => $b, 'message' => 'تم تحديث الفرع']);
+        $branch = $this->findBranchForCurrentAccount($id);
+        $this->authorize('update', $branch);
+
+        $branch->update($request->only([
+            'name',
+            'city',
+            'address',
+            'branch_type',
+            'phone',
+            'email',
+            'manager_name',
+            'manager_user_id',
+            'latitude',
+            'longitude',
+            'status',
+            'capabilities',
+            'operating_hours',
+        ]));
+
+        return response()->json([
+            'data' => $branch,
+            'message' => 'طھظ… طھط­ط¯ظٹط« ط§ظ„ظپط±ط¹',
+        ]);
     }
 
     public function destroy(string $id): JsonResponse
     {
-        Branch::findOrFail($id)->delete();
-        return response()->json(['message' => 'تم حذف الفرع']);
+        $branch = $this->findBranchForCurrentAccount($id);
+        $this->authorize('delete', $branch);
+
+        $branch->delete();
+
+        return response()->json(['message' => 'طھظ… ط­ط°ظپ ط§ظ„ظپط±ط¹']);
     }
 
-    public function stats(Request $r): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
-        $aid = $r->user()->account_id;
+        $this->authorize('viewAny', Branch::class);
+
+        $branchQuery = $this->scopedBranchQuery();
+
         return response()->json(['data' => [
-            'total' => Branch::where('account_id', $aid)->count(),
-            'active' => Branch::where('account_id', $aid)->where('status', 'active')->count(),
-            'by_type' => Branch::where('account_id', $aid)->selectRaw('branch_type, count(*) as count')->groupBy('branch_type')->pluck('count', 'branch_type'),
-            'by_country' => Branch::where('account_id', $aid)->selectRaw('country, count(*) as count')->groupBy('country')->pluck('count', 'country'),
-            'companies' => Company::where('account_id', $aid)->count(),
+            'total' => (clone $branchQuery)->count(),
+            'active' => Schema::hasColumn('branches', 'status')
+                ? (clone $branchQuery)->where('status', 'active')->count()
+                : (clone $branchQuery)->where('is_active', true)->count(),
+            'by_type' => Schema::hasColumn('branches', 'branch_type')
+                ? (clone $branchQuery)->selectRaw('branch_type, count(*) as count')->groupBy('branch_type')->pluck('count', 'branch_type')
+                : collect(),
+            'by_country' => Schema::hasColumn('branches', 'country')
+                ? (clone $branchQuery)->selectRaw('country, count(*) as count')->groupBy('country')->pluck('count', 'country')
+                : collect(),
+            'companies' => Schema::hasColumn('companies', 'account_id')
+                ? Company::query()->where('account_id', $this->currentAccountId())->count()
+                : 0,
         ]]);
     }
 
-    // ── Staff Assignment ─────────────────────────────────────────
-    public function assignStaff(Request $r, string $id): JsonResponse
+    public function assignStaff(Request $request, string $id): JsonResponse
     {
-        $r->validate(['user_id' => 'required|uuid|exists:users,id', 'role' => 'nullable|string|max:50']);
+        $branch = $this->findBranchForCurrentAccount($id);
+        $this->authorize('manageStaff', $branch);
+
+        $request->validate([
+            'user_id' => 'required|uuid|exists:users,id',
+            'role' => 'nullable|string|max:50',
+        ]);
+
+        User::query()
+            ->where('account_id', $this->currentAccountId())
+            ->where('id', $request->user_id)
+            ->firstOrFail();
+
         BranchStaff::updateOrCreate(
-            ['branch_id' => $id, 'user_id' => $r->user_id],
-            ['role' => $r->role ?? 'agent', 'assigned_at' => now(), 'released_at' => null]
+            ['branch_id' => $branch->id, 'user_id' => $request->user_id],
+            ['role' => $request->role ?? 'agent', 'assigned_at' => now(), 'released_at' => null]
         );
-        return response()->json(['message' => 'تم تعيين الموظف']);
+
+        return response()->json(['message' => 'طھظ… طھط¹ظٹظٹظ† ط§ظ„ظ…ظˆط¸ظپ']);
+    }
+
+    public function staff(string $id): JsonResponse
+    {
+        $branch = $this->findBranchForCurrentAccount($id, ['staff.user']);
+        $this->authorize('view', $branch);
+
+        return response()->json(['data' => $branch->staff]);
     }
 
     public function removeStaff(string $id, string $userId): JsonResponse
     {
-        BranchStaff::where('branch_id', $id)->where('user_id', $userId)->update(['released_at' => now()]);
-        return response()->json(['message' => 'تم إلغاء تعيين الموظف']);
+        $branch = $this->findBranchForCurrentAccount($id);
+        $this->authorize('manageStaff', $branch);
+
+        BranchStaff::query()
+            ->where('branch_id', $branch->id)
+            ->where('user_id', $userId)
+            ->update(['released_at' => now()]);
+
+        return response()->json(['message' => 'طھظ… ط¥ظ„ط؛ط§ط، طھط¹ظٹظٹظ† ط§ظ„ظ…ظˆط¸ظپ']);
+    }
+
+    /**
+     * @param array<int, string> $with
+     */
+    private function findBranchForCurrentAccount(string $id, array $with = []): Branch
+    {
+        $query = $this->scopedBranchQuery();
+
+        if ($with !== []) {
+            $query->with($with);
+        }
+
+        return $query->where('id', $id)->firstOrFail();
+    }
+
+    private function scopedBranchQuery(): Builder
+    {
+        if (Schema::hasColumn('branches', 'account_id')) {
+            return Branch::query()->where('account_id', $this->currentAccountId());
+        }
+
+        return Branch::query()->whereHas('staff.user', function (Builder $builder): void {
+            $builder->where('account_id', $this->currentAccountId());
+        });
+    }
+
+    private function currentAccountId(): string
+    {
+        return trim((string) app('current_account_id'));
     }
 }

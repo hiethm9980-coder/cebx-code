@@ -16,13 +16,12 @@ class OrganizationMember extends Model
 
     protected $fillable = [
         'organization_id', 'user_id', 'role_id', 'membership_role', 'status',
-        'can_view_financial', 'custom_permissions',
+        'can_view_financial',
         'joined_at', 'suspended_at', 'suspended_reason',
     ];
 
     protected $casts = [
         'can_view_financial'  => 'boolean',
-        'custom_permissions'  => 'array',
         'joined_at'           => 'datetime',
         'suspended_at'        => 'datetime',
     ];
@@ -60,14 +59,9 @@ class OrganizationMember extends Model
         // Owner has all permissions
         if ($this->isOwner()) return true;
 
-        // Check custom permissions first
-        if ($this->custom_permissions && in_array($permissionKey, $this->custom_permissions)) {
-            return true;
-        }
-
         // Check role-based permissions
         if ($this->role && $this->role->permissions) {
-            return in_array($permissionKey, $this->role->permissions);
+            return $this->role->permissions->contains('key', $permissionKey);
         }
 
         return false;

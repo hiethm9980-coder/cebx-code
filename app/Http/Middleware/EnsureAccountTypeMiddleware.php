@@ -6,68 +6,87 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/**
- * FIX P2-1: EnsureAccountTypeMiddleware
- *
- * يمنع حساب فردي (individual) من دخول بوابة B2B والعكس.
- *
- * القواعد:
- *   بوابة b2b ⇒ account.type === 'organization'
- *   بوابة b2c ⇒ account.type === 'individual'
- *
- * الاستخدام في routes:
- *   middleware: 'ensureAccountType:organization'  (لبوابة B2B)
- *   middleware: 'ensureAccountType:individual'     (لبوابة B2C)
- */
 class EnsureAccountTypeMiddleware
 {
     public function handle(Request $request, Closure $next, string $requiredType): Response
     {
         $user = $request->user();
 
-        if (!$user) {
-            // غير مسجل دخول — سيُعالج بواسطة auth middleware
+        if (! $user) {
             return $next($request);
         }
 
         $account = $user->account;
 
-        if (!$account) {
-            abort(403, 'لا يوجد حساب مرتبط بالمستخدم.');
-        }
-
-        // التحقق من نوع الحساب
-        if ($account->type !== $requiredType) {
-            $portal = $request->attributes->get('portal', '');
-
-            // إذا كان طلب API
+        if (! $account) {
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
-                    'success'    => false,
-                    'error_code' => 'ERR_WRONG_PORTAL',
-                    'message'    => $this->getErrorMessage($account->type, $requiredType),
+                    'success' => false,
+                    'error_code' => 'ERR_ACCOUNT_CONTEXT_REQUIRED',
+                    'message' => 'The authenticated user is not linked to an account.',
                 ], 403);
             }
 
-            // إعادة توجيه لبوابة الصحيحة
-            if ($account->type === 'organization') {
-                return redirect()->route('b2b.dashboard')
-                    ->with('warning', 'حسابك من نوع منظمة، تم توجيهك لبوابة B2B.');
+            return response()->view('pages.browser-guidance', [
+                'statusCode' => 403,
+                'eyebrow' => 'حساب غير مكتمل',
+                'title' => 'لا يوجد حساب مرتبط',
+                'heading' => 'لا يمكن فتح هذه البوابة الآن',
+                'message' => 'هذا المسار مخصص لحسابات العملاء، بينما المستخدم الحالي غير مرتبط بحساب عميل صالح.',
+                'primaryActionLabel' => 'العودة إلى اختيار البوابة',
+                'primaryActionUrl' => route('login'),
+                'secondaryActionLabel' => 'تسجيل الخروج',
+                'secondaryActionUrl' => route('logout'),
+                'secondaryActionMethod' => 'post',
+            ], 403);
+        }
+
+        if ($account->type !== $requiredType) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'error_code' => 'ERR_WRONG_PORTAL',
+                    'message' => $this->apiErrorMessage($account->type, $requiredType),
+                ], 403);
             }
 
-            return redirect()->route('b2c.dashboard')
-                ->with('warning', 'حسابك فردي، تم توجيهك لبوابة B2C.');
+            return response()->view('pages.browser-guidance', $this->browserGuidance($account->type, $requiredType), 403);
         }
 
         return $next($request);
     }
 
-    private function getErrorMessage(string $actualType, string $requiredType): string
+    private function browserGuidance(string $actualType, string $requiredType): array
+    {
+        $isB2B = $requiredType === 'organization';
+
+        return [
+            'statusCode' => 403,
+            'eyebrow' => 'البوابة غير المناسبة',
+            'title' => $isB2B ? 'بوابة الأعمال' : 'بوابة الأفراد',
+            'heading' => $isB2B
+                ? 'هذه المنطقة مخصصة لبوابة الأعمال الخاصة بحسابات المنظمات'
+                : 'هذه المنطقة مخصصة لبوابة الأفراد الخاصة بالحسابات الفردية',
+            'message' => $actualType === 'organization'
+                ? 'حسابك يتبع منظمة خارجية. استخدم بوابة الأعمال لإدارة شحنات المنظمة وفريقها عبر شبكة الناقلين التابعة للمنصة.'
+                : 'حسابك فردي خارجي. استخدم بوابة الأفراد لإدارة شحناتك الشخصية ومحفظتك وتتبعك عبر شبكة الناقلين التابعة للمنصة.',
+            'primaryActionLabel' => $actualType === 'organization' ? 'العودة إلى بوابة الأعمال' : 'العودة إلى بوابة الأفراد',
+            'primaryActionUrl' => $actualType === 'organization' ? route('b2b.dashboard') : route('b2c.dashboard'),
+            'secondaryActionLabel' => 'العودة إلى الصفحة السابقة',
+            'secondaryActionUrl' => url()->previous(),
+        ];
+    }
+
+    private function apiErrorMessage(string $actualType, string $requiredType): string
     {
         if ($requiredType === 'organization') {
-            return 'هذه البوابة مخصصة لحسابات المنظمات فقط. حسابك من نوع فردي.';
+            return 'This portal is only available for organization accounts.';
         }
 
-        return 'هذه البوابة مخصصة للحسابات الفردية فقط. حسابك من نوع منظمة.';
+        if ($actualType === 'organization') {
+            return 'This portal is only available for individual accounts.';
+        }
+
+        return 'The authenticated account type is not allowed for this portal.';
     }
 }

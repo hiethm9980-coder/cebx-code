@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\AuditLog;
 use App\Services\AuditService;
+use Tests\Concerns\InteractsWithStrictRbac;
 
 /**
  * ST Module Integration Tests — API endpoints (20 tests)
@@ -19,6 +20,7 @@ use App\Services\AuditService;
 class OrderApiTest extends TestCase
 {
     use RefreshDatabase;
+    use InteractsWithStrictRbac;
 
     protected Account $account;
     protected User $owner;
@@ -37,14 +39,13 @@ class OrderApiTest extends TestCase
             'is_owner'   => true,
         ]);
 
-        $managerRole = Role::factory()->create([
-            'account_id'  => $this->account->id,
-            'permissions' => ['orders:manage', 'store:manage'],
-        ]);
-        $this->manager = User::factory()->create([
-            'account_id' => $this->account->id,
-            'is_owner'   => false,
-            'role_id'    => $managerRole->id,
+        $managerRole = $this->createTenantRoleWithPermissions(
+            (string) $this->account->id,
+            ['orders.manage', 'stores.manage'],
+            'orders_manager'
+        );
+        $this->manager = $this->createUserWithRole((string) $this->account->id, (string) $managerRole->id, [
+            'is_owner' => false,
         ]);
 
         $this->member = User::factory()->create([
@@ -63,7 +64,7 @@ class OrderApiTest extends TestCase
     // POST /orders (Manual Creation)
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_create_order()
     {
         $response = $this->actingAs($this->owner)
@@ -74,7 +75,7 @@ class OrderApiTest extends TestCase
             ->assertJsonPath('data.customer_name', 'Ahmed Ali');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function manager_can_create_order()
     {
         $response = $this->actingAs($this->manager)
@@ -83,7 +84,7 @@ class OrderApiTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function member_cannot_create_order()
     {
         $response = $this->actingAs($this->member)
@@ -92,7 +93,7 @@ class OrderApiTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function create_order_validates_required_fields()
     {
         $response = $this->actingAs($this->owner)
@@ -101,7 +102,7 @@ class OrderApiTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function create_order_requires_items()
     {
         $payload = $this->validPayload();
@@ -113,7 +114,7 @@ class OrderApiTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function order_creation_is_audit_logged()
     {
         $this->actingAs($this->owner)
@@ -127,7 +128,7 @@ class OrderApiTest extends TestCase
     // GET /orders
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_list_orders()
     {
         Order::factory()->count(3)->create([
@@ -142,7 +143,7 @@ class OrderApiTest extends TestCase
             ->assertJsonPath('meta.total', 3);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function list_filters_by_status()
     {
         Order::factory()->ready()->count(2)->create([
@@ -161,7 +162,7 @@ class OrderApiTest extends TestCase
             ->assertJsonPath('meta.total', 2);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function list_filters_by_store()
     {
         $store2 = Store::factory()->create(['account_id' => $this->account->id]);
@@ -179,7 +180,7 @@ class OrderApiTest extends TestCase
     // GET /orders/{id}
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_view_single_order()
     {
         $order = Order::factory()->create([
@@ -198,7 +199,7 @@ class OrderApiTest extends TestCase
     // PUT /orders/{id}/status
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_update_status()
     {
         $order = Order::factory()->create([
@@ -214,7 +215,7 @@ class OrderApiTest extends TestCase
             ->assertJsonPath('data.status', 'ready');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function invalid_status_transition_rejected()
     {
         $order = Order::factory()->shipped()->create([
@@ -232,7 +233,7 @@ class OrderApiTest extends TestCase
     // POST /orders/{id}/cancel
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_cancel_order()
     {
         $order = Order::factory()->create([
@@ -247,7 +248,7 @@ class OrderApiTest extends TestCase
             ->assertJsonPath('data.status', 'cancelled');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function cannot_cancel_shipped_order()
     {
         $order = Order::factory()->shipped()->create([
@@ -265,7 +266,7 @@ class OrderApiTest extends TestCase
     // GET /orders/stats
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_get_order_stats()
     {
         Order::factory()->count(3)->create([
@@ -284,7 +285,7 @@ class OrderApiTest extends TestCase
     // Store Connection & Sync
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_test_connection()
     {
         $response = $this->actingAs($this->owner)
@@ -294,7 +295,7 @@ class OrderApiTest extends TestCase
             ->assertJsonPath('data.success', true);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function owner_can_register_webhooks()
     {
         $response = $this->actingAs($this->owner)
@@ -303,7 +304,7 @@ class OrderApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function manual_store_sync_not_supported()
     {
         $response = $this->actingAs($this->owner)
@@ -316,7 +317,7 @@ class OrderApiTest extends TestCase
     // Webhooks (Public Endpoint)
     // ═══════════════════════════════════════════════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function webhook_returns_404_for_unknown_store()
     {
         $fakeId = \Illuminate\Support\Str::uuid();

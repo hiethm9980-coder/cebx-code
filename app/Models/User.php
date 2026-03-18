@@ -2,64 +2,69 @@
 
 namespace App\Models;
 
-use Illuminate\Foundation\Auth\User as Authenticatable;
+use App\Services\Auth\PermissionResolver;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    // لا نستخدم HasUuids لأن جدول users على السيرفر قد يكون من الـ migration الأولى (id = bigint)
+    use HasApiTokens;
+    use HasFactory;
+    use HasUuids;
+
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $guarded = [];
     protected $hidden = ['password', 'remember_token'];
-    protected $casts = ['last_login_at' => 'datetime', 'is_active' => 'boolean', 'is_super_admin' => 'boolean'];
+    protected $casts = [
+        'last_login_at' => 'datetime',
+        'is_active' => 'boolean',
+        'user_type' => 'string',
+    ];
 
-    public function account(): BelongsTo  { return $this->belongsTo(Account::class); }
-    public function branch(): BelongsTo   { return $this->belongsTo(Branch::class); }
-    public function shipments(): HasMany  { return $this->hasMany(Shipment::class); }
-    public function tickets(): HasMany    { return $this->hasMany(SupportTicket::class); }
+    public function account(): BelongsTo { return $this->belongsTo(Account::class); }
+    public function branch(): BelongsTo { return $this->belongsTo(Branch::class); }
+    public function shipments(): HasMany { return $this->hasMany(Shipment::class); }
+    public function tickets(): HasMany { return $this->hasMany(SupportTicket::class); }
 
-    /**
-     * الأدوار المرتبطة بالمستخدم (جدول user_role).
-     * قد يكون user_id في user_role من نوع uuid بينما users.id bigint — إن لم يُستخدم الجدول فاستخدم عمود role.
-     */
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class, 'user_role')
             ->withPivot(['assigned_by', 'assigned_at']);
     }
 
-    /**
-     * التحقق من صلاحية المستخدم.
-     * تدعم المسارات استخدام النقطة (مثل shipments.create) والكتالوج استخدام النقطتين (shipments:create).
-     */
     public function hasPermission(string $permission): bool
     {
-        if ($this->is_super_admin ?? false) {
-            return true;
-        }
-        if ($this->role === 'admin') {
-            return true;
-        }
-
-        $keyForLookup = str_replace('.', ':', $permission);
-
         try {
-            $userRoles = $this->roles()->with('permissions')->get();
-            foreach ($userRoles as $role) {
-                if ($role->permissions->contains('key', $keyForLookup) || $role->permissions->contains('key', $permission)) {
-                    return true;
-                }
-            }
+            return app(PermissionResolver::class)->can($this, $permission);
         } catch (\Throwable $e) {
-            // إذا كان جدول user_role غير متوافق (مثلاً uuid vs bigint) نعتمد على عمود role فقط
+            return false;
         }
+    }
 
-        // مدير ومشرف: نمنح صلاحيات القراءة الأساسية حتى يتم ربط الأدوار لاحقاً
-        if (in_array($this->role, ['manager', 'supervisor'], true)) {
-            return true;
+    /**
+     * @return array<int, string>
+     */
+    public function allPermissions(): array
+    {
+        try {
+            return app(PermissionResolver::class)->all($this);
+        } catch (\Throwable $e) {
+            return [];
         }
+    }
 
-        return false;
+    /**
+     * @return array<int, string>
+     */
+    public function getAllPermissions(): array
+    {
+        return $this->allPermissions();
     }
 }

@@ -29,12 +29,12 @@ class AdminApiTest extends TestCase
         parent::setUp();
         $this->account = Account::factory()->create();
         $role = Role::factory()->create(['account_id' => $this->account->id, 'slug' => 'admin']);
-        $this->admin = User::factory()->create(['account_id' => $this->account->id, 'role_id' => $role->id]);
+        $this->admin = $this->createUserWithRole((string) $this->account->id, (string) $role->id);
     }
 
     // ═══════════════ FR-ADM-001: Settings ════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_update_setting(): void
     {
         $response = $this->actingAs($this->admin)->putJson('/api/v1/admin/settings', [
@@ -43,7 +43,7 @@ class AdminApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_get_settings(): void
     {
         $this->actingAs($this->admin)->putJson('/api/v1/admin/settings', [
@@ -54,7 +54,7 @@ class AdminApiTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_test_carrier(): void
     {
         $response = $this->actingAs($this->admin)->postJson('/api/v1/admin/test-carrier', ['carrier' => 'dhl']);
@@ -63,14 +63,14 @@ class AdminApiTest extends TestCase
 
     // ═══════════════ FR-ADM-002/006: Health ══════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_system_health(): void
     {
         $response = $this->actingAs($this->admin)->getJson('/api/v1/admin/system-health');
         $response->assertOk()->assertJsonStructure(['data' => ['overall_status', 'services']]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_integration_health(): void
     {
         $response = $this->actingAs($this->admin)->getJson('/api/v1/admin/integration-health');
@@ -79,24 +79,25 @@ class AdminApiTest extends TestCase
 
     // ═══════════════ FR-ADM-003: Users ═══════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_users(): void
     {
         $response = $this->actingAs($this->admin)->getJson('/api/v1/admin/users');
         $response->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_suspend_user(): void
     {
-        $user = User::factory()->create(['account_id' => $this->account->id, 'role_id' => Role::factory()->create(['account_id' => $this->account->id])->id]);
+        $userRole = Role::factory()->create(['account_id' => $this->account->id]);
+        $user = $this->createUserWithRole((string) $this->account->id, (string) $userRole->id);
         $response = $this->actingAs($this->admin)->postJson("/api/v1/admin/users/{$user->id}/suspend", ['reason' => 'TOS violation']);
         $response->assertOk();
     }
 
     // ═══════════════ FR-ADM-005: Tax Rules ═══════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_tax_rule(): void
     {
         $response = $this->actingAs($this->admin)->postJson('/api/v1/admin/tax-rules', [
@@ -105,7 +106,7 @@ class AdminApiTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_tax_rules(): void
     {
         TaxRule::factory()->create();
@@ -115,7 +116,7 @@ class AdminApiTest extends TestCase
 
     // ═══════════════ FR-ADM-006: Role Templates ══════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_role_template(): void
     {
         $response = $this->actingAs($this->admin)->postJson('/api/v1/admin/role-templates', [
@@ -127,7 +128,7 @@ class AdminApiTest extends TestCase
 
     // ═══════════════ FR-ADM-008: Support Tickets ═════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_ticket(): void
     {
         $response = $this->actingAs($this->admin)->postJson('/api/v1/support/tickets', [
@@ -136,7 +137,7 @@ class AdminApiTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('data.status', 'open');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_tickets(): void
     {
         SupportTicket::factory()->count(3)->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -144,7 +145,7 @@ class AdminApiTest extends TestCase
         $response->assertOk();
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_reply_to_ticket(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -154,7 +155,7 @@ class AdminApiTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_resolve_ticket(): void
     {
         $ticket = SupportTicket::factory()->create(['account_id' => $this->account->id, 'user_id' => $this->admin->id]);
@@ -166,7 +167,7 @@ class AdminApiTest extends TestCase
 
     // ═══════════════ FR-ADM-009: API Keys ════════════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_api_key(): void
     {
         $response = $this->actingAs($this->admin)->postJson('/api/v1/admin/api-keys', [
@@ -175,7 +176,7 @@ class AdminApiTest extends TestCase
         $response->assertStatus(201)->assertJsonStructure(['data' => ['raw_key', 'warning']]);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_list_api_keys(): void
     {
         ApiKey::factory()->count(2)->create(['account_id' => $this->account->id, 'created_by' => $this->admin->id]);
@@ -183,7 +184,7 @@ class AdminApiTest extends TestCase
         $response->assertOk()->assertJsonCount(2, 'data');
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_revoke_api_key(): void
     {
         $key = ApiKey::factory()->create(['account_id' => $this->account->id, 'created_by' => $this->admin->id]);
@@ -193,7 +194,7 @@ class AdminApiTest extends TestCase
 
     // ═══════════════ FR-ADM-010: Feature Flags ═══════════════
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_create_feature_flag(): void
     {
         $response = $this->actingAs($this->admin)->postJson('/api/v1/admin/feature-flags', [
@@ -202,7 +203,7 @@ class AdminApiTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_toggle_feature_flag(): void
     {
         $flag = FeatureFlag::factory()->create();
@@ -212,7 +213,7 @@ class AdminApiTest extends TestCase
         $response->assertOk()->assertJsonPath('data.is_enabled', true);
     }
 
-    /** @test */
+    #[\PHPUnit\Framework\Attributes\Test]
     public function test_api_check_feature_flag(): void
     {
         FeatureFlag::factory()->enabled()->create(['key' => 'check_me']);
