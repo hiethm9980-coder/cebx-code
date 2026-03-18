@@ -288,12 +288,12 @@ class RiskController extends Controller
 
         if ($shipment->chargeable_weight > 1000) {
             $delayProbability += 10;
-            $factors[] = ['factor' => 'heavy_shipment', 'impact' => 10, 'description_ar' => 'ط´ط­ظ†ط© ط«ظ‚ظٹظ„ط© â€” ط§ط­طھظ…ط§ظ„ طھط£ط®ظٹط± ط§ظ„طھط­ظ…ظٹظ„'];
+            $factors[] = ['factor' => 'heavy_shipment', 'impact' => 10, 'description_ar' => 'شحنة ثقيلة — احتمال تأخير التحميل'];
         }
 
         if (now()->isWeekend()) {
             $delayProbability += 5;
-            $factors[] = ['factor' => 'weekend', 'impact' => 5, 'description_ar' => 'ط¹ط·ظ„ط© ظ†ظ‡ط§ظٹط© ط§ظ„ط£ط³ط¨ظˆط¹'];
+            $factors[] = ['factor' => 'weekend', 'impact' => 5, 'description_ar' => 'عطلة نهاية الأسبوع'];
         }
 
         $delayProbability = min(100, $delayProbability);

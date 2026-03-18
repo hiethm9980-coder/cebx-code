@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 namespace Database\Seeders;
 
 use App\Models\Account;
@@ -18,14 +18,14 @@ class DemoAccountSeeder extends Seeder
         if (!$account) {
             $account = Account::firstOrCreate(
                 ['slug' => 'demo-company'],
-                ['name' => 'ط´ط±ظƒط© ط§ظ„ط´ط­ظ† ط§ظ„ط³ط±ظٹط¹', 'type' => 'organization', 'status' => 'active']
+                ['name' => 'شركة الشحن السريع', 'type' => 'organization', 'status' => 'active']
             );
         }
 
         Organization::firstOrCreate(
-            ['account_id' => $account->id, 'legal_name' => 'ط´ط±ظƒط© ط§ظ„ط´ط­ظ† ط§ظ„ط³ط±ظٹط¹'],
+            ['account_id' => $account->id, 'legal_name' => 'شركة الشحن السريع'],
             [
-                'trade_name' => 'ط´ط±ظƒط© ط§ظ„ط´ط­ظ† ط§ظ„ط³ط±ظٹط¹',
+                'trade_name' => 'شركة الشحن السريع',
                 'country_code' => 'SA',
                 'verification_status' => 'verified',
                 'verified_at' => now(),
@@ -43,10 +43,10 @@ class DemoAccountSeeder extends Seeder
         );
 
         $users = [
-            ['name' => 'ط£ط­ظ…ط¯ ط§ظ„ظ…ط­ظ…ط¯ظٹ', 'email' => 'admin@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'organization_owner', 'status' => 'active', 'phone' => '+966501234567', 'locale' => 'ar'],
-            ['name' => 'ظپط§ط·ظ…ط© ط§ظ„ط¹ظ„ظٹ', 'email' => 'fatima@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'organization_admin', 'status' => 'active', 'phone' => '+966507654321', 'locale' => 'ar'],
-            ['name' => 'ط®ط§ظ„ط¯ ط§ظ„ط³ط¹ظٹط¯', 'email' => 'khalid@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'organization_admin', 'status' => 'active', 'phone' => '+966509876543', 'locale' => 'ar'],
-            ['name' => 'ظ†ظˆط±ط§ ط§ظ„ط´ظ…ط±ظٹ', 'email' => 'noura@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'staff', 'status' => 'active', 'phone' => '+966503456789', 'locale' => 'ar'],
+            ['name' => 'أحمد المحمدي', 'email' => 'admin@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'organization_owner', 'status' => 'active', 'phone' => '+966501234567', 'locale' => 'ar'],
+            ['name' => 'فاطمة العلي', 'email' => 'fatima@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'organization_admin', 'status' => 'active', 'phone' => '+966507654321', 'locale' => 'ar'],
+            ['name' => 'خالد السعيد', 'email' => 'khalid@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'organization_admin', 'status' => 'active', 'phone' => '+966509876543', 'locale' => 'ar'],
+            ['name' => 'نورا الشمري', 'email' => 'noura@company.sa', 'password' => Hash::make('password'), 'role_slug' => 'staff', 'status' => 'active', 'phone' => '+966503456789', 'locale' => 'ar'],
         ];
 
         foreach ($users as $u) {
@@ -72,9 +72,9 @@ class DemoAccountSeeder extends Seeder
         }
 
         $addresses = [
-            ['label' => 'ط§ظ„ظ…ظ‚ط± ط§ظ„ط±ط¦ظٹط³ظٹ', 'contact_name' => 'ط´ط±ظƒط© ط§ظ„ط´ط­ظ† ط§ظ„ط³ط±ظٹط¹', 'phone' => '+966501234567', 'address_line_1' => 'ط·ط±ظٹظ‚ ط§ظ„ظ…ظ„ظƒ ظپظ‡ط¯', 'city' => 'ط§ظ„ط±ظٹط§ط¶', 'postal_code' => '11564', 'country' => 'SA', 'is_default_sender' => true],
-            ['label' => 'ظپط±ط¹ ط¬ط¯ط©', 'contact_name' => 'ظپط±ط¹ ط¬ط¯ط©', 'phone' => '+966507654321', 'address_line_1' => 'ط´ط§ط±ط¹ ظپظ„ط³ط·ظٹظ†', 'city' => 'ط¬ط¯ط©', 'postal_code' => '21462', 'country' => 'SA', 'is_default_sender' => false],
-            ['label' => 'ظ…ط³طھظˆط¯ط¹ ط§ظ„ط¯ظ…ط§ظ…', 'contact_name' => 'ظ…ط³طھظˆط¯ط¹ ط§ظ„ط¯ظ…ط§ظ…', 'phone' => '+966509876543', 'address_line_1' => 'ط´ط§ط±ط¹ 15', 'city' => 'ط§ظ„ط¯ظ…ط§ظ…', 'postal_code' => '31473', 'country' => 'SA', 'is_default_sender' => false],
+            ['label' => 'المقر الرئيسي', 'contact_name' => 'شركة الشحن السريع', 'phone' => '+966501234567', 'address_line_1' => 'طريق الملك فهد', 'city' => 'الرياض', 'postal_code' => '11564', 'country' => 'SA', 'is_default_sender' => true],
+            ['label' => 'فرع جدة', 'contact_name' => 'فرع جدة', 'phone' => '+966507654321', 'address_line_1' => 'شارع فلسطين', 'city' => 'جدة', 'postal_code' => '21462', 'country' => 'SA', 'is_default_sender' => false],
+            ['label' => 'مستودع الدمام', 'contact_name' => 'مستودع الدمام', 'phone' => '+966509876543', 'address_line_1' => 'شارع 15', 'city' => 'الدمام', 'postal_code' => '31473', 'country' => 'SA', 'is_default_sender' => false],
         ];
 
         foreach ($addresses as $a) {
