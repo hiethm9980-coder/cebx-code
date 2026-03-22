@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Laravel API Server",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--host=0.0.0.0", "--port=8000"],
+      "port": 8000
+    },
+    {
+      "name": "Laravel Queue Worker",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "queue:work", "--tries=3"],
+      "port": null
+    }
+  ]
+}

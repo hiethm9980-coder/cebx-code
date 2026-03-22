@@ -17,7 +17,7 @@ return new class extends Migration
             $table->uuid('account_id');
             $table->uuid('user_id')->nullable();
             $table->string('action', 100); // e.g., account.created, user.invited
-            $table->string('entity_type', 100); // e.g., Account, User
+            $table->string('entity_type', 100)->nullable(); // e.g., Account, User; nullable for generic system events
             $table->uuid('entity_id')->nullable();
             $table->json('old_values')->nullable();
             $table->json('new_values')->nullable();

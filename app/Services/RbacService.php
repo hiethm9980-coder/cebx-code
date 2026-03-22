@@ -303,6 +303,12 @@ class RbacService
 
     private function syncRolePermissions(Role $role, array $permissionKeys, User $performer): void
     {
+        // Normalise colon-notation → dot-notation for all keys (shipments:view → shipments.view)
+        $permissionKeys = array_map(
+            static fn (string $k): string => str_replace(':', '.', $k),
+            $permissionKeys
+        );
+
         // Validate: max permissions check
         if (count($permissionKeys) > self::MAX_PERMISSIONS_PER_ROLE) {
             throw new BusinessException(
@@ -324,7 +330,12 @@ class RbacService
         }
         // Validate: performer cannot grant permissions they do not already have.
         $performerPerms = $performer->allPermissions();
-        $unauthorized = array_diff($permissionKeys, $performerPerms);
+        // Normalise performer permissions to dot-notation for consistent comparison
+        $performerPermsNorm = array_map(
+            static fn (string $k): string => str_replace(':', '.', $k),
+            $performerPerms
+        );
+        $unauthorized = array_diff($permissionKeys, $performerPermsNorm);
         if (!empty($unauthorized)) {
             throw new BusinessException(
                 'Cannot grant permissions higher than your own permissions.',
@@ -346,7 +357,14 @@ class RbacService
             return;
         }
 
-        $permissionIds = Permission::whereIn('key', $template['permissions'])->pluck('id')->toArray();
+        // Normalise colon-notation (financial:view) → dot-notation (financial.view)
+        // Template definitions may use colon notation but DB stores dot-notation keys.
+        $keys = array_map(
+            static fn (string $k): string => str_replace(':', '.', $k),
+            $template['permissions']
+        );
+
+        $permissionIds = Permission::whereIn('key', $keys)->pluck('id')->toArray();
         $role->syncPermissions($permissionIds);
     }
 

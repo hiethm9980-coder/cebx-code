@@ -110,13 +110,18 @@ class AdminService
     public function listPlatformUsers(array $filters = [], int $perPage = 20)
     {
         $query = User::query();
-        if (!empty($filters['account_id'])) $query->where('account_id', $filters['account_id']);
-        if (!empty($filters['role'])) $query->whereHas('role', fn($q) => $q->where('slug', $filters['role']));
+        if (!empty($filters['account_id'])) {
+            $query->where('account_id', $filters['account_id']);
+        }
+        if (!empty($filters['role'])) {
+            // User has a `roles` (plural) many-to-many relation via pivot
+            $query->whereHas('roles', fn($q) => $q->where('slug', $filters['role']));
+        }
         if (!empty($filters['search'])) {
             $query->where(fn($q) => $q->where('name', 'like', "%{$filters['search']}%")
                 ->orWhere('email', 'like', "%{$filters['search']}%"));
         }
-        return $query->with('role')->orderBy('created_at', 'desc')->paginate($perPage);
+        return $query->with('roles')->orderBy('created_at', 'desc')->paginate($perPage);
     }
 
     public function suspendUser(string $userId, string $reason): User

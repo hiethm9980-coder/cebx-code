@@ -8,6 +8,7 @@ use App\Models\OrganizationInvite;
 use App\Models\OrganizationMember;
 use App\Models\OrganizationWallet;
 use App\Models\Permission;
+use App\Models\PermissionCatalog;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -164,13 +165,13 @@ class OrganizationService
 
     public function listPermissionCatalog(?string $module = null): Collection
     {
-        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+        if (!DB::getSchemaBuilder()->hasTable('permission_catalog')) {
             return collect();
         }
 
-        $query = Permission::query();
+        $query = PermissionCatalog::active();
         if ($module) {
-            $query->where('group', $module);
+            $query->forModule($module);
         }
 
         return $query->orderBy('key')->get();
@@ -178,25 +179,25 @@ class OrganizationService
 
     public function getFinancialPermissions(): Collection
     {
-        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+        if (!DB::getSchemaBuilder()->hasTable('permission_catalog')) {
             return collect();
         }
 
-        return Permission::query()->where('group', 'financial')->orderBy('key')->get();
+        return PermissionCatalog::active()->financial()->orderBy('key')->get();
     }
 
     public function getOperationalPermissions(): Collection
     {
-        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+        if (!DB::getSchemaBuilder()->hasTable('permission_catalog')) {
             return collect();
         }
 
-        return Permission::query()->where('group', '!=', 'financial')->orderBy('key')->get();
+        return PermissionCatalog::active()->operational()->orderBy('key')->get();
     }
 
     public function validatePermissions(array $keys): array
     {
-        if (!DB::getSchemaBuilder()->hasTable('permissions')) {
+        if (!DB::getSchemaBuilder()->hasTable('permission_catalog')) {
             return ['valid' => [], 'invalid' => array_values(array_unique($keys))];
         }
 
@@ -205,10 +206,7 @@ class OrganizationService
             $keys
         )));
 
-        $valid = Permission::query()->whereIn('key', $normalized)->pluck('key')->toArray();
-        $invalid = array_values(array_diff($normalized, $valid));
-
-        return ['valid' => $valid, 'invalid' => $invalid];
+        return PermissionCatalog::validateKeys($normalized);
     }
 
     // ═══════════════════════════════════════════════════════════

@@ -23,4 +23,12 @@ class WalletRefund extends Model
     protected $casts = ['amount' => 'decimal:2'];
 
     public function wallet(): BelongsTo { return $this->belongsTo(BillingWallet::class, 'wallet_id'); }
+
+    /**
+     * Alias accessor: some code uses refund_reason while the DB column is `reason`.
+     */
+    public function getRefundReasonAttribute(): ?string
+    {
+        return $this->attributes['reason'] ?? null;
+    }
 }

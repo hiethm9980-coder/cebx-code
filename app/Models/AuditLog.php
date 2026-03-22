@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Exceptions\BusinessException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -19,6 +21,9 @@ class AuditLog extends Model
 
     public $incrementing = false;
     protected $keyType = 'string';
+
+    // audit_logs has no updated_at column
+    const UPDATED_AT = null;
 
     protected $guarded = [];
 
@@ -48,7 +53,7 @@ class AuditLog extends Model
     {
         static::creating(function (AuditLog $auditLog): void {
             $action = $auditLog->getAttributes()['action'] ?? null;
-            $event = $auditLog->getAttributes()['event'] ?? null;
+            $event  = $auditLog->getAttributes()['event']  ?? null;
 
             if (self::auditColumnExists('event') && $event === null && $action !== null) {
                 $auditLog->setAttribute('event', $action);
@@ -57,6 +62,23 @@ class AuditLog extends Model
             if (self::auditColumnExists('action') && $action === null && $event !== null) {
                 $auditLog->setAttribute('action', $event);
             }
+        });
+
+        // ── Append-only guard: block all mutations (FR-IAM-006 immutability) ──
+        static::updating(function (): void {
+            throw new BusinessException(
+                'Audit logs are immutable and cannot be updated.',
+                'ERR_AUDIT_IMMUTABLE',
+                403
+            );
+        });
+
+        static::deleting(function (): void {
+            throw new BusinessException(
+                'Audit logs are immutable and cannot be deleted.',
+                'ERR_AUDIT_IMMUTABLE',
+                403
+            );
         });
     }
 
@@ -118,6 +140,64 @@ class AuditLog extends Model
             self::SEVERITY_CRITICAL,
         ];
     }
+
+    // ─── Query Scopes ─────────────────────────────────────────────
+
+    public function scopeForAccount(Builder $query, string $accountId): Builder
+    {
+        return $query->where('account_id', $accountId);
+    }
+
+    public function scopeByCategory(Builder $query, string $category): Builder
+    {
+        return $query->where('category', $category);
+    }
+
+    public function scopeBySeverity(Builder $query, string $severity): Builder
+    {
+        return $query->where('severity', $severity);
+    }
+
+    public function scopeByActor(Builder $query, string $userId): Builder
+    {
+        return $query->where('user_id', $userId);
+    }
+
+    public function scopeByAction(Builder $query, string $action): Builder
+    {
+        return $query->where('action', $action);
+    }
+
+    public function scopeByEntity(Builder $query, string $entityType, ?string $entityId = null): Builder
+    {
+        $query->where('entity_type', $entityType);
+
+        if ($entityId !== null) {
+            $query->where('entity_id', $entityId);
+        }
+
+        return $query;
+    }
+
+    public function scopeByRequestId(Builder $query, string $requestId): Builder
+    {
+        return $query->where('request_id', $requestId);
+    }
+
+    public function scopeDateRange(Builder $query, ?string $from, ?string $to): Builder
+    {
+        if ($from) {
+            $query->where('created_at', '>=', $from);
+        }
+
+        if ($to) {
+            $query->where('created_at', '<=', $to);
+        }
+
+        return $query;
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────
 
     private static function auditColumnExists(string $column): bool
     {

@@ -8,6 +8,23 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // No-op: superseded by 2026_02_12_000013 (UUID shipments/stores/orders/addresses/etc).
+        // The legacy bigint schema here conflicts with UUID foreign keys in all 2026 migrations.
+        // If this migration creates 'addresses', the 2026_02_12_000013 guard fires and skips
+        // the entire module tables creation, causing 'shipments.created_by' to be missing.
+        return;
+    }
+
+    public function down(): void
+    {
+        // No-op: nothing was created here.
+    }
+
+    /**
+     * @internal kept for reference only; never executed.
+     */
+    private function _legacyUp(): void
+    {
         // ── Shipments ──
         Schema::create('shipments', function (Blueprint $table) {
             $table->id();
@@ -194,20 +211,5 @@ return new class extends Migration
             $table->timestamp('expires_at');
             $table->timestamps();
         });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('invitations');
-        Schema::dropIfExists('notifications');
-        Schema::dropIfExists('ticket_replies');
-        Schema::dropIfExists('support_tickets');
-        Schema::dropIfExists('addresses');
-        Schema::dropIfExists('wallet_transactions');
-        Schema::dropIfExists('wallets');
-        Schema::dropIfExists('orders');
-        Schema::dropIfExists('stores');
-        Schema::dropIfExists('shipment_events');
-        Schema::dropIfExists('shipments');
     }
 };

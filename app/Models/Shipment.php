@@ -73,6 +73,20 @@ class Shipment extends Model {
     public function balanceReservation(): BelongsTo { return $this->belongsTo(WalletHold::class, 'balance_reservation_id'); }
     public function contentDeclaration(): HasOne { return $this->hasOne(ContentDeclaration::class, 'shipment_id'); }
 
+    /**
+     * Compatibility alias: some tests / older code use _line1 suffix.
+     * The actual column is sender_address_1 / recipient_address_1.
+     */
+    public function setSenderAddressLine1Attribute(mixed $value): void
+    {
+        $this->attributes['sender_address_1'] = $value;
+    }
+
+    public function setRecipientAddressLine1Attribute(mixed $value): void
+    {
+        $this->attributes['recipient_address_1'] = $value;
+    }
+
     public static function generateRef(): string {
         $prefix = 'SHP-' . now()->format('Y');
         $lastReference = static::withoutGlobalScopes()
@@ -145,6 +159,7 @@ class Shipment extends Model {
                 self::STATUS_DRAFT,
                 self::STATUS_KYC_BLOCKED,
                 self::STATUS_READY_FOR_RATES,
+                self::STATUS_RATED,
                 self::STATUS_CANCELLED,
             ],
             self::STATUS_KYC_BLOCKED => [

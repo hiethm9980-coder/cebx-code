@@ -235,10 +235,8 @@ class ShipmentService
             );
         }
 
-        if ($shipment->status !== Shipment::STATUS_READY_FOR_RATES) {
-            $this->transitionStatus($shipment, Shipment::STATUS_READY_FOR_RATES, 'system', $performer->id, 'Shipment cleared for rate fetching');
-        }
-
+        // Record KYC verification result but remain at VALIDATED status.
+        // Transitioning to READY_FOR_RATES is handled by the rate-fetching step.
         $this->updateShipmentCompat($shipment, [
             'kyc_verified' => $kycGate['kyc_status'] === 'verified',
             'status_reason' => null,
@@ -630,18 +628,19 @@ class ShipmentService
         // Increment print count (FR-SH-012)
         $shipment->increment('label_print_count');
 
+        // increment() already updated the in-memory value; return it directly.
         $this->auditService->info(
             $accountId, $performer->id,
             'shipment.label_printed', AuditLog::CATEGORY_ACCOUNT,
             'Shipment', $shipment->id,
             null,
-            ['print_count' => $shipment->label_print_count + 1]
+            ['print_count' => $shipment->label_print_count]
         );
 
         return [
             'label_url'    => $shipment->label_url,
             'label_format' => $shipment->label_format,
-            'print_count'  => $shipment->label_print_count + 1,
+            'print_count'  => $shipment->label_print_count,
             'tracking_number' => $shipment->tracking_number,
         ];
     }
@@ -669,10 +668,10 @@ class ShipmentService
         if (!empty($filters['search'])) {
             $s = $filters['search'];
             $query->where(function ($q) use ($s) {
-                $q->where('reference_number', 'ilike', "%{$s}%")
-                  ->orWhere('tracking_number', 'ilike', "%{$s}%")
-                  ->orWhere('recipient_name', 'ilike', "%{$s}%")
-                  ->orWhere('recipient_phone', 'ilike', "%{$s}%");
+                $q->where('reference_number', 'like', "%{$s}%")
+                  ->orWhere('tracking_number', 'like', "%{$s}%")
+                  ->orWhere('recipient_name', 'like', "%{$s}%")
+                  ->orWhere('recipient_phone', 'like', "%{$s}%");
             });
         }
 

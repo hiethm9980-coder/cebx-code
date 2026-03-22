@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\WalletHold;
 use App\Services\Carriers\Contracts\CarrierShipmentProvider;
 use App\Services\Carriers\DhlApiService;
+use App\Services\Carriers\DhlShipmentProvider;
 use App\Services\Carriers\FedexShipmentProvider;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -307,7 +308,7 @@ class CarrierService
         }
     }
 
-    public function cancelAtCarrier(Shipment $shipment, User $user): CarrierShipment
+    public function cancelAtCarrier(Shipment $shipment, User $user, ?string $reason = null): CarrierShipment
     {
         $carrierShipment = $shipment->carrierShipment;
 
@@ -324,7 +325,11 @@ class CarrierService
                 $carrierShipment->tracking_number
             );
 
-            $carrierShipment->update(['status' => CarrierShipment::STATUS_CANCELLED]);
+            $carrierShipment->update([
+                'status' => CarrierShipment::STATUS_CANCELLED,
+                'cancellation_reason' => $reason,
+                'cancelled_at' => now(),
+            ]);
 
             $oldStatus = (string) $shipment->status;
             $shipment->update(['status' => Shipment::STATUS_CANCELLED]);
@@ -372,12 +377,20 @@ class CarrierService
 
         $carrierShipment->incrementAttempt();
 
+        // Release the original idempotency key from the failed record so that
+        // createAtCarrier can insert a fresh CarrierShipment row using that key
+        // without violating the unique constraint.
+        $originalKey = $carrierShipment->idempotency_key;
+        $carrierShipment->update([
+            'idempotency_key' => $originalKey . ':failed:' . $carrierShipment->attempt_count,
+        ]);
+
         CarrierError::where('carrier_shipment_id', $carrierShipment->id)
             ->where('was_resolved', false)
             ->update(['was_resolved' => true, 'resolved_at' => now()]);
 
         if ($shipment->status === Shipment::STATUS_FAILED) {
-            $shipment->update(['status' => Shipment::STATUS_PAYMENT_PENDING]);
+            $shipment->update(['status' => Shipment::STATUS_PURCHASED]);
         }
 
         return $this->createAtCarrier(
@@ -385,7 +398,7 @@ class CarrierService
             $user,
             $carrierShipment->label_format,
             $carrierShipment->label_size,
-            $carrierShipment->idempotency_key,
+            $originalKey,
             $carrierShipment->correlation_id
         );
     }
@@ -773,15 +786,6 @@ class CarrierService
     {
         $shipment->loadMissing(['selectedRateOption', 'balanceReservation', 'contentDeclaration', 'parcels']);
 
-        if (! $shipment->selectedRateOption) {
-            throw BusinessException::make(
-                'ERR_SELECTED_OFFER_REQUIRED',
-                'A selected shipment offer is required before carrier creation can begin.',
-                ['shipment_id' => (string) $shipment->id],
-                422
-            );
-        }
-
         if ($shipment->status === Shipment::STATUS_REQUIRES_ACTION) {
             throw BusinessException::make(
                 'ERR_DG_HOLD_REQUIRED',
@@ -795,61 +799,79 @@ class CarrierService
             );
         }
 
-        if ($shipment->status !== Shipment::STATUS_PAYMENT_PENDING) {
+        $allowedStatuses = [
+            Shipment::STATUS_PAYMENT_PENDING,
+            Shipment::STATUS_PURCHASED,
+        ];
+
+        if (! in_array($shipment->status, $allowedStatuses, true)) {
             throw BusinessException::make(
                 'ERR_INVALID_STATE_FOR_CARRIER',
                 'Shipment must complete declaration and wallet pre-flight before carrier creation.',
                 [
                     'shipment_id' => (string) $shipment->id,
                     'current_status' => (string) $shipment->status,
-                    'allowed_statuses' => [Shipment::STATUS_PAYMENT_PENDING],
+                    'allowed_statuses' => $allowedStatuses,
                 ],
                 422
             );
         }
 
-        $declaration = $shipment->contentDeclaration;
-        if (! $declaration || $declaration->status !== ContentDeclaration::STATUS_COMPLETED) {
+        // Require a selected offer only for PAYMENT_PENDING (pre-purchase) shipments
+        if ($shipment->status === Shipment::STATUS_PAYMENT_PENDING && ! $shipment->selectedRateOption) {
             throw BusinessException::make(
-                'ERR_DG_DECLARATION_INCOMPLETE',
-                'Dangerous goods declaration must be completed before carrier creation.',
+                'ERR_SELECTED_OFFER_REQUIRED',
+                'A selected shipment offer is required before carrier creation can begin.',
                 ['shipment_id' => (string) $shipment->id],
                 422
             );
         }
 
-        if ((bool) ($declaration->contains_dangerous_goods ?? false)) {
-            throw BusinessException::make(
-                'ERR_DG_HOLD_REQUIRED',
-                'Dangerous goods shipments require manual handling and cannot continue through normal carrier creation.',
-                ['shipment_id' => (string) $shipment->id],
-                422
-            );
-        }
+        // Declaration and wallet reservation checks only apply to PAYMENT_PENDING shipments
+        if ($shipment->status === Shipment::STATUS_PAYMENT_PENDING) {
+            $declaration = $shipment->contentDeclaration;
+            if (! $declaration || $declaration->status !== ContentDeclaration::STATUS_COMPLETED) {
+                throw BusinessException::make(
+                    'ERR_DG_DECLARATION_INCOMPLETE',
+                    'Dangerous goods declaration must be completed before carrier creation.',
+                    ['shipment_id' => (string) $shipment->id],
+                    422
+                );
+            }
 
-        $activeReservation = $this->resolveActiveReservation($shipment);
-        if (! $activeReservation) {
-            throw BusinessException::make(
-                'ERR_WALLET_RESERVATION_REQUIRED',
-                'An active wallet reservation is required before carrier creation.',
-                ['shipment_id' => (string) $shipment->id],
-                422
-            );
-        }
+            if ((bool) ($declaration->contains_dangerous_goods ?? false)) {
+                throw BusinessException::make(
+                    'ERR_DG_HOLD_REQUIRED',
+                    'Dangerous goods shipments require manual handling and cannot continue through normal carrier creation.',
+                    ['shipment_id' => (string) $shipment->id],
+                    422
+                );
+            }
 
-        $expectedAmount = $this->resolveExpectedReservationAmount($shipment);
-        if (round((float) $activeReservation->amount, 2) !== round($expectedAmount, 2)) {
-            throw BusinessException::make(
-                'ERR_PREFLIGHT_AMOUNT_MISMATCH',
-                'The active wallet reservation does not match the selected shipment offer total.',
-                [
-                    'shipment_id' => (string) $shipment->id,
-                    'reservation_id' => (string) $activeReservation->id,
-                    'reserved_amount' => (float) $activeReservation->amount,
-                    'expected_amount' => $expectedAmount,
-                ],
-                422
-            );
+            $activeReservation = $this->resolveActiveReservation($shipment);
+            if (! $activeReservation) {
+                throw BusinessException::make(
+                    'ERR_WALLET_RESERVATION_REQUIRED',
+                    'An active wallet reservation is required before carrier creation.',
+                    ['shipment_id' => (string) $shipment->id],
+                    422
+                );
+            }
+
+            $expectedAmount = $this->resolveExpectedReservationAmount($shipment);
+            if (round((float) $activeReservation->amount, 2) !== round($expectedAmount, 2)) {
+                throw BusinessException::make(
+                    'ERR_PREFLIGHT_AMOUNT_MISMATCH',
+                    'The active wallet reservation does not match the selected shipment offer total.',
+                    [
+                        'shipment_id' => (string) $shipment->id,
+                        'reservation_id' => (string) $activeReservation->id,
+                        'reserved_amount' => (float) $activeReservation->amount,
+                        'expected_amount' => $expectedAmount,
+                    ],
+                    422
+                );
+            }
         }
 
         if ($shipment->parcels()->count() === 0) {
@@ -933,6 +955,11 @@ class CarrierService
     {
         $carrierCode = $this->resolveCarrierCodeForCreation($shipment);
 
+        $dhlCodes = [CarrierShipment::CARRIER_DHL, 'dhl_express'];
+        if (in_array($carrierCode, $dhlCodes, true)) {
+            return new DhlShipmentProvider($this->dhlApi);
+        }
+
         if ($carrierCode !== CarrierShipment::CARRIER_FEDEX) {
             throw BusinessException::make(
                 'ERR_CARRIER_PROVIDER_NOT_SUPPORTED',
@@ -980,7 +1007,7 @@ class CarrierService
             return $shipmentCarrier;
         }
 
-        return CarrierShipment::CARRIER_FEDEX;
+        return CarrierShipment::CARRIER_DHL;
     }
 
     private function resolveActiveReservation(Shipment $shipment): ?WalletHold
@@ -1032,11 +1059,18 @@ class CarrierService
         return round($amount, 2);
     }
 
-    private function captureActiveReservationForIssuedShipment(Shipment $shipment): WalletHold
+    private function captureActiveReservationForIssuedShipment(Shipment $shipment): ?WalletHold
     {
         $reservation = $this->resolveActiveReservation($shipment);
 
         if (! $reservation) {
+            // For already-PURCHASED shipments the reservation was captured in a prior step
+            // (or the account uses a pre-paid/invoiced billing model).  In this case we
+            // proceed without recapturing to avoid blocking legitimate re-submissions.
+            if ($shipment->status === Shipment::STATUS_PURCHASED) {
+                return null;
+            }
+
             throw BusinessException::make(
                 'ERR_WALLET_RESERVATION_REQUIRED',
                 'An active wallet reservation is required before carrier creation.',
@@ -1059,8 +1093,15 @@ class CarrierService
         array $response,
         ?WalletHold $reservation = null
     ): array {
+        // A shipment already at STATUS_PURCHASED transitions to READY_FOR_PICKUP once
+        // the label has been issued at the carrier.  A shipment at PAYMENT_PENDING
+        // first transitions to PURCHASED (payment is captured as part of this flow).
+        $targetStatus = $shipment->status === Shipment::STATUS_PURCHASED
+            ? Shipment::STATUS_READY_FOR_PICKUP
+            : Shipment::STATUS_PURCHASED;
+
         $updates = [
-            'status' => Shipment::STATUS_PURCHASED,
+            'status' => $targetStatus,
         ];
 
         $trackingNumber = $response['tracking_number'] ?? null;

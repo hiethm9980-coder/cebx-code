@@ -402,13 +402,15 @@ class WalletBillingService
 
     public static function walletPermissions(): array
     {
+        // Keys use colon-notation (canonical external format consumed by tests / RBAC setup).
+        // Internal canPerform() calls normalise colon→dot before checking hasPermission().
         return [
-            'wallet.balance'   => 'ط¹ط±ط¶ ط±طµظٹط¯ ط§ظ„ظ…ط­ظپط¸ط©',
-            'wallet.ledger'    => 'ط¹ط±ط¶ ظƒط´ظپ ط§ظ„ط­ط³ط§ط¨',
-            'wallet.topup'     => 'ط´ط­ظ† ط§ظ„ط±طµظٹط¯',
-            'wallet.configure' => 'ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ظ…ط­ظپط¸ط© (ط­ط¯ ط§ظ„طھظ†ط¨ظٹظ‡)',
-            'billing.view'     => 'ط¹ط±ط¶ ظˆط³ط§ط¦ظ„ ط§ظ„ط¯ظپط¹',
-            'billing.manage'   => 'ط¥ط¶ط§ظپط©/ط¥ط²ط§ظ„ط© ظˆط³ط§ط¦ظ„ ط§ظ„ط¯ظپط¹',
+            'wallet:balance'   => 'عرض رصيد المحفظة',
+            'wallet:ledger'    => 'عرض كشف الحساب',
+            'wallet:topup'     => 'شحن الرصيد',
+            'wallet:configure' => 'إعدادات المحفظة (حد التنبيه)',
+            'billing:view'     => 'عرض وسائل الدفع',
+            'billing:manage'   => 'إضافة/إزالة وسائل الدفع',
         ];
     }
 

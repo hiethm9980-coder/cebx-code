@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan:*)",
+      "Bash(php -r \":*)",
+      "Bash(grep -n \"fillable\\\\|casts\\\\|$table\" app/Models/VerificationCase.php)",
+      "Bash(sed -n '15,50p' app/Models/VerificationCase.php)",
+      "Bash(sed -n '10,35p' app/Models/VerificationRestriction.php)",
+      "Bash(grep -rn audit_logs_action_index C:/Users/legion/Documents/GitHub/cebx-code/database/ --include=*.php)",
+      "Bash(grep -n \"toTimelineItem\" app/Models/*.php)",
+      "Bash(php artisan tinker --execute=\":*)",
+      "Bash(php vendor/bin/phpunit tests/Unit/StoreTest.php tests/Unit/TrackingTest.php tests/Unit/AuditLogTest.php --no-coverage)",
+      "Bash(php vendor/bin/phpunit tests/Unit/CarrierTest.php tests/Unit/RateTest.php tests/Unit/OrderTest.php tests/Unit/NotificationEmptyDestinationTest.php tests/Unit/PricingEngineTest.php --no-coverage)"
+    ]
+  }
+}

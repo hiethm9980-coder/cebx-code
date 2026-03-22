@@ -38,19 +38,26 @@ class RateService
 
         $account = Account::findOrFail($accountId);
 
-        if (! in_array($shipment->status, [Shipment::STATUS_READY_FOR_RATES, Shipment::STATUS_RATED], true)) {
+        $rateableStatuses = [
+            Shipment::STATUS_DRAFT,
+            Shipment::STATUS_VALIDATED,
+            Shipment::STATUS_KYC_BLOCKED,
+            Shipment::STATUS_READY_FOR_RATES,
+            Shipment::STATUS_RATED,
+            Shipment::STATUS_OFFER_SELECTED,
+            Shipment::STATUS_DECLARATION_REQUIRED,
+            Shipment::STATUS_DECLARATION_COMPLETE,
+            Shipment::STATUS_REQUIRES_ACTION,
+        ];
+        if (! in_array($shipment->status, $rateableStatuses, true)) {
             throw new BusinessException(
-                'لا يمكن جلب الأسعار قبل اكتمال التحقق من البيانات واجتياز بوابة التحقق والقيود.',
+                'لا يمكن جلب الأسعار لشحنة في هذه الحالة.',
                 'ERR_INVALID_STATE_FOR_RATES',
                 422,
                 [
                     'shipment_id' => $shipment->id,
                     'current_status' => $shipment->status,
-                    'allowed_statuses' => [
-                        Shipment::STATUS_READY_FOR_RATES,
-                        Shipment::STATUS_RATED,
-                    ],
-                    'next_action' => 'أكمل خطوة التحقق من الشحنة أولًا حتى تصبح جاهزة لمرحلة التسعير.',
+                    'allowed_statuses' => $rateableStatuses,
                 ]
             );
         }
@@ -83,6 +90,12 @@ class RateService
 
             try {
                 $rawRates = $this->carrierAdapter->fetchRates($context);
+
+                // FR-RT-012: Filter premium international services for unverified KYC accounts
+                if ($account->kyc_status !== 'verified') {
+                    $premiumIntlServices = ['express_9_00'];
+                    $rawRates = array_values(array_filter($rawRates, fn ($r) => ! in_array($r['service_code'] ?? '', $premiumIntlServices, true)));
+                }
 
                 if (empty($rawRates)) {
                     $quote->update([
@@ -163,7 +176,13 @@ class RateService
                     'selected_rate_option_id' => null,
                 ];
 
-                if ($shipment->status === Shipment::STATUS_READY_FOR_RATES) {
+                $preRateStatuses = [
+                    Shipment::STATUS_DRAFT,
+                    Shipment::STATUS_VALIDATED,
+                    Shipment::STATUS_KYC_BLOCKED,
+                    Shipment::STATUS_READY_FOR_RATES,
+                ];
+                if (in_array($shipment->status, $preRateStatuses, true)) {
                     $shipmentUpdates['status'] = Shipment::STATUS_RATED;
                 }
 
@@ -397,8 +416,7 @@ class RateService
                     $canViewFinancial,
                     $selectedOptionId !== '' && (string) $opt->id === $selectedOptionId
                 ))
-                ->values()
-                ->all(),
+                ->values(),
             'is_expired' => $quote->isExpired(),
             'expires_in_seconds' => $quote->expires_at ? max(0, now()->diffInSeconds($quote->expires_at, false)) : null,
         ];

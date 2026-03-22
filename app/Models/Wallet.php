@@ -55,20 +55,36 @@ class Wallet extends Model
     }
 
     /**
+     * Return a wallet summary array.
+     *
+     * When $canViewBalance is true the full balance fields are included.
+     * When false, sensitive balance fields are OMITTED entirely and a boolean
+     * has_sufficient_balance indicator is included instead (FR-IAM-017 masking).
+     *
      * @return array<string, mixed>
      */
     public function summary(bool $canViewBalance): array
     {
-        return [
-            'id' => $this->id,
+        $base = [
+            'id'         => $this->id,
             'account_id' => $this->account_id,
-            'currency' => $this->currency,
-            'status' => $this->status,
-            'available_balance' => $canViewBalance ? number_format((float) $this->available_balance, 2, '.', '') : null,
-            'locked_balance' => $canViewBalance ? number_format((float) $this->locked_balance, 2, '.', '') : null,
-            'low_balance_threshold' => $this->low_balance_threshold !== null
-                ? number_format((float) $this->low_balance_threshold, 2, '.', '')
-                : null,
+            'currency'   => $this->currency,
+            'status'     => $this->status,
         ];
+
+        if ($canViewBalance) {
+            return array_merge($base, [
+                'available_balance'    => number_format((float) $this->available_balance, 2, '.', ''),
+                'locked_balance'       => number_format((float) $this->locked_balance, 2, '.', ''),
+                'low_balance_threshold' => $this->low_balance_threshold !== null
+                    ? number_format((float) $this->low_balance_threshold, 2, '.', '')
+                    : null,
+            ]);
+        }
+
+        // Masked: reveal only whether the balance is positive (no exact amount)
+        return array_merge($base, [
+            'has_sufficient_balance' => (float) $this->available_balance > 0,
+        ]);
     }
 }

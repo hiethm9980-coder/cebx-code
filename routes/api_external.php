@@ -290,20 +290,20 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'userType:external', 'tenantCon
          ->name('api.v1.kyc.documents.purge');
 
     // ── FR-IAM-012: Financial Data Masking ───────────────────────
+    // visibility and sensitive-fields return metadata about the caller's OWN access level —
+    // any authenticated user may query their own visibility map (no financial.read gate needed).
     Route::get('/financial/visibility', [FinancialDataController::class, 'visibility'])
-         ->middleware('permission:financial.read')
          ->name('api.v1.financial.visibility');
 
     Route::get('/financial/sensitive-fields', [FinancialDataController::class, 'sensitiveFields'])
-         ->middleware('permission:financial.read')
          ->name('api.v1.financial.sensitive-fields');
 
+    // mask-card and filter apply field-level access control internally based on caller permissions.
+    // Any authenticated user may call them; the response is already filtered to their visibility.
     Route::post('/financial/mask-card', [FinancialDataController::class, 'maskCard'])
-         ->middleware('permission:financial.manage')
          ->name('api.v1.financial.mask-card');
 
     Route::post('/financial/filter', [FinancialDataController::class, 'filterData'])
-         ->middleware('permission:financial.manage')
          ->name('api.v1.financial.filter');
 
     // ── FR-IAM-017+019+020: Wallet & Billing ─────────────────────

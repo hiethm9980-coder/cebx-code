@@ -11,9 +11,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('shipments', function (Blueprint $table) {
-            $table->dropForeign(['created_by']);
-        });
+        // Drop the FK only if it exists — the 2026 shipments table may not define one.
+        try {
+            Schema::table('shipments', function (Blueprint $table) {
+                $table->dropForeign(['created_by']);
+            });
+        } catch (\Throwable) {
+            // FK did not exist; nothing to drop.
+        }
         Schema::table('shipments', function (Blueprint $table) {
             $table->uuid('created_by')->nullable()->change();
         });

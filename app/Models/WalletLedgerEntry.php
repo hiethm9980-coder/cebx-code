@@ -55,6 +55,22 @@ class WalletLedgerEntry extends Model
         return $this->belongsTo(User::class, 'actor_user_id');
     }
 
+    // ─── Accessors ───────────────────────────────────────────────
+
+    /**
+     * Return the canonical transaction type.
+     * The legacy `type` ENUM only has: topup, debit, refund, adjustment, lock, unlock.
+     * The `transaction_type` column is the authoritative value (reversal, hold, etc.).
+     * Accessing ->type returns transaction_type when available so tests and callers
+     * always see the semantic value regardless of which column was populated.
+     */
+    public function getTypeAttribute(): ?string
+    {
+        return $this->attributes['transaction_type']
+            ?? $this->attributes['type']
+            ?? null;
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────
 
     public function isCredit(): bool

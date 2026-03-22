@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
 
 class PricingRule extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, SoftDeletes;
 
     protected $keyType = 'string';
     public $incrementing = false;
@@ -59,7 +60,7 @@ class PricingRule extends Model
             ? 'international'
             : 'domestic';
         $storeId = (string) ($context['store_id'] ?? '');
-        $weight = (float) ($context['chargeable_weight'] ?? $context['weight'] ?? 0);
+        $weight = (float) ($context['chargeable_weight'] ?? $context['total_weight'] ?? $context['weight'] ?? 0);
         $isCod = array_key_exists('is_cod', $context) ? (bool) $context['is_cod'] : null;
 
         if (filled($this->carrier_code) && strtoupper((string) $this->carrier_code) !== $carrierCode) {

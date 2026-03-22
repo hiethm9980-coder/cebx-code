@@ -8,6 +8,21 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // No-op: superseded by 2026_02_12_* UUID migrations.
+        // The legacy bigint schema here conflicts with UUID foreign keys in all 2026 migrations.
+        return;
+    }
+
+    public function down(): void
+    {
+        // No-op: nothing was created here.
+    }
+
+    /**
+     * @internal kept for reference only; never executed.
+     */
+    private function _legacyUp(): void
+    {
         // ── Branches ──
         Schema::create('branches', function (Blueprint $table) {
             $table->id();
@@ -204,13 +219,5 @@ return new class extends Migration
             $table->string('ip_address', 45)->nullable();
             $table->timestamps();
         });
-    }
-
-    public function down(): void
-    {
-        $tables = ['audit_logs','risk_alerts','risk_rules','pricing_rules','dg_classifications',
-            'kyc_requests','hs_codes','claims','drivers','customs_declarations',
-            'schedules','containers','vessels','companies','branches'];
-        foreach ($tables as $t) Schema::dropIfExists($t);
     }
 };

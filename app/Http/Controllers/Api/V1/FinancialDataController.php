@@ -89,15 +89,15 @@ class FinancialDataController extends Controller
             'success' => true,
             'data'    => [
                 'profit_sensitive' => [
-                    'permission' => 'financial.profit.view',
+                    'permission' => 'financial:profit.view',
                     'fields'     => DataMaskingService::profitSensitiveFields(),
                 ],
                 'general_financial' => [
-                    'permission' => 'financial.view',
+                    'permission' => 'financial:view',
                     'fields'     => DataMaskingService::generalFinancialFields(),
                 ],
                 'card_sensitive' => [
-                    'permission' => 'financial.cards.view',
+                    'permission' => 'financial:cards.view',
                     'fields'     => DataMaskingService::cardSensitiveFields(),
                 ],
             ],

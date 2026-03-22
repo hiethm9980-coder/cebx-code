@@ -307,7 +307,17 @@ class InvitationService
             if (Schema::hasColumn('invitations', 'send_count')) {
                 $resendPayload['send_count'] = (int) $invitation->send_count + 1;
             }
-            $invitation->update($resendPayload);
+            // Use DB::table() instead of Eloquent update() to bypass dirty-tracking.
+            // When create and resend happen within the same second, Eloquent considers
+            // expires_at "not dirty" (same formatted string) and excludes it from the
+            // SET clause. MySQL's implicit ON UPDATE CURRENT_TIMESTAMP then fires
+            // (explicit_defaults_for_timestamp = OFF) and overwrites expires_at with
+            // the current time. Using DB::table() ensures expires_at is always in SET.
+            DB::table('invitations')
+                ->where('id', $invitation->id)
+                ->update($resendPayload);
+
+            $invitation->refresh();
 
             $this->logAction(
                 $performer->account_id,

@@ -75,8 +75,8 @@ class BillingWalletService
             throw new \RuntimeException('ERR_CURRENCY_MISMATCH: Currency does not match wallet');
         }
 
-        // Idempotency check
-        $idempotencyKey = $options['idempotency_key'] ?? null;
+        // Idempotency check — auto-generate a key if none is provided
+        $idempotencyKey = $options['idempotency_key'] ?? 'topup-' . (string) Str::uuid();
         if ($idempotencyKey) {
             $existing = WalletTopup::where('idempotency_key', $idempotencyKey)->first();
             if ($existing) return $existing;
@@ -169,6 +169,11 @@ class BillingWalletService
             'correlation_id'  => $data['correlation_id'] ?? 'BW-' . Str::uuid(),
             'running_balance' => $runningBalance,
             'created_at'      => $createdAt->format('Y-m-d H:i:s'),
+            // Also populate the legacy `type` column (from migration 000011) so that
+            // queries on `type` and model attributes like typeLabel() work correctly.
+            // The legacy ENUM only allows: topup, debit, refund, adjustment, lock, unlock.
+            // Map newer transaction_type values to their closest legacy equivalents.
+            'type'            => self::mapToLegacyType($data['transaction_type'] ?? $data['type'] ?? 'debit'),
         ]);
 
         if (array_key_exists('metadata', $payload) && is_array($payload['metadata'])) {
@@ -489,6 +494,24 @@ class BillingWalletService
         return $wallet->fresh();
     }
 
+    /**
+     * Map new transaction_type values to the legacy `type` ENUM
+     * (migration 000011: topup, debit, refund, adjustment, lock, unlock).
+     */
+    private static function mapToLegacyType(string $transactionType): string
+    {
+        return match ($transactionType) {
+            'topup'        => 'topup',
+            'debit'        => 'debit',
+            'refund'       => 'refund',
+            'reversal'     => 'adjustment',
+            'hold'         => 'lock',
+            'hold_capture' => 'debit',
+            'hold_release' => 'unlock',
+            default        => 'debit',
+        };
+    }
+
     private function checkLowBalance(BillingWallet $wallet): void
     {
         if (!$wallet->isLowBalance()) return;
@@ -519,12 +542,13 @@ class BillingWalletService
             ];
         }
 
-        // FR-BW-009: Masked view
+        // FR-BW-009: Masked view — includes available_balance for read-only callers
         return [
-            'wallet_id' => $wallet->id,
-            'currency'  => $wallet->currency,
-            'status'    => $wallet->status,
-            'has_funds' => $wallet->available_balance > 0,
+            'wallet_id'         => $wallet->id,
+            'currency'          => $wallet->currency,
+            'status'            => $wallet->status,
+            'available_balance' => (float) $wallet->available_balance,
+            'has_funds'         => $wallet->available_balance > 0,
         ];
     }
 

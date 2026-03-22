@@ -454,7 +454,8 @@ class TrackingService
             'destination'     => $data['destination'],
             'subscriber_name' => $data['subscriber_name'] ?? $user->name,
             'event_types'     => $data['event_types'] ?? null,
-            'language'         => $data['language'] ?? 'ar',
+            'language'        => $data['language'] ?? 'ar',
+            'is_active'       => true,
         ]);
     }
 

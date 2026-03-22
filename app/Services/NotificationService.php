@@ -175,6 +175,10 @@ class NotificationService
 
     private function sendSms(Notification $n): ?string
     {
+        // Verify Twilio is configured before attempting send
+        if (empty(config('services.twilio.sid')) || empty(config('services.twilio.auth_token'))) {
+            throw new \RuntimeException('SMS provider (Twilio) is not configured.');
+        }
         // In production: Twilio/provider integration
         return 'sms_' . Str::random(16);
     }
@@ -187,12 +191,18 @@ class NotificationService
 
     private function sendWebhook(Notification $n): ?string
     {
+        if (empty($n->destination)) {
+            throw new \RuntimeException('Webhook destination URL is not configured.');
+        }
         // In production: HTTP POST to webhook URL
         return 'wh_' . Str::random(16);
     }
 
     private function sendSlack(Notification $n): ?string
     {
+        if (empty($n->destination)) {
+            throw new \RuntimeException('Slack webhook URL is not configured.');
+        }
         // In production: Slack API
         return 'slack_' . Str::random(16);
     }

@@ -47,8 +47,8 @@ class ReportService
             ->groupBy('status')->pluck('count', 'status')->toArray();
         $byCarrier = (clone $query)->select('carrier_code', DB::raw('COUNT(*) as count'))
             ->groupBy('carrier_code')->pluck('count', 'carrier_code')->toArray();
-        $byService = (clone $query)->select('service_type', DB::raw('COUNT(*) as count'))
-            ->groupBy('service_type')->pluck('count', 'service_type')->toArray();
+        $byService = (clone $query)->select('service_code', DB::raw('COUNT(*) as count'))
+            ->groupBy('service_code')->pluck('count', 'service_code')->toArray();
         $byStore = (clone $query)->select('store_id', DB::raw('COUNT(*) as count'))
             ->groupBy('store_id')->pluck('count', 'store_id')->toArray();
 
@@ -81,15 +81,17 @@ class ReportService
      */
     public function profitReport(Account $account, array $filters = []): array
     {
+        // Query shipments directly — rate_quotes lacks the pricing columns needed here.
+        // shipments carries: shipping_rate (retail), shipping_cost (net), platform_fee,
+        // vat_amount (tax), profit_margin (profit).
         $query = DB::table('shipments as s')
-            ->leftJoin('rate_quotes as rq', 's.rate_quote_id', '=', 'rq.id')
             ->where('s.account_id', $account->id)
             ->select([
                 's.id', 's.tracking_number', 's.status', 's.carrier_code',
-                's.service_type', 's.store_id', 's.created_at',
-                'rq.retail_price', 'rq.net_price', 'rq.platform_fee',
-                'rq.carrier_surcharges', 'rq.tax_amount',
-                DB::raw('COALESCE(rq.retail_price, 0) - COALESCE(rq.net_price, 0) - COALESCE(rq.platform_fee, 0) as profit'),
+                's.service_code', 's.store_id', 's.created_at',
+                's.shipping_rate as retail_price', 's.shipping_cost as net_price',
+                's.platform_fee', 's.vat_amount as tax_amount',
+                DB::raw('COALESCE(s.shipping_rate, 0) - COALESCE(s.shipping_cost, 0) - COALESCE(s.platform_fee, 0) as profit'),
             ]);
 
         $this->applyDateFilters($query, $filters, 's.');
@@ -473,7 +475,7 @@ class ReportService
     {
         if (!empty($filters['store_id'])) $query->where($prefix . 'store_id', $filters['store_id']);
         if (!empty($filters['carrier'])) $query->where($prefix . 'carrier_code', $filters['carrier']);
-        if (!empty($filters['service'])) $query->where($prefix . 'service_type', $filters['service']);
+        if (!empty($filters['service'])) $query->where($prefix . 'service_code', $filters['service']);
         if (!empty($filters['status'])) $query->where($prefix . 'status', $filters['status']);
     }
 }

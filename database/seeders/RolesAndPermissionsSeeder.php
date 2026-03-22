@@ -33,31 +33,66 @@ class RolesAndPermissionsSeeder extends Seeder
      */
     private function seedPermissionsCatalog(): array
     {
-        $permissionsByKey = [];
+        $definitions = $this->permissionDefinitions();
+        $hasAudience = Schema::hasColumn('permissions', 'audience');
+        $now = now();
 
-        foreach ($this->permissionDefinitions() as $definition) {
+        foreach ($definitions as $definition) {
             if (str_contains($definition['key'], ':')) {
                 throw new \RuntimeException(
                     sprintf('Phase 2B2 requires dot-notation permission keys only. Invalid key: %s', $definition['key'])
                 );
             }
-
-            $attributes = ['key' => $definition['key']];
-            $values = [
-                'group' => $definition['group'],
-                'display_name' => $definition['display_name'],
-                'description' => $definition['description'],
-            ];
-
-            if (Schema::hasColumn('permissions', 'audience')) {
-                $values['audience'] = $definition['audience'];
-            }
-
-            $permission = Permission::query()->updateOrCreate($attributes, $values);
-            $permissionsByKey[$permission->key] = (string) $permission->id;
         }
 
-        return $permissionsByKey;
+        // Load existing permissions keyed by their key string to avoid updateOrCreate
+        // row-level gap locks that cause MySQL deadlocks inside RefreshDatabase transactions.
+        /** @var array<string, string> $existing key => id */
+        $existing = DB::table('permissions')->pluck('id', 'key')->all();
+
+        $toInsert = [];
+        $toUpdate = [];
+
+        foreach ($definitions as $definition) {
+            $row = [
+                'key'          => $definition['key'],
+                'group'        => $definition['group'],
+                'display_name' => $definition['display_name'],
+                'description'  => $definition['description'],
+            ];
+            if ($hasAudience) {
+                $row['audience'] = $definition['audience'];
+            }
+
+            if (isset($existing[$definition['key']])) {
+                $row['id'] = $existing[$definition['key']];
+                $toUpdate[] = $row;
+            } else {
+                $row['id'] = (string) \Illuminate\Support\Str::uuid();
+                $row['created_at'] = $now;
+                $row['updated_at'] = $now;
+                $toInsert[] = $row;
+            }
+        }
+
+        // Use insertOrIgnore (INSERT IGNORE) for new permissions — avoids gap locks that
+        // cause MySQL deadlocks when running inside RefreshDatabase transactions.
+        if ($toInsert) {
+            DB::table('permissions')->insertOrIgnore($toInsert);
+        }
+
+        // Update existing ones one-by-one (rare after first seed).
+        foreach ($toUpdate as $row) {
+            $id = $row['id'];
+            unset($row['id'], $row['created_at']);
+            $row['updated_at'] = $now;
+            DB::table('permissions')->where('id', $id)->update($row);
+        }
+
+        // Re-fetch to get all IDs (including newly inserted).
+        $permissionsByKey = DB::table('permissions')->pluck('id', 'key')->all();
+
+        return array_map('strval', $permissionsByKey);
     }
 
     /**
@@ -418,7 +453,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $id = (string) Str::uuid();
 
-        DB::table('internal_roles')->insert([
+        // Use insertOrIgnore to avoid duplicate key violations when the seeder
+        // runs multiple times within the same RefreshDatabase transaction.
+        DB::table('internal_roles')->insertOrIgnore([
             'id' => $id,
             'name' => $roleDefinition['name'],
             'display_name' => $roleDefinition['display_name'],
@@ -428,7 +465,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'updated_at' => now(),
         ]);
 
-        return $id;
+        // In case the insertOrIgnore was ignored (race condition), re-fetch the real id.
+        $realId = DB::table('internal_roles')->where('name', $roleDefinition['name'])->value('id');
+
+        return (string) ($realId ?? $id);
     }
 
     /**

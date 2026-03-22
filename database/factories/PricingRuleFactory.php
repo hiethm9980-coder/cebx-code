@@ -15,12 +15,7 @@ class PricingRuleFactory extends Factory
         return [
             'account_id' => Account::factory(),
             'name' => 'Pricing Rule ' . $this->faker->word,
-            'carrier_code' => 'DHL',
-            'carrier_name' => 'DHL',
-            'service_type' => 'domestic',
-            'base_weight' => 1,
-            'base_price' => 0,
-            'extra_kg_price' => 0,
+            'carrier_code' => null,
             'shipment_type' => 'any',
             'markup_type' => 'percentage',
             'markup_percentage' => 15.0,
@@ -55,7 +50,6 @@ class PricingRuleFactory extends Factory
     public function international(): static
     {
         return $this->state([
-            'service_type' => 'international',
             'shipment_type' => 'international',
             'markup_percentage' => 20.0,
             'name' => 'International Pricing Rule',
@@ -65,7 +59,6 @@ class PricingRuleFactory extends Factory
     public function domestic(): static
     {
         return $this->state([
-            'service_type' => 'domestic',
             'shipment_type' => 'domestic',
             'markup_percentage' => 12.0,
             'name' => 'Domestic Pricing Rule',

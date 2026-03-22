@@ -49,6 +49,7 @@ class CarrierApiTest extends TestCase
         $this->owner = User::factory()->create([
             'account_id' => $this->account->id,
             'role_id'    => $ownerRole->id,
+            'is_owner'   => true,
         ]);
         $this->member = User::factory()->create([
             'account_id' => $this->account->id,

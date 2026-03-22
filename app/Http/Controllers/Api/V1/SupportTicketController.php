@@ -42,8 +42,8 @@ class SupportTicketController extends Controller
         }
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
-                $q->where('subject', 'ilike', "%{$request->search}%")
-                    ->orWhere('ticket_number', 'ilike', "%{$request->search}%");
+                $q->where('subject', 'like', "%{$request->search}%")
+                    ->orWhere('ticket_number', 'like', "%{$request->search}%");
             });
         }
 

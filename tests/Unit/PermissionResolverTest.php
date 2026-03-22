@@ -164,7 +164,7 @@ class PermissionResolverTest extends TestCase
             $payload['kyc_status'] = 'not_submitted';
         }
         if (Schema::hasColumn('accounts', 'settings')) {
-            $payload['settings'] = [];
+            $payload['settings'] = json_encode([]);
         }
         if (Schema::hasColumn('accounts', 'created_at')) {
             $payload['created_at'] = now();

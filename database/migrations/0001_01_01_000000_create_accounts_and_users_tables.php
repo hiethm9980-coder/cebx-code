@@ -8,6 +8,21 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // No-op: superseded by 2026_02_12_000001 (UUID accounts) and 2026_02_12_000002 (UUID users).
+        // The legacy bigint schema here conflicts with UUID foreign keys in all 2026 migrations.
+        return;
+    }
+
+    public function down(): void
+    {
+        // No-op: nothing was created here.
+    }
+
+    /**
+     * @internal kept for reference only; never executed.
+     */
+    private function _legacyUp(): void
+    {
         if (Schema::hasTable('accounts')) {
             return;
         }
@@ -52,12 +67,5 @@ return new class extends Migration
             $table->longText('payload');
             $table->integer('last_activity')->index();
         });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('sessions');
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('accounts');
     }
 };

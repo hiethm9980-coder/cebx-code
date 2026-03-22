@@ -121,7 +121,9 @@ class PermissionsCatalog
 
     public static function exists(string $key): bool
     {
-        return in_array($key, static::keys(), true);
+        // Normalise colon-notation (shipments:view) → dot-notation (shipments.view)
+        $normalized = str_replace(':', '.', $key);
+        return in_array($normalized, static::keys(), true);
     }
 
     /**
@@ -144,60 +146,60 @@ class PermissionsCatalog
                 'permissions' => static::keys(),
             ],
             'accountant' => [
-                'display_name' => 'Accountant',
+                'display_name' => 'محاسب',
                 'description' => 'Financial and reporting access.',
                 'permissions' => [
-                    'financial.view',
-                    'financial.profit.view',
-                    'financial.cards.view',
-                    'financial.wallet_view',
-                    'financial.ledger_view',
-                    'financial.invoices_view',
-                    'financial.invoices_manage',
-                    'financial.refund_review',
-                    'financial.threshold',
-                    'reports.view',
-                    'reports.export',
-                    'audit.view',
+                    'financial:view',
+                    'financial:profit.view',
+                    'financial:cards.view',
+                    'financial:wallet_view',
+                    'financial:ledger_view',
+                    'financial:invoices_view',
+                    'financial:invoices_manage',
+                    'financial:refund_review',
+                    'financial:threshold',
+                    'reports:view',
+                    'reports:export',
+                    'audit:view',
                 ],
             ],
             'warehouse' => [
                 'display_name' => 'Warehouse',
                 'description' => 'Operations role for fulfillment.',
                 'permissions' => [
-                    'shipments.view',
-                    'shipments.create',
-                    'shipments.edit',
-                    'shipments.print',
-                    'shipments.export',
-                    'orders.view',
-                    'orders.manage',
-                    'orders.export',
-                    'stores.view',
+                    'shipments:view',
+                    'shipments:create',
+                    'shipments:edit',
+                    'shipments:print',
+                    'shipments:export',
+                    'orders:view',
+                    'orders:manage',
+                    'orders:export',
+                    'stores:view',
                 ],
             ],
             'viewer' => [
                 'display_name' => 'Viewer',
                 'description' => 'Read-only access.',
                 'permissions' => [
-                    'users.view',
-                    'roles.view',
-                    'account.view',
-                    'shipments.view',
-                    'orders.view',
-                    'stores.view',
-                    'reports.view',
-                    'kyc.view',
-                    'audit.view',
+                    'users:view',
+                    'roles:view',
+                    'account:view',
+                    'shipments:view',
+                    'orders:view',
+                    'stores:view',
+                    'reports:view',
+                    'kyc:view',
+                    'audit:view',
                 ],
             ],
             'printer' => [
                 'display_name' => 'Printer',
                 'description' => 'Shipment printing role without financial access.',
                 'permissions' => [
-                    'shipments.view',
-                    'shipments.print',
-                    'orders.view',
+                    'shipments:view',
+                    'shipments:print',
+                    'orders:view',
                 ],
             ],
         ];

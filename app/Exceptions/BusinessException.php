@@ -175,6 +175,24 @@ class BusinessException extends Exception
         );
     }
 
+    public static function emailAlreadyInAccount(): self
+    {
+        return new self(
+            'البريد الإلكتروني مرتبط بمستخدم موجود بالفعل في هذا الحساب.',
+            'ERR_EMAIL_ALREADY_IN_ACCOUNT',
+            409
+        );
+    }
+
+    public static function invitationCannotCancel(): self
+    {
+        return new self(
+            'لا يمكن إلغاء هذه الدعوة في حالتها الحالية.',
+            'ERR_INVITATION_CANNOT_CANCEL',
+            422
+        );
+    }
+
     // ─── FR-IAM-014/015/016: KYC ────────────────────────────────
 
     public static function kycRequired(): self

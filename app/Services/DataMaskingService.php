@@ -46,12 +46,13 @@ class DataMaskingService
         $last4 = substr($digits, -4);
         $maskedLength = $length - 4;
 
-        // Format in groups of 4 for readability
-        $masked = str_repeat('•', $maskedLength);
-        $full = $masked . $last4;
+        // Group only the masked prefix in groups of 4, then append last 4 digits unsplit.
+        // Grouping the full string would split last-4 across boundaries for non-16-digit cards.
+        $prefixChars = mb_str_split(str_repeat('•', $maskedLength));
+        $prefixGroups = array_chunk($prefixChars, 4);
+        $prefixStr = trim(implode(' ', array_map(static fn (array $g): string => implode('', $g), $prefixGroups)));
 
-        // Insert spaces every 4 characters
-        return trim(chunk_split($full, 4, ' '));
+        return $prefixStr !== '' ? $prefixStr . ' ' . $last4 : $last4;
     }
 
     /**

@@ -10,6 +10,11 @@ class Permission extends Model
 {
     use HasUuids;
 
+    public function newEloquentBuilder($query): PermissionQueryBuilder
+    {
+        return new PermissionQueryBuilder($query);
+    }
+
     protected $keyType = 'string';
     public $incrementing = false;
 

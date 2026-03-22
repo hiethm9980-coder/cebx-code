@@ -28,7 +28,14 @@ class ShipmentEvent extends Model {
      */
     public function toTimelineItem(): array
     {
-        $normalizedStatus = CanonicalShipmentStatus::normalize((string) ($this->normalized_status ?? $this->status ?? ''));
+        // Trust normalized_status when already set (e.g. TrackingEvent::unified_status
+        // values like 'picked_up', 'in_transit'). Only run normalize() on raw status
+        // values that originate from Shipment status strings.
+        $normalizedStatus = isset($this->attributes['normalized_status'])
+            ? (string) $this->attributes['normalized_status']
+            : CanonicalShipmentStatus::normalize((string) ($this->status ?? ''));
+
+        $payload = $this->payload ?? [];
 
         return [
             'id' => (string) $this->id,
@@ -42,7 +49,8 @@ class ShipmentEvent extends Model {
             'source' => (string) ($this->source ?? self::SOURCE_SYSTEM),
             'source_label' => $this->sourceLabel(),
             'correlation_id' => $this->correlation_id,
-            'payload' => $this->payload ?? [],
+            'signatory' => $payload['signatory'] ?? null,
+            'payload' => $payload,
         ];
     }
 

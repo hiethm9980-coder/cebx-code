@@ -265,7 +265,7 @@ class OrderService
                 'total_amount'          => $subtotal + ($data['shipping_cost'] ?? 0) + ($data['tax_amount'] ?? 0) - ($data['discount_amount'] ?? 0),
                 'currency'              => $data['currency'] ?? 'SAR',
                 'total_weight'          => $totalWeight,
-                'items_count'           => count($items),
+                'items_count'           => (int) collect($items)->sum(fn ($i) => $i['quantity'] ?? 1),
                 'imported_at'           => now(),
                 'imported_by'           => $performer->id,
                 'metadata'              => $data['metadata'] ?? null,
@@ -326,10 +326,10 @@ class OrderService
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
-                $q->where('external_order_number', 'ilike', "%{$search}%")
-                  ->orWhere('customer_name', 'ilike', "%{$search}%")
-                  ->orWhere('customer_email', 'ilike', "%{$search}%")
-                  ->orWhere('external_order_id', 'ilike', "%{$search}%");
+                $q->where('external_order_number', 'like', "%{$search}%")
+                  ->orWhere('customer_name', 'like', "%{$search}%")
+                  ->orWhere('customer_email', 'like', "%{$search}%")
+                  ->orWhere('external_order_id', 'like', "%{$search}%");
             });
         }
         if (!empty($filters['from'])) {
@@ -588,7 +588,7 @@ class OrderService
                 'store_id'    => $store->id,
                 'status'      => Order::STATUS_PENDING,
                 'total_weight' => $totalWeight,
-                'items_count' => count($items),
+                'items_count' => (int) collect($items)->sum(fn ($i) => $i['quantity'] ?? 1),
                 'imported_at' => now(),
             ]));
 

@@ -266,7 +266,8 @@ class KycComplianceService
             'actor_type'  => 'user',
             'action'      => $action,
             'ip_address'  => request()?->ip(),
-            'metadata'    => $metadata,
+            // Store null (not []) when no metadata is provided (FR-KYC-007 — no document content in audit)
+            'metadata'    => empty($metadata) ? null : $metadata,
             'result'      => $result,
         ]);
     }
