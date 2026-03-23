@@ -11,5 +11,6 @@ class EventServiceProvider extends ServiceProvider
         \App\Events\OrderCreated::class => [\App\Listeners\NotifyOrderCreated::class],
         \App\Events\WalletTopup::class => [\App\Listeners\LogWalletTopup::class],
         \App\Events\KycSubmitted::class => [\App\Listeners\NotifyKycSubmission::class],
+        \App\Events\UserInvited::class => [\App\Listeners\SendUserInvitationListener::class],
     ];
 }

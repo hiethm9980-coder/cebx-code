@@ -31,15 +31,11 @@ Route::prefix('b2b')->name('b2b.')->middleware('portal:b2b')->group(function ():
 
         Route::prefix('orders')->name('orders.')->group(function (): void {
             Route::get('/', [PortalWorkspaceController::class, 'b2bOrders'])->name('index');
-            Route::get('/{id}', function ($id) {
-                return view('b2b.dashboard', ['orderId' => $id]);
-            })->name('show');
+            Route::get('/{id}', [PortalWorkspaceController::class, 'b2bOrderShow'])->name('show');
         });
 
         Route::prefix('stores')->name('stores.')->group(function (): void {
-            Route::get('/', function () {
-                return view('b2b.dashboard');
-            })->name('index');
+            Route::get('/', [PortalWorkspaceController::class, 'b2bStores'])->name('index');
         });
 
         Route::prefix('users')->name('users.')->group(function (): void {
@@ -51,9 +47,8 @@ Route::prefix('b2b')->name('b2b.')->middleware('portal:b2b')->group(function ():
         });
 
         Route::prefix('invitations')->name('invitations.')->group(function (): void {
-            Route::get('/', function () {
-                return view('b2b.dashboard');
-            })->name('index');
+            Route::get('/', [PortalWorkspaceController::class, 'b2bInvitations'])->name('index');
+            Route::post('/', [PortalWorkspaceController::class, 'b2bInvitationsStore'])->name('store');
         });
 
         Route::prefix('wallet')->name('wallet.')->group(function (): void {
@@ -92,9 +87,7 @@ Route::prefix('b2b')->name('b2b.')->middleware('portal:b2b')->group(function ():
         });
 
         Route::prefix('settings')->name('settings.')->group(function (): void {
-            Route::get('/', function () {
-                return view('b2b.dashboard');
-            })->name('index');
+            Route::get('/', [PortalWorkspaceController::class, 'b2bSettings'])->name('index');
         });
     });
 });

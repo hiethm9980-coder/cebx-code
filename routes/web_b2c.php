@@ -23,9 +23,7 @@ Route::prefix('b2c')->name('b2c.')->middleware('portal:b2c')->group(function () 
     // مسارات محمية
     Route::middleware(['auth:web', 'userType:external', 'tenant', 'ensureAccountType:individual'])->group(function () {
 
-        Route::get('/dashboard', function () {
-            return view('b2c.dashboard');
-        })->name('dashboard');
+        Route::get('/dashboard', [PortalWorkspaceController::class, 'b2cDashboard'])->name('dashboard');
 
         Route::prefix('shipments')->name('shipments.')->group(function () {
             Route::get('/', [PortalWorkspaceController::class, 'b2cShipments'])->name('index');
@@ -56,9 +54,7 @@ Route::prefix('b2c')->name('b2c.')->middleware('portal:b2c')->group(function () 
 
         Route::prefix('tracking')->name('tracking.')->group(function () {
             Route::get('/', [PortalWorkspaceController::class, 'b2cTracking'])->name('index');
-            Route::get('/{trackingNumber}', function ($trackingNumber) {
-                return view('b2c.dashboard', ['trackingNumber' => $trackingNumber]);
-            })->name('show');
+            Route::get('/{trackingNumber}', [PortalWorkspaceController::class, 'b2cTrackingShow'])->name('show');
         });
 
         Route::prefix('wallet')->name('wallet.')->group(function () {
@@ -66,21 +62,20 @@ Route::prefix('b2c')->name('b2c.')->middleware('portal:b2c')->group(function () 
         });
 
         Route::prefix('addresses')->name('addresses.')->group(function () {
-            Route::get('/', function () {
-                return view('b2c.dashboard');
-            })->name('index');
+            Route::get('/', [PortalWorkspaceController::class, 'b2cAddresses'])->name('index');
+            Route::post('/', [PortalWorkspaceController::class, 'b2cAddressStore'])->name('store');
+            Route::patch('/{address}/default', [PortalWorkspaceController::class, 'b2cAddressDefault'])->name('default');
+            Route::delete('/{address}', [PortalWorkspaceController::class, 'b2cAddressDestroy'])->name('destroy');
         });
 
         Route::prefix('support')->name('support.')->group(function () {
-            Route::get('/', function () {
-                return view('b2c.dashboard');
-            })->name('index');
+            Route::get('/', [PortalWorkspaceController::class, 'b2cSupport'])->name('index');
+            Route::post('/', [PortalWorkspaceController::class, 'b2cSupportStore'])->name('store');
         });
 
         Route::prefix('settings')->name('settings.')->group(function () {
-            Route::get('/', function () {
-                return view('b2c.dashboard');
-            })->name('index');
+            Route::get('/', [PortalWorkspaceController::class, 'b2cSettings'])->name('index');
+            Route::put('/', [PortalWorkspaceController::class, 'b2cSettingsUpdate'])->name('update');
         });
     });
 });

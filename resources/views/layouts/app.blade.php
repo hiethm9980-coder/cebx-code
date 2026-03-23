@@ -78,10 +78,12 @@
             ['active' => ['b2b.dashboard'], 'route' => 'b2b.dashboard', 'icon' => 'HOME', 'label' => 'الرئيسية'],
             ['active' => ['b2b.shipments.*'], 'route' => 'b2b.shipments.index', 'icon' => 'SH', 'label' => 'الشحنات'],
             ['active' => ['b2b.orders.*'], 'route' => 'b2b.orders.index', 'icon' => 'OR', 'label' => 'الطلبات'],
+            ['active' => ['b2b.stores.*'], 'route' => 'b2b.stores.index', 'icon' => 'ST', 'label' => 'المتاجر'],
             ['active' => ['b2b.wallet.*'], 'route' => 'b2b.wallet.index', 'icon' => 'WL', 'label' => 'المحفظة'],
             ['active' => ['b2b.reports.*'], 'route' => 'b2b.reports.index', 'icon' => 'RPT', 'label' => 'التقارير'],
             ['active' => ['b2b.users.*'], 'route' => 'b2b.users.index', 'icon' => 'USR', 'label' => 'المستخدمون'],
             ['active' => ['b2b.roles.*'], 'route' => 'b2b.roles.index', 'icon' => 'ROL', 'label' => 'الأدوار'],
+            ['active' => ['b2b.invitations.*'], 'route' => 'b2b.invitations.index', 'icon' => 'INV', 'label' => 'الدعوات'],
         ];
 
         if ($showDeveloperWorkspace) {
@@ -181,6 +183,12 @@
             @endif
             @if(session('error'))
                 <x-toast type="error" :message="session('error')" />
+            @endif
+            @if(session('warning'))
+                <x-toast type="warning" :message="session('warning')" />
+            @endif
+            @if(session('info'))
+                <x-toast type="info" :message="session('info')" />
             @endif
             @yield('content')
         </main>

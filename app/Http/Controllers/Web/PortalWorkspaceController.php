@@ -5,21 +5,26 @@ namespace App\Http\Controllers\Web;
 use App\Exceptions\BusinessException;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
+use App\Models\Address;
 use App\Models\BillingWallet;
 use App\Models\CarrierError;
 use App\Models\ContentDeclaration;
 use App\Models\CustomerApiKey;
 use App\Models\IntegrationHealthLog;
+use App\Models\Invitation;
 use App\Models\Notification;
 use App\Models\Order;
 use App\Models\Role;
 use App\Models\RateQuote;
 use App\Models\Shipment;
 use App\Models\Store;
+use App\Models\SupportTicket;
+use App\Models\TrackingEvent;
 use App\Models\User;
 use App\Models\WaiverVersion;
 use App\Models\WalletLedgerEntry;
 use App\Models\WebhookEvent;
+use App\Services\AdminService;
 use App\Services\CarrierService;
 use App\Services\ShipmentTimelineService;
 use Illuminate\Contracts\View\View;
@@ -380,14 +385,37 @@ class PortalWorkspaceController extends Controller
         $catalog = $this->integrationCatalog()->keyBy('id');
         abort_unless($catalog->has($integration), 404);
 
+        $startedAt = hrtime(true);
+        $status = 'healthy';
+        $errorRate = 0;
+        $failedRequests = 0;
+        $metadata = [
+            'source' => 'browser_workspace',
+            'account_name' => $account->name,
+        ];
+
+        try {
+            if (in_array($integration, ['dhl', 'aramex'], true)) {
+                $health = app(AdminService::class)->testCarrierConnection($integration);
+                $status = (string) ($health['status'] ?? 'healthy');
+            }
+        } catch (\Throwable $exception) {
+            $status = 'degraded';
+            $errorRate = 100;
+            $failedRequests = 1;
+            $metadata['error'] = $exception->getMessage();
+        }
+
+        $responseTimeMs = max(1, (int) floor((hrtime(true) - $startedAt) / 1_000_000));
+
         $attributes = [
             'id' => (string) Str::uuid(),
             'service' => $integration,
-            'status' => 'healthy',
-            'response_time_ms' => random_int(45, 180),
-            'error_rate' => 0,
+            'status' => $status,
+            'response_time_ms' => $responseTimeMs,
+            'error_rate' => $errorRate,
             'total_requests' => 1,
-            'failed_requests' => 0,
+            'failed_requests' => $failedRequests,
             'checked_at' => now(),
             'created_at' => now(),
             'updated_at' => now(),
@@ -400,10 +428,7 @@ class PortalWorkspaceController extends Controller
             $attributes['integration_id'] = $integration;
         }
         if (Schema::hasColumn('integration_health_logs', 'metadata')) {
-            $attributes['metadata'] = [
-                'source' => 'browser_workspace',
-                'account_name' => $account->name,
-            ];
+            $attributes['metadata'] = $metadata;
         }
 
         IntegrationHealthLog::query()->create($attributes);
@@ -481,6 +506,291 @@ class PortalWorkspaceController extends Controller
             'baseWebhookUrl' => rtrim(config('app.url'), '/') . '/api/v1/webhooks',
             'recentWebhookEvents' => $this->recentWebhookEvents($accountId),
             'stores' => Store::query()->where('account_id', $accountId)->orderBy('name')->limit(8)->get(),
+        ]);
+    }
+
+    // ═══ B2B — Stores ═══
+    public function b2bStores(): View
+    {
+        $account = $this->currentAccount();
+        $accountId = (string) $account->id;
+
+        $stores = Store::query()
+            ->where('account_id', $accountId)
+            ->orderBy('name')
+            ->get();
+
+        return view('pages.portal.b2b.stores', [
+            'account' => $account,
+            'stores' => $stores,
+            'stats' => [
+                ['icon' => 'ST', 'label' => 'إجمالي المتاجر', 'value' => number_format($stores->count())],
+                ['icon' => 'OK', 'label' => 'متصلة', 'value' => number_format($stores->where('status', 'active')->count())],
+                ['icon' => 'WN', 'label' => 'تحتاج مراجعة', 'value' => number_format($stores->whereNotIn('status', ['active'])->count())],
+            ],
+        ]);
+    }
+
+    // ═══ B2B — Invitations ═══
+    public function b2bInvitations(): View
+    {
+        $account = $this->currentAccount();
+        $accountId = (string) $account->id;
+
+        $invitations = Invitation::query()
+            ->where('account_id', $accountId)
+            ->latest()
+            ->get();
+
+        return view('pages.portal.b2b.invitations', [
+            'account' => $account,
+            'invitations' => $invitations,
+            'roles' => Role::query()->where('account_id', $accountId)->orderBy('name')->get(),
+            'stats' => [
+                ['icon' => 'INV', 'label' => 'إجمالي الدعوات', 'value' => number_format($invitations->count())],
+                ['icon' => 'PD', 'label' => 'معلقة', 'value' => number_format($invitations->where('status', 'pending')->count())],
+                ['icon' => 'OK', 'label' => 'مقبولة', 'value' => number_format($invitations->where('status', 'accepted')->count())],
+            ],
+        ]);
+    }
+
+    // ═══ B2B — Settings ═══
+    public function b2bSettings(): View
+    {
+        $account = $this->currentAccount();
+
+        return view('pages.portal.b2b.settings', [
+            'account' => $account,
+            'user' => auth()->user(),
+        ]);
+    }
+
+    // ═══ B2B — Order Show ═══
+    public function b2bOrderShow(string $id): View
+    {
+        $account = $this->currentAccount();
+        $accountId = (string) $account->id;
+
+        $order = Order::query()
+            ->where('account_id', $accountId)
+            ->where('id', $id)
+            ->with(['store', 'shipment'])
+            ->firstOrFail();
+
+        return view('pages.portal.b2b.orders.show', [
+            'account' => $account,
+            'order' => $order,
+        ]);
+    }
+
+    // ═══ B2C — Addresses ═══
+    public function b2cAddresses(): View
+    {
+        $account = $this->currentAccount();
+        $accountId = (string) $account->id;
+
+        $addresses = Address::query()
+            ->where('account_id', $accountId)
+            ->orderByDesc('is_default')
+            ->orderBy('label')
+            ->get();
+
+        return view('pages.portal.b2c.addresses', [
+            'account' => $account,
+            'addresses' => $addresses,
+        ]);
+    }
+
+    // ═══ B2C — Support ═══
+    public function b2cSupport(): View
+    {
+        $account = $this->currentAccount();
+        $accountId = (string) $account->id;
+
+        $tickets = Schema::hasTable('support_tickets')
+            ? SupportTicket::query()
+                ->where('account_id', $accountId)
+                ->latest()
+                ->limit(30)
+                ->get()
+            : collect();
+
+        return view('pages.portal.b2c.support', [
+            'account' => $account,
+            'tickets' => $tickets,
+        ]);
+    }
+
+    // ═══ B2C — Settings ═══
+    public function b2cSettings(): View
+    {
+        $account = $this->currentAccount();
+
+        return view('pages.portal.b2c.settings', [
+            'account' => $account,
+            'user' => auth()->user(),
+        ]);
+    }
+
+    // ═══ B2C — Tracking Show ═══
+    public function b2cTrackingShow(string $trackingNumber): View
+    {
+        $account = $this->currentAccount();
+        $accountId = (string) $account->id;
+
+        $identifierColumns = array_values(array_filter([
+            Schema::hasColumn('shipments', 'tracking_number') ? 'tracking_number' : null,
+            Schema::hasColumn('shipments', 'carrier_shipment_id') ? 'carrier_shipment_id' : null,
+            Schema::hasColumn('shipments', 'reference_number') ? 'reference_number' : null,
+        ]));
+
+        $shipment = null;
+        if ($identifierColumns !== []) {
+            $shipment = Shipment::query()
+                ->where('account_id', $accountId)
+                ->where(function ($builder) use ($trackingNumber, $identifierColumns): void {
+                    foreach ($identifierColumns as $index => $column) {
+                        $method = $index === 0 ? 'where' : 'orWhere';
+                        $builder->{$method}($column, $trackingNumber);
+                    }
+                })
+                ->first();
+        }
+
+        abort_unless($shipment !== null, 404);
+
+        $events = Schema::hasTable('tracking_events')
+            ? TrackingEvent::query()
+                ->where('shipment_id', $shipment->id)
+                ->orderByDesc('occurred_at')
+                ->limit(20)
+                ->get()
+            : collect();
+
+        return view('pages.portal.b2c.tracking-show', [
+            'account' => $account,
+            'shipment' => $shipment,
+            'trackingNumber' => $trackingNumber,
+            'events' => $events,
+        ]);
+    }
+
+    // ═══ B2C — Address Actions ═══
+    public function b2cAddressStore(Request $request): RedirectResponse
+    {
+        $account = $this->currentAccount();
+        $data = $request->validate([
+            'label'        => 'required|string|max:100',
+            'street'       => 'required|string|max:300',
+            'city'         => 'required|string|max:100',
+            'postal_code'  => 'nullable|string|max:20',
+            'country'      => 'required|string|size:2',
+            'phone'        => 'nullable|string|max:30',
+            'is_default'   => 'nullable|boolean',
+        ]);
+
+        if (!empty($data['is_default'])) {
+            Address::query()->where('account_id', (string) $account->id)->update(['is_default' => false]);
+        }
+
+        Address::query()->create(array_merge($data, [
+            'account_id' => (string) $account->id,
+            'is_default' => !empty($data['is_default']),
+        ]));
+
+        return redirect()->route('b2c.addresses.index')->with('success', 'تم إضافة العنوان بنجاح.');
+    }
+
+    public function b2cAddressDefault(Request $request, string $address): RedirectResponse
+    {
+        $account = $this->currentAccount();
+        $addr = Address::query()->where('account_id', (string) $account->id)->where('id', $address)->firstOrFail();
+        Address::query()->where('account_id', (string) $account->id)->update(['is_default' => false]);
+        $addr->update(['is_default' => true]);
+
+        return redirect()->route('b2c.addresses.index')->with('success', 'تم تعيين العنوان الافتراضي.');
+    }
+
+    public function b2cAddressDestroy(Request $request, string $address): RedirectResponse
+    {
+        $account = $this->currentAccount();
+        $addr = Address::query()->where('account_id', (string) $account->id)->where('id', $address)->firstOrFail();
+        $addr->delete();
+
+        return redirect()->route('b2c.addresses.index')->with('success', 'تم حذف العنوان.');
+    }
+
+    // ═══ B2C — Support Actions ═══
+    public function b2cSupportStore(Request $request): RedirectResponse
+    {
+        $account = $this->currentAccount();
+        $data = $request->validate([
+            'subject' => 'required|string|max:200',
+            'body'    => 'required|string|max:2000',
+        ]);
+
+        if (Schema::hasTable('support_tickets')) {
+            SupportTicket::query()->create([
+                'account_id' => (string) $account->id,
+                'user_id'    => (string) $request->user()->id,
+                'subject'    => $data['subject'],
+                'body'       => $data['body'],
+                'status'     => 'open',
+            ]);
+        }
+
+        return redirect()->route('b2c.support.index')->with('success', 'تم إرسال طلب الدعم بنجاح.');
+    }
+
+    // ═══ B2C — Settings Update ═══
+    public function b2cSettingsUpdate(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name'     => 'required|string|max:200',
+            'phone'    => 'nullable|string|max:30',
+            'locale'   => 'nullable|string|in:ar,en',
+        ]);
+
+        $request->user()->update(array_filter($data, fn($v) => $v !== null));
+
+        return redirect()->route('b2c.settings.index')->with('success', 'تم حفظ الإعدادات بنجاح.');
+    }
+
+    // ═══ B2B — Invitations Store ═══
+    public function b2bInvitationsStore(Request $request): RedirectResponse
+    {
+        $account = $this->currentAccount();
+        $data = $request->validate([
+            'email'     => 'required|email|max:255',
+            'role_name' => 'nullable|string|max:100',
+        ]);
+
+        Invitation::query()->create([
+            'email'      => $data['email'],
+            'role_name'  => $data['role_name'] ?? 'عارض',
+            'status'     => 'pending',
+            'account_id' => (string) $account->id,
+            'token'      => bin2hex(random_bytes(32)),
+            'invited_by' => (string) $request->user()->id,
+            'expires_at' => now()->addDays(7),
+        ]);
+
+        return redirect()->route('b2b.invitations.index')->with('success', 'تم إرسال الدعوة بنجاح.');
+    }
+
+    // ═══ B2C — Dashboard ═══
+    public function b2cDashboard(): View
+    {
+        $account = $this->currentAccount();
+        $accountId = (string) $account->id;
+
+        return view('pages.portal.b2c.dashboard', [
+            'account' => $account,
+            'stats' => [
+                ['icon' => 'SH', 'label' => 'إجمالي الشحنات', 'value' => number_format(Shipment::query()->where('account_id', $accountId)->count())],
+                ['icon' => 'IP', 'label' => 'قيد التنفيذ', 'value' => number_format(Shipment::query()->where('account_id', $accountId)->whereIn('status', ['pending', 'ready_for_pickup', 'picked_up', 'in_transit', 'out_for_delivery'])->count())],
+                ['icon' => 'OK', 'label' => 'تم التسليم', 'value' => number_format(Shipment::query()->where('account_id', $accountId)->where('status', 'delivered')->count())],
+            ],
         ]);
     }
 

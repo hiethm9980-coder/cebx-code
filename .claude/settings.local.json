@@ -10,7 +10,14 @@
       "Bash(grep -n \"toTimelineItem\" app/Models/*.php)",
       "Bash(php artisan tinker --execute=\":*)",
       "Bash(php vendor/bin/phpunit tests/Unit/StoreTest.php tests/Unit/TrackingTest.php tests/Unit/AuditLogTest.php --no-coverage)",
-      "Bash(php vendor/bin/phpunit tests/Unit/CarrierTest.php tests/Unit/RateTest.php tests/Unit/OrderTest.php tests/Unit/NotificationEmptyDestinationTest.php tests/Unit/PricingEngineTest.php --no-coverage)"
+      "Bash(php vendor/bin/phpunit tests/Unit/CarrierTest.php tests/Unit/RateTest.php tests/Unit/OrderTest.php tests/Unit/NotificationEmptyDestinationTest.php tests/Unit/PricingEngineTest.php --no-coverage)",
+      "Bash(php vendor/bin/phpunit tests/Unit/AccountTypeTest.php tests/Unit/InvitationTest.php --no-coverage)",
+      "Bash(tasklist /FI \"IMAGENAME eq php.exe\" /FO TABLE)",
+      "Bash(tasklist /FI \"IMAGENAME eq php.exe\")",
+      "Bash(Get-Process php:*)",
+      "Bash(Select-Object Id,CPU,StartTime)",
+      "Bash(Format-Table)",
+      "Bash(powershell -Command \"Get-Process php -ErrorAction SilentlyContinue | Select-Object Id,CPU,StartTime | Format-Table -AutoSize\")"
     ]
   }
 }

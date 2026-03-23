@@ -46,29 +46,50 @@ class DemoSeeder extends Seeder
             ['name' => 'شركة التقنية المتقدمة', 'type' => 'organization', 'status' => 'active']
         );
 
-        $admin = User::firstOrCreate(
+        // updateOrCreate يضمن إعادة تعيين كلمة المرور التجريبية عند إعادة تشغيل السيدر (firstOrCreate لا يحدّث كلمة المرور للمستخدم الموجود).
+        $admin = User::updateOrCreate(
             ['account_id' => $account->id, 'email' => 'sultan@techco.sa'],
-            ['name' => 'سلطان القحطاني', 'password' => Hash::make('password'), 'status' => 'active', 'is_owner' => true, 'is_active' => true, 'last_login_at' => now()]
+            [
+                'name' => 'سلطان القحطاني',
+                'password' => Hash::make('password'),
+                'status' => 'active',
+                'is_owner' => true,
+                'is_active' => true,
+                'user_type' => 'external',
+                'last_login_at' => now(),
+            ]
         );
 
         $users = collect([
             ['name'=>'هند العتيبي','email'=>'hind@techco.sa'],
             ['name'=>'ماجد السبيعي','email'=>'majed@techco.sa'],
             ['name'=>'لمى الحربي','email'=>'lama@techco.sa','is_active'=>false],
-        ])->map(fn($u) => User::firstOrCreate(
+        ])->map(fn ($u) => User::updateOrCreate(
             ['account_id' => $account->id, 'email' => $u['email']],
-            array_merge($u, [
-                'password' => Hash::make('password'),
-                'status' => ($u['is_active'] ?? true) ? 'active' : 'inactive',
-                'is_active' => $u['is_active'] ?? true,
-                'last_login_at' => now()->subHours(rand(1, 168)),
-            ])
+            array_merge(
+                array_diff_key($u, ['email' => 1]),
+                [
+                    'password' => Hash::make('password'),
+                    'status' => ($u['is_active'] ?? true) ? 'active' : 'inactive',
+                    'is_active' => $u['is_active'] ?? true,
+                    'user_type' => 'external',
+                    'last_login_at' => now()->subHours(rand(1, 168)),
+                ]
+            )
         ));
 
         // Platform admin (internal actor; no account.type admin usage)
-        User::firstOrCreate(
+        User::updateOrCreate(
             ['email' => 'admin@system.sa'],
-            ['account_id' => null, 'name' => 'مدير النظام', 'password' => Hash::make('admin'), 'status' => 'active', 'is_active' => true, 'user_type' => 'internal', 'last_login_at' => now()]
+            [
+                'account_id' => null,
+                'name' => 'مدير النظام',
+                'password' => Hash::make('admin'),
+                'status' => 'active',
+                'is_active' => true,
+                'user_type' => 'internal',
+                'last_login_at' => now(),
+            ]
         );
 
         // B2C Individual account
@@ -76,13 +97,14 @@ class DemoSeeder extends Seeder
             ['slug' => 'mohammed-individual'],
             ['name' => 'محمد العمري', 'type' => 'individual', 'status' => 'active']
         );
-        $b2cUser = User::firstOrCreate(
-            ['account_id'=>$b2cAccount->id,'email'=>'mohammed@example.sa'],
+        $b2cUser = User::updateOrCreate(
+            ['account_id' => $b2cAccount->id, 'email' => 'mohammed@example.sa'],
             [
                 'name' => 'محمد العمري',
                 'password' => Hash::make('password'),
                 'status' => 'active',
                 'is_active' => true,
+                'user_type' => 'external',
                 'last_login_at' => now(),
             ]
         );

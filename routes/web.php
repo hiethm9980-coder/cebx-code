@@ -10,6 +10,7 @@ use App\Http\Controllers\Web\StoreWebController;
 use App\Http\Controllers\Web\SupportWebController;
 use App\Http\Controllers\Web\UserWebController;
 use App\Http\Controllers\Web\WalletWebController;
+use App\Http\Controllers\Web\WalletTopupWebController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [AuthWebController::class, 'showLogin'])->name('login');
@@ -55,7 +56,7 @@ Route::middleware(['auth:web', 'userType:external', 'tenant'])->group(function (
     Route::delete('/stores/{store}', [StoreWebController::class, 'destroy'])->name('stores.destroy');
 
     Route::get('/wallet', [WalletWebController::class, 'index'])->name('wallet.index');
-    Route::post('/wallet/topup', [WalletWebController::class, 'topup'])->name('wallet.topup');
+    Route::post('/wallet/topup', [WalletTopupWebController::class, 'topup'])->name('wallet.topup');
     Route::post('/wallet/hold', [WalletWebController::class, 'hold'])->name('wallet.hold');
 
     Route::get('/users', [UserWebController::class, 'index'])->name('users.index');
